@@ -22,10 +22,16 @@ import logging
 import uuid
 from pathlib import Path
 import time
+import math
+from decimal import Decimal, ROUND_FLOOR
 
 from backend.strategy.smc.sessions import get_current_kill_zone
 from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus, OrderType
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
+from backend.bot.executor.execution_outcomes import ExecutionReceipt
+from backend.bot.executor.execution_fee_recovery import ExecutionFeeRecovery
+from backend.bot.executor.execution_reports import ExecutionReportPublisher
+from copy import deepcopy
 from backend.bot.telemetry.storage import TelemetryStorage
 from backend.bot.telemetry.events import TelemetryEvent, EventType
 from backend.engine.orchestrator import Orchestrator
@@ -35,7 +41,6 @@ from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
 from backend.data.adapters.phemex import PhemexAdapter
 from backend.analysis.regime_policies import get_regime_policy
-from backend.shared.utils.math_utils import round_to_lot
 from backend.diagnostics.logger import DiagnosticLogger, ProbeCategory, Severity
 from backend.diagnostics.report import ReportGenerator, ModeStats
 from backend.bot.trade_journal import get_trade_journal
@@ -476,9 +481,25 @@ class CompletedTrade:
     nearest_same_side_pool_price: Optional[float] = None
     nearest_same_side_pool_swept: Optional[bool] = None
 
+    execution_accounting: Optional[Dict[str, Any]] = None
+    gross_pnl: Optional[float] = None
+    execution_fees: Optional[Dict[str, str]] = None
+    outcome_basis: str = 'legacy_estimate'
+    execution_report_prepared_at: Optional[str] = None
+    _execution_report_snapshot: Optional[Dict[str, Any]] = field(default=None, repr=False)
+
+    def apply_execution_report(self, record):
+        """Replace estimated money only with a validated durable report snapshot."""
+        self._execution_report_snapshot = deepcopy(record)
+        for key in ('trade_id', 'entry_price', 'exit_price', 'quantity', 'pnl', 'pnl_pct',
+                    'gross_pnl', 'execution_fees', 'execution_accounting', 'outcome_basis', 'execution_report_prepared_at'):
+            setattr(self, key, deepcopy(record[key]))
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
-        return {
+        if self._execution_report_snapshot is not None:
+            return deepcopy(self._execution_report_snapshot)
+        record = {
             "trade_id": self.trade_id,
             "symbol": self.symbol,
             "direction": self.direction,
@@ -543,6 +564,11 @@ class CompletedTrade:
             "nearest_same_side_pool_price": self.nearest_same_side_pool_price,
             "nearest_same_side_pool_swept": self.nearest_same_side_pool_swept,
         }
+        if self.execution_accounting is not None:
+            record.update(execution_accounting=deepcopy(self.execution_accounting),
+                          gross_pnl=self.gross_pnl, execution_fees=deepcopy(self.execution_fees),
+                          outcome_basis=self.outcome_basis, execution_report_prepared_at=self.execution_report_prepared_at)
+        return record
 
 
 @dataclass
@@ -656,10 +682,15 @@ class PaperTradingService:
         # Background task
         self._scan_task: Optional[asyncio.Task] = None
         self._monitor_task: Optional[asyncio.Task] = None
+        self._fee_recovery_task = None
+        self._fee_recovery = None
+        self._reporting_status = {}
         self._running = False
 
         # Price cache for P&L calculations
         self._price_cache: Dict[str, float] = {}
+        self._price_cache_observed_at: Dict[str, float] = {}
+        self._pending_testnet_exits: Dict[str, str] = {}
         self._price_cache_refreshed_at: Optional[datetime] = None
         # Detailed signal processing log (every signal, not just recent activity)
         self.signal_log: List[Dict[str, Any]] = []
@@ -775,6 +806,9 @@ class PaperTradingService:
                     raise ValueError("Testnet execution recovery required; use the live-trading testnet recovery service")
                 await asyncio.to_thread(self.executor.verify_flat_account)
                 self.executor.initialize_trading()
+                accounting = await asyncio.to_thread(self.executor.reconcile_account, force=True)
+                if not accounting['entry_eligible']:
+                    raise ValueError(', '.join(accounting['reasons']))
                 self.executor.set_entry_admission(True)
             except BaseException:
                 # No tasks or orders were started. Release the lock so the live
@@ -817,6 +851,7 @@ class PaperTradingService:
             trailing_stop_activation=config.trailing_activation,
             trailing_stop_distance=0.75,  # WAS 0.5 - increased to 0.75 to give trade more room to breathe
             max_hours_open=config.max_hours_open,
+            receipt_execution=bool(getattr(self.executor, '_accounting', None)),
         )
 
         # Initialize orchestrator with exchange adapter
@@ -904,7 +939,9 @@ class PaperTradingService:
         self._pending_extended = {}
         self._expired_symbols = set()
         self._price_cache = {}
-        self._peak_equity = config.initial_balance
+        self._price_cache_observed_at = {}
+        self._pending_testnet_exits = {}
+        self._peak_equity = self.executor.get_equity({}) if getattr(self.executor, '_accounting', None) else config.initial_balance
         self._prev_regime_trend = None
         self._current_regime_trend = None
 
@@ -953,6 +990,10 @@ class PaperTradingService:
             self._monitor_loop(), name=f"paper_monitor_loop_{self.session_id}"
         )
         self._monitor_task.add_done_callback(self._task_done_callback)
+        if getattr(self.executor, '_accounting', None):
+            self._fee_recovery = ExecutionFeeRecovery(self.executor, report_journal=get_trade_journal())
+            self._fee_recovery_task = asyncio.create_task(self._fee_recovery.run(), name=f'paper_fee_recovery_{self.session_id}')
+            self._fee_recovery_task.add_done_callback(self._task_done_callback)
         # Observational CVD poller (decisions/2026-06-30__cvd-experiment) — feeds the journal, not decisions.
         self._cvd_task = asyncio.create_task(
             self._cvd_poll_loop(), name=f"paper_cvd_poll_{self.session_id}"
@@ -986,8 +1027,20 @@ class PaperTradingService:
         """
         if self.executor and hasattr(self.executor, "set_entry_admission"):
             self.executor.set_entry_admission(False)
+        if self._fee_recovery:
+            self._fee_recovery.request_stop()
+        if self._fee_recovery_task:
+            self._fee_recovery_task.cancel()
         if self.status != PaperBotStatus.RUNNING:
             if self.executor and hasattr(self.executor, "recovery_snapshot"):
+                if getattr(self.executor, '_accounting', None):
+                    await self._close_all_positions('session_stopped')
+                if self._fee_recovery_task:
+                    try:
+                        await self._fee_recovery_task
+                    except asyncio.CancelledError:
+                        pass
+                    self._fee_recovery_task = None
                 return self.get_status()
             return {"status": self.status.value, "message": "Not running"}
 
@@ -1020,6 +1073,12 @@ class PaperTradingService:
 
         # Close all open positions
         await self._close_all_positions("session_stopped")
+        if self._fee_recovery_task:
+            try:
+                await self._fee_recovery_task
+            except asyncio.CancelledError:
+                pass
+            self._fee_recovery_task = None
 
         # Generate diagnostic report
         if self.diagnostic_logger:
@@ -1117,6 +1176,8 @@ class PaperTradingService:
         self.signal_log = []
         self.stats = PaperTradingStats()
         self._price_cache = {}
+        self._price_cache_observed_at = {}
+        self._pending_testnet_exits = {}
         self._pending_plans = {}
         self._pending_placed_at = {}
         self._pending_placed_price = {}
@@ -1136,9 +1197,11 @@ class PaperTradingService:
         ex = self.executor
         snap = ex.recovery_snapshot()
         if (snap["requests"] or snap.get("storage_error") or snap.get("inflight_mutations")
+                or snap.get('inflight_account_reads') or snap.get('inflight_evidence_events')
                 or self.position_manager and self.position_manager.get_open_positions()
                 or any(task and not task.done() for task in
-                       (getattr(self, "_scan_task", None), getattr(self, "_monitor_task", None)))):
+                       (getattr(self, "_scan_task", None), getattr(self, "_monitor_task", None),
+                        getattr(self, '_fee_recovery_task', None)))):
             raise ValueError("Testnet recovery required; unresolved execution prevents Start/Reset")
         observed_at = ex.verify_flat_account()
         ex.checkpoint_flat(observed_at)
@@ -1194,7 +1257,13 @@ class PaperTradingService:
         result["positions"] = active_positions
 
         # Balance info
-        if self.executor:
+        if self.executor and getattr(self.executor, '_accounting', None):
+            result['accounting'] = self.executor.accounting_status()
+            result['balance'] = self.executor.balance_status(result['accounting'])
+            result['outcome_basis'] = 'executions_excluding_funding_and_transfers'
+            result['execution_reporting'] = deepcopy(self._reporting_status)
+            result['execution_history'] = self._fee_recovery.status() if self._fee_recovery else {'state': 'inactive', 'running': False}
+        elif self.executor:
             initial = self.config.initial_balance if self.config else 0
 
             # Pure cash balance (executor handles fees and ALL realized PnL)
@@ -1241,6 +1310,13 @@ class PaperTradingService:
                 "prices_age_seconds": None,
             }
 
+        if 'accounting' not in result:
+            from backend.bot.executor.accounting_runtime import non_runtime_status
+            simulation = not bool(self.config and getattr(self.config, 'use_testnet', False))
+            if not simulation:
+                result['balance'] = dict(initial=None, current=None, equity=None, pnl=None, pnl_pct=None)
+            result['accounting'] = non_runtime_status(result['balance'], simulation=simulation)
+
         # Statistics
         result["statistics"] = self.stats.to_dict()
 
@@ -1250,9 +1326,9 @@ class PaperTradingService:
         # Pending limit orders
         result["pending_orders"] = []
         if self.executor:
-            for order_id, plan in self._pending_plans.items():
+            for order_id, plan in list(self._pending_plans.items()):
                 order = self.executor.get_order(order_id)
-                if order and order.status in [OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED]:
+                if order and (getattr(self.executor, '_accounting', None) or order.status in [OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED]):
                     result["pending_orders"].append({
                         "order_id": order_id,
                         "symbol": order.symbol,
@@ -1260,6 +1336,8 @@ class PaperTradingService:
                         "limit_price": order.price,
                         "quantity": order.quantity,
                         "filled_qty": order.filled_quantity,
+                        "average_fill_price": order.average_fill_price,
+                        "awaiting_adoption": bool(order.filled_quantity > 0),
                         "status": order.status.value,
                         "confluence": plan.confidence_score,
                         "trade_type": getattr(plan, "trade_type", "intraday"),
@@ -1433,7 +1511,14 @@ class PaperTradingService:
                     # Process open limit orders
                     executor = self.executor
                     if executor:
-                        open_orders = executor.get_open_orders()
+                        if getattr(executor, '_accounting', None):
+                            await asyncio.to_thread(executor.cleanup_flat_protection)
+                            await asyncio.to_thread(executor.reconcile_account)
+                            await self._monitor_testnet_entries()
+                            await self._reconcile_testnet_positions()
+                            open_orders = []
+                        else:
+                            open_orders = executor.get_open_orders()
                         for order in open_orders:
                             if order.order_type == OrderType.LIMIT:
                                 current_price = self._price_cache.get(order.symbol)
@@ -1525,7 +1610,7 @@ class PaperTradingService:
                                             pass
 
                         # Expire stale pending orders that have outlived their per-type TTL.
-                        if self._pending_plans and self.config:
+                        if self._pending_plans and self.config and not getattr(executor, '_accounting', None):
                             now = datetime.now(timezone.utc)
                             for order_id in list(self._pending_plans.keys()):
                                 placed_at = self._pending_placed_at.get(order_id)
@@ -1697,6 +1782,157 @@ class PaperTradingService:
 
             await asyncio.sleep(1)  # Check every second
 
+
+    async def _reconcile_testnet_positions(self, *, force=False):
+        """Set managed state from owned exits and one current account observation."""
+        ex = self.executor
+        if not ex or not getattr(ex, '_accounting', None) or not self.position_manager:
+            return True
+        now = time.monotonic()
+        if not force and now < getattr(self, '_testnet_position_reconcile_at', 0):
+            return True
+        self._testnet_position_reconcile_at = now + 5.0
+        ok = True
+        for pos in self.position_manager.get_open_positions():
+            try:
+                await asyncio.to_thread(ex.refresh_entry_exits, pos.entry_order_id)
+                await asyncio.to_thread(ex.reconcile_account, force=True)
+                progress = ex.reconciled_execution_progress(pos.entry_order_id)
+                pending = getattr(self, '_pending_testnet_exits', {}).get(pos.symbol)
+                if pending and progress.remaining_quantity:
+                    # R1i books the original logical slice once, when complete.
+                    # Do not also apply its partial fills through this path.
+                    continue
+                self.position_manager.reconcile_execution_progress(
+                    pos.position_id, progress, self._price_cache.get(pos.symbol))
+                triggered = [r for r in progress.exits if r.quantity
+                             and ex.get_order(r.order_id).order_type == OrderType.STOP_LOSS]
+                if progress.remaining_quantity == 0:
+                    getattr(self, '_pending_testnet_exits', {}).pop(pos.symbol, None)
+                    pos.pending_exit_reason = None
+                    pos.pending_target = None
+                    pos.pending_target_quantity = None
+                    await asyncio.to_thread(ex.cleanup_flat_protection)
+                elif triggered:
+                    if any(not r.terminal for r in triggered):
+                        pos.exchange_close_pending = True
+                    else:
+                        pos.pending_exit_reason = pos.pending_exit_reason or 'NATIVE_STOP'
+                elif not pos.pending_exit_reason and pos.pending_target is None:
+                    protection = await asyncio.to_thread(ex.protect_confirmed_entry,
+                        pos.entry_order_id, pos.stop_loss, quantity=pos.remaining_quantity)
+                    if (protection is not None and protection.status in (OrderStatus.REJECTED, OrderStatus.CANCELLED)
+                            and protection.filled_quantity == 0):
+                        ok = False
+                        logger.error('TESTNET_PROTECTION_REJECTED %s; software management remains active', pos.position_id)
+                        self._log_activity('testnet_protection_rejected', {
+                            'position_id': pos.position_id, 'order_id': protection.order_id,
+                        })
+                    elif protection is None or protection.status != OrderStatus.OPEN or protection.filled_quantity:
+                        raise ValueError('TESTNET_POSITION_PROTECTION_PENDING')
+                self._log_activity('testnet_execution_reconciled', {
+                    'position_id': pos.position_id, 'entry_order_id': pos.entry_order_id,
+                    'remaining_quantity': str(progress.remaining_quantity),
+                    'realized_gross': str(progress.realized_gross),
+                })
+            except Exception as exc:
+                ok = False
+                pos.exchange_close_pending = True
+                logger.exception('TESTNET_POSITION_RECONCILIATION_PENDING %s', pos.position_id)
+                self._log_activity('testnet_position_reconciliation_pending', {
+                    'position_id': pos.position_id, 'reason': str(exc),
+                })
+        return ok
+
+    async def _monitor_testnet_entries(self):
+        """Adopt cumulative, priced terminal fills once; retain all unknown outcomes."""
+        ex = self.executor
+        terminal = {OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED}
+        for oid, plan in list(self._pending_plans.items()):
+            try:
+                await asyncio.to_thread(ex.refresh_order, oid)
+                order = ex.get_order(oid)
+                if order is None:
+                    raise ValueError('Pending testnet order missing')
+                placed = self._pending_placed_at.get(oid)
+                ttl = _PENDING_TTL_MINUTES.get(getattr(plan, 'trade_type', 'intraday'), 10.)
+                if order.status not in terminal and placed and (datetime.now(timezone.utc) - placed).total_seconds() > ttl * 60:
+                    await asyncio.to_thread(ex.cancel_order, oid)
+                if order.filled_quantity > 0 and order.status in terminal:
+                    initial_progress = None
+                    protection = None
+                    if plan.stop_loss:
+                        protection = await asyncio.to_thread(ex.protect_confirmed_entry, oid, float(plan.stop_loss.level))
+                        if protection and protection.filled_quantity > 0:
+                            await asyncio.to_thread(ex.refresh_entry_exits, oid)
+                            await asyncio.to_thread(ex.reconcile_account, force=True)
+                            initial_progress = ex.reconciled_execution_progress(oid)
+                    if order.average_fill_price is None:
+                        logger.warning('TESTNET_ENTRY_COST_UNAVAILABLE %s; retaining plan and protection', oid)
+                        continue
+                    position = self.position_manager.find_position_by_order_id(oid)
+                    if position is None:
+                        pid = self.position_manager.open_position(trade_plan=plan, entry_price=order.average_fill_price,
+                            quantity=order.filled_quantity, entry_order_id=oid,
+                            **({'execution_progress': initial_progress} if initial_progress is not None else {}))
+                        self.stats.signals_taken += 1
+                        if initial_progress is not None:
+                            position = self.position_manager.get_position(pid)
+                            native = next(r for r in initial_progress.exits if r.order_id == protection.order_id)
+                            if initial_progress.remaining_quantity > 0:
+                                if native.terminal:
+                                    position.pending_exit_reason = 'NATIVE_STOP'
+                                else:
+                                    position.exchange_close_pending = True
+                    self._pending_plans.pop(oid, None)
+                    self._pending_placed_at.pop(oid, None)
+                elif order.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                    self._pending_plans.pop(oid, None)
+                    self._pending_placed_at.pop(oid, None)
+            except Exception:
+                logger.exception('TESTNET_ENTRY_RECONCILIATION_FAILED %s; retaining request', oid)
+
+    async def _execute_testnet_exit(self, symbol, side, quantity, price, entry_order_id=None):
+        if not hasattr(self, '_exit_callbacks_active'):
+            self._exit_callbacks_active = set()
+        if symbol in self._exit_callbacks_active:
+            return False
+        self._exit_callbacks_active.add(symbol)
+        try:
+            ex = self.executor
+            if not entry_order_id:
+                raise ValueError('EXIT_PARENT_REQUIRED')
+            if not hasattr(self, '_pending_testnet_exits'):
+                self._pending_testnet_exits = {}
+            oid = self._pending_testnet_exits.get(symbol)
+            order = ex.get_order(oid) if oid else None
+            if not oid and self.position_manager and any(
+                    p.entry_order_id == entry_order_id and p.exchange_close_pending
+                    for p in self.position_manager.get_open_positions()):
+                logger.warning('TESTNET_EXIT_EVIDENCE_PENDING %s; no replacement sent', entry_order_id)
+                return False
+            if oid and order is None:
+                logger.error('TESTNET_EXIT_IDENTITY_MISSING %s %s', symbol, oid)
+                return False
+            if order is None:
+                order = await asyncio.to_thread(ex.place_order, symbol, side, 'MARKET', quantity, price=price,
+                                                reduce_only=True, parent_entry_order_id=entry_order_id)
+                self._pending_testnet_exits[symbol] = order.order_id
+            if order.parent_entry_order_id != entry_order_id:
+                raise ValueError('EXIT_PARENT_CONFLICT')
+            if order.side.value != side.upper() or order.quantity != quantity:
+                raise ValueError('EXIT_GOAL_CONFLICT')
+            confirmed = await asyncio.to_thread(ex.advance_reduction, order.order_id, price)
+            if not confirmed.confirms(quantity):
+                logger.warning('TESTNET_EXIT_UNCONFIRMED %s %s filled=%s reasons=%s; original request retained',
+                               symbol, order.order_id, confirmed.quantity, confirmed.reasons)
+                return False
+            await asyncio.to_thread(ex.cleanup_flat_protection)
+            self._pending_testnet_exits.pop(symbol, None)
+            return confirmed
+        finally:
+            self._exit_callbacks_active.discard(symbol)
+
     async def _refresh_price_cache(self):
         """Fetch current prices for all open positions and pending orders, update the cache."""
         if not self.position_manager:
@@ -1711,7 +1947,11 @@ class PaperTradingService:
                 price = await self._fetch_price(symbol)
                 if price > 0:
                     self._price_cache[symbol] = price
+                    if not hasattr(self, '_price_cache_observed_at'):
+                        self._price_cache_observed_at = {}
+                    self._price_cache_observed_at[symbol] = time.monotonic()
             except Exception as e:
+                getattr(self, '_price_cache_observed_at', {}).pop(symbol, None)
                 logger.debug(f"Price refresh failed for {symbol}: {e}")
 
         if symbols:
@@ -1731,17 +1971,16 @@ class PaperTradingService:
         actual_scan_mode = getattr(conf, "sniper_mode", "stealth")
         if actual_scan_mode == "stealth":
             try:
-                from backend.analysis.regime_detector import get_regime_detector  # type: ignore
                 from backend.strategy.planner.regime_engine import get_mode_recommendation  # type: ignore
                 
-                detector = get_regime_detector("stealth_balanced")
+                detector = self.orchestrator.regime_detector
                 global_regime = detector.get_confirmed_regime()
                 
                 if global_regime and global_regime.composite != "unknown":
                     rec = get_mode_recommendation(
-                        global_regime.trend, 
-                        global_regime.volatility, 
-                        global_regime.risk_appetite
+                        global_regime.dimensions.trend,
+                        global_regime.dimensions.volatility,
+                        global_regime.dimensions.risk_appetite
                     )
                     recommended_mode = rec.get("mode", "stealth")
                     if recommended_mode != "stealth":
@@ -2470,25 +2709,35 @@ class PaperTradingService:
                     close_price = await self._fetch_price(plan.symbol)
                     self._price_cache[plan.symbol] = close_price
                 except Exception:
-                    close_price = self._price_cache.get(plan.symbol)
+                    close_price = self._get_price(plan.symbol)
 
                 # IMPORTANT: fire the exit order through the executor BEFORE
                 # closing in the PositionManager so the executor's positions dict
                 # and balance accounting are reconciled with the close.
+                confirmed = False
                 if executor and existing_pos.remaining_quantity > 0 and close_price:
                     close_side = "SELL" if existing_direction == "LONG" else "BUY"
                     try:
-                        await self._execute_exit_order(
+                        confirmed = await self._execute_exit_order(
                             symbol=plan.symbol,
                             side=close_side,
                             quantity=existing_pos.remaining_quantity,
                             price=close_price,
+                            **({'entry_order_id': existing_pos.entry_order_id} if existing_pos.entry_order_id else {}),
                         )
                     except Exception as _ex:
                         logger.warning(
                             f"DIRECTION FLIP: executor close failed for {plan.symbol}: {_ex} — "
-                            f"continuing with PositionManager close"
+                            f"retaining the existing position"
                         )
+
+                if not confirmed:
+                    self._log_activity('direction_flip_exit_unconfirmed', {
+                        'position_id': existing_pos.position_id, 'symbol': plan.symbol,
+                    })
+                    return
+                if isinstance(confirmed, ExecutionReceipt):
+                    close_price = confirmed.average_price
 
                 self.position_manager.close_position(
                     existing_pos.position_id,
@@ -2798,10 +3047,13 @@ class PaperTradingService:
 
         # Calculate position size (size_modifier applies near-miss halving)
         balance = executor.get_balance()
+        if getattr(executor, '_accounting', None) and not executor.accounting_status()['entry_eligible']:
+            self._log_signal(plan, 'filtered', 'Account reconciliation required', reason_type='accounting_unavailable')
+            return
         position_size = self._calculate_position_size(plan, size_modifier=size_modifier)
         if position_size <= 0:
             reason = (
-                f"Invalid position size (balance={balance:.2f}, "
+                f"Invalid position size (balance={balance}, "
                 f"entry={plan.entry_zone.near_entry:.2f}, "
                 f"stop={plan.stop_loss.level:.2f})"
             )
@@ -3018,6 +3270,15 @@ class PaperTradingService:
                         getattr(plan, "symbol", "?"), _rr_e,
                     )
 
+            try:
+                position_size, limit_price, native_stop = self._prepare_entry_order(
+                    plan, limit_price, position_size, size_modifier,
+                )
+            except Exception as risk_error:
+                logger.warning("ENTRY_RISK_INVALID %s: %s", plan.symbol, risk_error)
+                self._log_signal(plan, "filtered", str(risk_error), reason_type="risk_validation")
+                return
+
             # Use LIMIT to allow the executor to simulate realistic partial fills
             order = executor.place_order(
                 symbol=plan.symbol,
@@ -3025,7 +3286,17 @@ class PaperTradingService:
                 order_type="LIMIT",
                 quantity=position_size,
                 price=limit_price,
+                **({'sl_price': native_stop} if getattr(executor, '_accounting', None) else {}),
             )
+
+            if getattr(executor, '_accounting', None):
+                if order.status != OrderStatus.REJECTED:
+                    self._pending_plans[order.order_id] = plan
+                    self._pending_placed_at[order.order_id] = datetime.now(timezone.utc)
+                    await self._monitor_testnet_entries()
+                else:
+                    self._log_signal(plan, 'filtered', order.rejection_reason or 'Order rejected')
+                return
 
 
             # snap_taker: fill immediately at ~market (taker). rest_maker: leave the limit RESTING at
@@ -3198,6 +3469,9 @@ class PaperTradingService:
         """
         if not self.executor or self._peak_equity <= 0:
             return 0.0
+        if getattr(self.executor, '_accounting', None):
+            equity = self.executor.get_equity({})
+            return max(0., (self._peak_equity - equity) / self._peak_equity * 100) if equity is not None else self.stats.max_drawdown
         current_equity = self.executor.get_balance()
         if self.position_manager:
             current_equity += sum(
@@ -3277,89 +3551,108 @@ class PaperTradingService:
 
         return gate, floor, adjustments
 
-    def _calculate_position_size(self, plan: TradePlan, size_modifier: float = 1.0) -> float:
+    def _calculate_position_size(
+        self, plan: TradePlan, size_modifier: float = 1.0, *,
+        entry_price: Optional[float] = None, native_stop: Optional[float] = None,
+    ) -> float:
+        """Bound planned stop loss by configured risk, reductions and free margin.
+
+        Re-evaluated at final placement after snap/price precision. Regime and
+        sensitivity may reduce the budget; neither may raise the user limit.
+        This is planned price risk, excluding fees, gaps and execution slippage.
         """
-        Calculate position size based on risk parameters with regime-aware adjustment.
-
-        Risk is calculated correctly for leveraged positions:
-        - risk_amount = balance * risk_pct (e.g., 1% of $10,000 = $100)
-        - position_size = risk_amount / risk_per_unit (how many units to risk $100)
-        - Leverage only affects MARGIN required, NOT risk amount
-        - Regime policy adjusts position size up/down based on market conditions
-        - size_modifier: 1.0 = full size, 0.5 = near-miss half-size (Signal Sensitivity band)
-
-        Args:
-            plan: Trade plan with stop loss
-            size_modifier: Multiplier from signal sensitivity tier (1.0 full, 0.5 near-miss)
-
-        Returns:
-            Position size in base currency
-        """
-        config = self.config
-        executor = self.executor
+        config, executor = self.config, self.executor
         if not config or not executor:
             return 0.0
-
-        balance = executor.get_balance()
-        # Include unrealized P&L so we don't oversize into an existing drawdown
-        if self.position_manager:
-            balance += sum(
-                pos.unrealized_pnl
-                for pos in self.position_manager.get_open_positions()
-            )
-        balance = max(balance, 0.0)  # Never size off negative effective equity
-
-        # Apply streak-based risk adaptation, then signal-sensitivity modifier.
-        # size_modifier=0.5 (near-miss band) stacks with streak adaptation:
-        # e.g. 3-loss streak (50%) + near-miss (50%) = 25% of configured risk.
-        effective_risk_pct = self._get_adapted_risk_pct() * size_modifier
-        risk_amount = balance * (effective_risk_pct / 100)
-
-        # Calculate risk per unit
-        entry = plan.entry_zone.near_entry
-        stop = plan.stop_loss.level
-
-        if entry == 0 or stop == 0:
+        try:
+            if getattr(executor, '_accounting', None):
+                account = executor.accounting_status()
+                balance, available = account['equity'], account['free']
+                if not account['entry_eligible']:
+                    return 0.0
+            else:
+                balance = executor.get_balance()
+                # Validate cash before adding P&L; bool is not a cash amount.
+                if isinstance(balance, bool) or not math.isfinite(float(balance)):
+                    raise ValueError("invalid balance")
+                if self.position_manager:
+                    balance += sum(pos.unrealized_pnl for pos in self.position_manager.get_open_positions())
+                available = balance
+            values = {
+                'equity': balance, 'free': available,
+                'risk': config.risk_per_trade, 'adapted': self._get_adapted_risk_pct(),
+                'modifier': size_modifier, 'regime': self._get_regime_size_multiplier(),
+                'entry': plan.entry_zone.near_entry if entry_price is None else entry_price,
+                'stop': plan.stop_loss.level, 'leverage': config.leverage,
+                'lot': getattr(plan, 'lot_size', 0.),
+            }
+            if native_stop is not None:
+                values['native_stop'] = native_stop
+            numbers = {}
+            for key, value in values.items():
+                if isinstance(value, bool) or value is None:
+                    raise ValueError(f"invalid {key}")
+                number = Decimal(str(value))
+                if not number.is_finite() or number < 0:
+                    raise ValueError(f"invalid {key}")
+                numbers[key] = number
+            d = numbers
+            if any(d[key] <= 0 for key in ('equity', 'free', 'risk', 'entry', 'stop', 'leverage')):
+                return 0.0
+            stops = [d['stop']] + ([d['native_stop']] if 'native_stop' in d else [])
+            if plan.direction not in ('LONG', 'SHORT') or any(
+                stop <= 0 or (d['entry'] <= stop if plan.direction == 'LONG' else d['entry'] >= stop)
+                for stop in stops
+            ):
+                raise ValueError("invalid directional stop")
+            distance = max(abs(d['entry'] - stop) for stop in stops)
+            risk_pct = min(d['risk'], d['adapted']) * min(Decimal(1), d['modifier'])
+            risk_amount = d['equity'] * risk_pct / 100 * min(Decimal(1), d['regime'])
+            margin_cap = d['free'] * Decimal('0.5') * max(Decimal(1), d['leverage']) / d['entry']
+            quantity = min(risk_amount / distance, margin_cap)
+            if d['lot'] > 0:
+                quantity = (quantity / d['lot']).to_integral_value(rounding=ROUND_FLOOR) * d['lot']
+            result = float(quantity)
+            if Decimal(str(result)) > quantity:
+                result = math.nextafter(result, 0.)
+            return result
+        except (ValueError, TypeError, ArithmeticError, AttributeError) as exc:
+            logger.warning("ENTRY_RISK_INVALID %s: %s", getattr(plan, 'symbol', '?'), exc)
             return 0.0
 
-        risk_per_unit = abs(entry - stop)
-        if risk_per_unit == 0:
-            return 0.0
-
-        # Base position size from risk calculation
-        position_size = risk_amount / risk_per_unit
-
-        # FIX: Leverage affects MARGIN required, not position size.
-        # With 5x leverage, you need 1/5th margin but risk stays the same.
-        # Do NOT multiply position_size by leverage — that was causing
-        # actual risk to be leverage * intended_risk (e.g., 5x * 2% = 10%).
-        # The position_size already represents the correct number of units
-        # to risk exactly risk_amount dollars.
-
-        # Apply regime-aware position size adjustment (Fix #7)
-        regime_multiplier = self._get_regime_size_multiplier()
-        position_size *= regime_multiplier
-
-        # Ensure we don't exceed available balance (accounting for leverage on margin)
-        # With leverage, margin required = position_value / leverage
-        margin_factor = max(1, config.leverage)
-
-        max_position_value = balance * 0.5 * margin_factor  # 50% of balance * leverage
-        max_size = max_position_value / entry if entry > 0 else 0
-
-        final_size = min(position_size, max_size)
-        
-        # Apply lot size rounding to align with exchange requirements
-        if hasattr(plan, 'lot_size') and plan.lot_size > 0:
-            final_size = round_to_lot(final_size, plan.lot_size)
-
-        if regime_multiplier != 1.0:
-            logger.info(
-                f"Position sized: {plan.symbol} | risk={effective_risk_pct:.1f}% "
-                f"| regime_mult={regime_multiplier:.2f} | size={final_size:.6f}"
+    def _prepare_entry_order(self, plan, limit_price, quantity, size_modifier):
+        """Apply final geometry/quantity constraints before any order is submitted."""
+        native_stop = float(plan.stop_loss.level)
+        if getattr(self.executor, '_accounting', None):
+            exchange = self.adapter.exchange
+            limit_price = float(exchange.price_to_precision(plan.symbol, limit_price))
+            native_stop = float(exchange.price_to_precision(plan.symbol, native_stop))
+        bounded = self._calculate_position_size(
+            plan, size_modifier, entry_price=limit_price, native_stop=native_stop,
+        )
+        if isinstance(quantity, bool) or not math.isfinite(quantity) or quantity <= 0 or bounded <= 0:
+            raise ValueError("ENTRY_RISK_INVALID: no valid final quantity or stop geometry")
+        final_quantity = min(quantity, bounded)
+        lot = Decimal(str(getattr(plan, 'lot_size', 0.)))
+        if lot > 0:
+            final_quantity = float(
+                (Decimal(str(final_quantity)) / lot).to_integral_value(rounding=ROUND_FLOOR) * lot
             )
-
-        return final_size
+        if getattr(self.executor, '_accounting', None):
+            rounded = float(self.adapter.exchange.amount_to_precision(plan.symbol, final_quantity))
+            if not math.isfinite(rounded) or rounded > final_quantity:
+                raise ValueError("ENTRY_RISK_INVALID: invalid quantity precision")
+            final_quantity = rounded
+        if final_quantity <= 0:
+            raise ValueError("ENTRY_RISK_INVALID: below quantity increment")
+        self._log_activity("entry_risk_sized", {
+            "symbol": plan.symbol, "entry_price": limit_price, "native_stop": native_stop,
+            "planned_stop": plan.stop_loss.level, "quantity": final_quantity,
+            "planned_stop_risk": final_quantity * max(
+                abs(limit_price - native_stop), abs(limit_price - plan.stop_loss.level)),
+            "risk_per_trade": self.config.risk_per_trade,
+        })
+        return final_quantity, limit_price, native_stop
 
     def _get_adapted_risk_pct(self) -> float:
         """
@@ -3636,8 +3929,35 @@ class PaperTradingService:
                     nearest_same_side_pool_swept=getattr(pos, "nearest_same_side_pool_swept", None),
                 )
 
+                stats_before = peak_before = None
+                try:
+                    if getattr(self.executor, '_accounting', None):
+                        publisher = ExecutionReportPublisher(self.executor, get_trade_journal())
+                        publisher.capture(pos.entry_order_id, trade.to_dict(), self.session_id or 'unknown')
+                        result = await asyncio.to_thread(publisher.publish, pos.entry_order_id)
+                        self._reporting_status[pos.entry_order_id] = {k: v for k, v in result.items() if k != 'trade'}
+                        if result['state'] != 'published':
+                            logger.warning('EXECUTION_REPORT_PENDING %s: %s', pos.entry_order_id, result.get('reasons'))
+                            continue
+                        if pos.position_id in self._completed_trade_ids:
+                            continue
+                        trade.apply_execution_report(result['trade'])
+                    else:
+                        get_trade_journal().upsert(trade.to_dict(), self.session_id or 'unknown')
+                    stats_before, peak_before = deepcopy(self.stats), self._peak_equity
+                    self._update_stats(trade)
+                except Exception as exc:
+                    if stats_before is not None:
+                        self.stats, self._peak_equity = stats_before, peak_before
+                    self._reporting_status[getattr(pos, 'entry_order_id', None) or pos.position_id] = {
+                        'state': 'error', 'reasons': [str(exc)]}
+                    logger.exception('TRADE_PUBLICATION_PENDING %s', trade.trade_id)
+                    self._log_activity('journal_write_error', {'trade_id': trade.trade_id, 'error': str(exc)})
+                    continue
+
                 self.completed_trades.append(trade)
                 self._completed_trade_ids.add(trade.trade_id)
+                self._completed_trade_ids.add(pos.position_id)
 
                 # Persist trade to telemetry DB for queryable historical data
                 if self.telemetry_storage:
@@ -3677,8 +3997,6 @@ class PaperTradingService:
                 # monitor loop's iteration over get_open_positions().
                 self.position_manager.remove_position(pos.position_id)
                 logger.info(f"💾 Trade {pos.position_id} archived and removed from active tracking")
-                self._update_stats(trade)
-
                 # Register stop-loss cooldown in orchestrator so the symbol is
                 # locked out of re-entry for _cooldown_hours. Without this call the
                 # orchestrator's CooldownManager never learns about runtime stop-outs
@@ -3746,9 +4064,33 @@ class PaperTradingService:
         if not self.position_manager:
             return
 
+        runtime = bool(getattr(self.executor, '_accounting', None))
+        if runtime:
+            for order in self.executor.get_open_entry_orders():
+                try:
+                    await asyncio.to_thread(self.executor.cancel_order, order.order_id)
+                except Exception:
+                    logger.exception('TESTNET_STOP_ENTRY_CANCEL_UNCONFIRMED %s', order.order_id)
+            await self._monitor_testnet_entries()
+            await self._reconcile_testnet_positions(force=True)
+
         for pos in list(self.position_manager.positions.values()):
             if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]:
                 current_price = self._price_cache.get(pos.symbol, pos.entry_price)
+                if runtime:
+                    if getattr(self.position_manager, 'receipt_execution', False) and (
+                            pos.pending_target is not None or pos.pending_exit_reason):
+                        await self.position_manager._retry_pending_reduction(pos, current_price)
+                        if pos.pending_target is not None or pos.pending_exit_reason or pos.remaining_quantity <= 0:
+                            continue
+                    side = 'SELL' if pos.direction == 'LONG' else 'BUY'
+                    confirmed = await self._execute_exit_order(pos.symbol, side, pos.remaining_quantity, current_price,
+                        **({'entry_order_id': pos.entry_order_id} if pos.entry_order_id else {}))
+                    if not confirmed:
+                        logger.error('TESTNET_STOP_EXIT_UNCONFIRMED %s; position and request retained', pos.position_id)
+                        continue
+                    if isinstance(confirmed, ExecutionReceipt):
+                        current_price = confirmed.average_price
                 self.position_manager.close_position(pos.position_id, reason, current_price)
 
         # Sync to completed trades
@@ -3756,11 +4098,6 @@ class PaperTradingService:
 
     def _update_stats(self, trade: CompletedTrade):
         """Update statistics after a trade completes."""
-        try:
-            get_trade_journal().append(trade.to_dict(), self.session_id or "unknown")
-        except Exception as _je:
-            logger.warning("Failed to write trade to journal: %s", _je)
-
         self.stats.total_trades += 1
 
         # Scratch: |P&L| < $1 (negligible result, usually slippage/commission noise).
@@ -3894,6 +4231,7 @@ class PaperTradingService:
                 "saved_at": datetime.now(timezone.utc).isoformat(),
                 "config": self.config.to_dict() if self.config else None,
                 "balance": self.executor.get_balance() if self.executor else None,
+                "accounting": self.executor.accounting_status() if getattr(self.executor, "_accounting", None) else None,
                 "stats": self.stats.to_dict(),
                 "positions": positions_data,
                 "pending_orders": pending_data,
@@ -3917,6 +4255,14 @@ class PaperTradingService:
         so that drawdown is captured in real-time, not only when positions close.
         """
         if not self.executor or not self.config:
+            return
+        if getattr(self.executor, '_accounting', None):
+            equity = self.executor.get_equity({})
+            if equity is not None:
+                self._peak_equity = max(self._peak_equity, equity)
+                if self._peak_equity > 0:
+                    self.stats.max_drawdown = max(self.stats.max_drawdown,
+                        (self._peak_equity - equity) / self._peak_equity * 100)
             return
         # Equity = realized balance + all unrealized PnL on open/partial positions
         current_equity = self.executor.get_balance()
@@ -4041,7 +4387,7 @@ class PaperTradingService:
             s = self.stats
             initial = self.config.initial_balance if self.config else 0
             final_equity = initial  # fallback
-            if self.executor:
+            if self.executor and not getattr(self.executor, '_accounting', None):
                 unrealized = 0.0
                 if self.position_manager:
                     unrealized = sum(
@@ -4050,14 +4396,22 @@ class PaperTradingService:
                     )
                 final_equity = self.executor.get_balance() + unrealized
 
-            pnl = final_equity - initial
-            pnl_pct = (pnl / initial * 100) if initial > 0 else 0
+            if getattr(self.executor, '_accounting', None):
+                values = self.executor.balance_status()
+                initial, final_equity, pnl, pnl_pct = (values[k] for k in ('initial', 'equity', 'pnl', 'pnl_pct'))
+                lines.append("Account equity includes funding and transfers. Trade outcomes below are legacy estimates.\n")
+            else:
+                pnl = final_equity - initial
+                pnl_pct = (pnl / initial * 100) if initial > 0 else 0
+            def money(value):
+                return f'${value:,.2f}' if value is not None else 'Unavailable'
+            percent = f'{pnl_pct:+.2f}%' if pnl_pct is not None else 'Unavailable'
 
             lines.append("| Metric | Value |")
             lines.append("|--------|-------|")
-            lines.append(f"| Starting Balance | ${initial:,.2f} |")
-            lines.append(f"| Final Equity | ${final_equity:,.2f} |")
-            lines.append(f"| Net P&L | ${pnl:,.2f} ({pnl_pct:+.2f}%) |")
+            lines.append(f"| Starting Equity | {money(initial)} |")
+            lines.append(f"| Final Equity | {money(final_equity)} |")
+            lines.append(f"| Equity Change | {money(pnl)} ({percent}) |")
             lines.append(f"| Total Trades | {s.total_trades} |")
             lines.append(f"| Expectancy | ${s.expectancy:+.2f}/trade |")
             lines.append(f"| Outcome Split | {s.winning_trades}W / {s.scratch_trades}S / {s.losing_trades}L (win rate {s.win_rate:.1f}%) |")
@@ -4362,6 +4716,10 @@ class PaperTradingService:
 
     def _get_price(self, symbol: str) -> float:
         """Synchronous price fetcher for position manager."""
+        if getattr(self.executor, '_accounting', None):
+            stamp = getattr(self, '_price_cache_observed_at', {}).get(symbol)
+            if stamp is None or not 0 <= time.monotonic() - stamp <= 30.:
+                return 0.0
         return self._price_cache.get(symbol, 0.0)
 
     async def _fetch_price(self, symbol: str) -> float:
@@ -4380,14 +4738,17 @@ class PaperTradingService:
             if price and price > 0:
                 return float(price)
         except Exception as e:
+            if getattr(self.executor, '_accounting', None):
+                raise ValueError(f'Fresh testnet ticker unavailable for {symbol}') from e
             logger.warning(f"Live ticker failed for {symbol}, trying OHLCV cache: {e}")
 
+        if getattr(self.executor, '_accounting', None):
+            raise ValueError(f'Fresh testnet ticker unavailable for {symbol}')
         # Fallback: use latest close from the OHLCV cache populated during scan
         try:
-            from backend.data.ohlcv_cache import get_ohlcv_cache
-            cache = get_ohlcv_cache()
+            pipeline = self.orchestrator.ingestion_pipeline
             for tf in ("1m", "5m", "15m", "1h"):
-                df = cache.get(symbol, tf)
+                df = pipeline.get_cached(symbol, tf)
                 if df is not None and not df.empty:
                     price = float(df["close"].iloc[-1])
                     if price > 0:
@@ -4399,12 +4760,12 @@ class PaperTradingService:
         raise ValueError(f"Could not get price for {symbol} from ticker or OHLCV cache")
 
     async def _execute_exit_order(
-        self, symbol: str, side: str, quantity: float, price: float
-    ) -> bool:
+        self, symbol: str, side: str, quantity: float, price: float, entry_order_id: Optional[str] = None
+    ) -> bool | ExecutionReceipt:
         """
         Execute exit order (called by position manager).
 
-        Returns True on successful fill, False on any failure. The position
+        Returns a priced receipt for testnet, True for simulation, or False on failure. The position
         manager checks the return value to decide whether to clear the
         position state — swallowing exceptions silently here previously
         left positions in a "half-closed" state where internal bookkeeping
@@ -4425,6 +4786,8 @@ class PaperTradingService:
             return False
 
         try:
+            if getattr(self.executor, '_accounting', None):
+                return await self._execute_testnet_exit(symbol, side, quantity, price, entry_order_id)
             order = self.executor.place_order(
                 symbol=symbol,
                 side=side,

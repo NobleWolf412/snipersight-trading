@@ -60,11 +60,23 @@ class PhemexWebSocketClient:
         api_secret: str,
         testnet: bool = False,
         on_order_update: Optional[Callable] = None,
+        on_raw_order: Optional[Callable] = None,
+        on_invalidate: Optional[Callable] = None,
+        on_pending: Optional[Callable] = None,
+        on_complete: Optional[Callable] = None,
     ):
         self._api_key = api_key
         self._api_secret = api_secret
         self._ws_url = TESTNET_WS_URL if testnet else MAINNET_WS_URL
         self._on_order_update = on_order_update
+        self._on_raw_order = on_raw_order
+        self._on_invalidate = on_invalidate
+        self._on_pending = on_pending
+        self._on_complete = on_complete
+        self._queue = asyncio.Queue(maxsize=256)
+        self._worker = None
+        self._ws = None
+        self._stop_lock = asyncio.Lock()
         self._running = False
         self._msg_id = 0
 
@@ -83,6 +95,8 @@ class PhemexWebSocketClient:
             "disconnects_total": 0,
             "heartbeat_failures_total": 0,
             "order_events_total": 0,
+            "queue_overflows_total": 0,
+            "callback_failures_total": 0,
         }
 
     def _next_id(self) -> int:
@@ -103,24 +117,65 @@ class PhemexWebSocketClient:
     async def run(self) -> None:
         """Connect, authenticate, subscribe, and receive until stop() is called."""
         self._running = True
-        while self._running:
-            try:
-                await self._connect_and_receive()
-            except asyncio.CancelledError:
-                break
-            except Exception as exc:
-                self.metrics["disconnects_total"] += 1
-                self.metrics["connected"] = False
-                self.metrics["disconnect_ts"] = int(time.time() * 1000)
-                logger.warning(
-                    f"Phemex WS disconnected ({exc!r}) — "
-                    f"reconnecting in {_RECONNECT_DELAY}s"
-                )
-                if self._running:
-                    await asyncio.sleep(_RECONNECT_DELAY)
+        if self._on_raw_order:
+            self._worker = asyncio.create_task(self._consume_orders())
+        try:
+            while self._running:
+                try:
+                    self._invalidate('WS_RECONNECT_RECONCILIATION_REQUIRED')
+                    await self._connect_and_receive()
+                except asyncio.CancelledError:
+                    await self.stop()
+                    break
+                except Exception as exc:
+                    self.metrics["disconnects_total"] += 1
+                    self._invalidate('WS_DISCONNECTED')
+                    self.metrics["connected"] = False
+                    self.metrics["disconnect_ts"] = int(time.time() * 1000)
+                    logger.warning(
+                        f"Phemex WS disconnected ({exc!r}) — "
+                        f"reconnecting in {_RECONNECT_DELAY}s"
+                    )
+                    if self._running:
+                        await asyncio.sleep(_RECONNECT_DELAY)
+                else:
+                    self._invalidate('WS_STREAM_ENDED')
+                    if self._running:
+                        await asyncio.sleep(_RECONNECT_DELAY)
+        finally:
+            await self.stop()
 
     async def stop(self) -> None:
-        self._running = False
+        async with self._stop_lock:
+            self._running = False
+            if self._ws is not None:
+                await self._ws.close()
+            if self._worker is not None:
+                # Never release ownership while a thread is still committing evidence.
+                await asyncio.shield(self._queue.join())
+                await self._queue.put(None)
+                await asyncio.shield(self._worker)
+                self._worker = None
+
+    def _invalidate(self, reason):
+        if self._on_invalidate:
+            self._on_invalidate(reason)
+
+    async def _consume_orders(self):
+        while True:
+            order = await self._queue.get()
+            try:
+                if order is None:
+                    return
+                await asyncio.to_thread(self._on_raw_order, order)
+            except Exception:
+                self.metrics['callback_failures_total'] += 1
+                self._invalidate('WS_CALLBACK_FAILED')
+                logger.exception('WS_CALLBACK_FAILED; REST reconciliation required')
+            finally:
+                if order is not None and self._on_complete:
+                    self._on_complete()
+                self._queue.task_done()
 
     async def _connect_and_receive(self) -> None:
         timeout = aiohttp.ClientTimeout(total=None, connect=10)
@@ -128,8 +183,9 @@ class PhemexWebSocketClient:
             async with session.ws_connect(
                 self._ws_url,
                 heartbeat=30,
-                max_msg_size=0,
+                max_msg_size=4 * 1024 * 1024,
             ) as ws:
+                self._ws = ws
                 self.metrics["connected"] = True
                 self.metrics["connect_ts"] = int(time.time() * 1000)
                 logger.info(f"Phemex WS connected: {self._ws_url}")
@@ -171,7 +227,7 @@ class PhemexWebSocketClient:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             self._dispatch(msg.data)
                         elif msg.type == aiohttp.WSMsgType.BINARY:
-                            self._dispatch(msg.data.decode("utf-8", errors="ignore"))
+                            self._dispatch(msg.data.decode("utf-8"))
                         elif msg.type in (
                             aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR
                         ):
@@ -209,13 +265,43 @@ class PhemexWebSocketClient:
             # Don't crash on bad JSON, but make it visible — silently dropping frames
             # masks malformed-message bugs and protocol drift.
             self.metrics["parse_errors_total"] += 1
+            self._invalidate('WS_FRAME_INVALID')
             logger.warning(
                 "Phemex WS JSON parse error: %s (raw_len=%d, head=%r)",
                 e, len(raw), raw[:120],
             )
             return
 
+        if not isinstance(msg, dict):
+            self._invalidate('WS_FRAME_INVALID')
+            return
         msg_type = msg.get("type")
+
+        if self._on_raw_order:
+            if msg_type not in ('snapshot', 'incremental', 'aop_p'):
+                return
+            self.metrics['frames_aop_total'] += 1
+            self._invalidate('WS_ACCOUNT_CHANGED')
+            orders = msg.get('orders_p', msg.get('orders'))
+            if orders is None and isinstance(msg.get('data'), dict):
+                orders = msg['data'].get('orders_p', msg['data'].get('orders'))
+            if orders is None:
+                return  # Account/position notification still invalidates valuation.
+            if not isinstance(orders, list) or any(not isinstance(o, dict) for o in orders):
+                self._invalidate('WS_ORDER_COLLECTION_INVALID')
+                return
+            for order in orders:
+                try:
+                    self._queue.put_nowait(order)
+                except asyncio.QueueFull:
+                    self.metrics['queue_overflows_total'] += 1
+                    self._invalidate('WS_QUEUE_OVERFLOW')
+                    logger.error('WS_QUEUE_OVERFLOW; REST reconciliation required')
+                    break
+                if self._on_pending:
+                    self._on_pending()
+                self.metrics['order_events_total'] += 1
+            return
 
         # aop_p channel messages carry order arrays
         if msg_type != "aop_p":

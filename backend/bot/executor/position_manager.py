@@ -18,6 +18,7 @@ Features:
 
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field
+from decimal import Decimal, localcontext
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 import asyncio
@@ -27,6 +28,7 @@ from threading import Lock
 
 from backend.shared.models.planner import TradePlan, Target
 from backend.strategy.smc.sessions import get_current_kill_zone
+from backend.bot.executor.execution_outcomes import ExecutionReceipt
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,13 @@ class PositionState:
     entry_order_id: Optional[str] = None
     exit_reason: Optional[str] = None
     exit_price: Optional[float] = None
+    exchange_close_pending: bool = False
+    native_target_order_id: Optional[str] = None
+    native_target_level: Optional[float] = None
+    native_target_quantity: Optional[str] = None
+    pending_exit_reason: Optional[str] = None
+    pending_target: Optional[Target] = None
+    pending_target_quantity: Optional[float] = None
 
     # Trade-type and regime context for adaptive stagnation
     trade_type: str = "intraday"  # "scalp", "intraday", "swing" — from TradePlan
@@ -329,6 +338,7 @@ class PositionManager:
         trailing_stop_activation: float = 1.5,  # Activate after 1.5R profit
         trailing_stop_distance: float = 0.5,  # Trail 0.5R behind
         max_hours_open: float = 6.0,  # Legacy fallback — used only if trade_type unknown
+        receipt_execution: bool = False,
     ):
         """
         Initialize Position Manager.
@@ -349,6 +359,7 @@ class PositionManager:
         self.trailing_stop_activation = trailing_stop_activation
         self.trailing_stop_distance = trailing_stop_distance
         self.max_hours_open = max_hours_open  # Legacy fallback
+        self.receipt_execution = receipt_execution
 
         self.positions: Dict[str, PositionState] = {}
         self._lock = Lock()
@@ -365,7 +376,8 @@ class PositionManager:
         trade_plan: TradePlan,
         entry_price: float,
         quantity: float,
-        entry_order_id: Optional[str] = None
+        entry_order_id: Optional[str] = None,
+        execution_progress=None,
     ) -> str:
         """
         Open new position from trade plan.
@@ -484,6 +496,9 @@ class PositionManager:
             tp1_realized_rr=float((getattr(trade_plan, "metadata", None) or {}).get("tp1_realized_rr", 0.0) or 0.0),
         )
 
+        if execution_progress is not None:
+            self._apply_execution_progress(position, execution_progress)
+
         # Calculate the adaptive stagnation deadline for logging
         adaptive_hours = self._get_adaptive_stagnation_hours(position)
         adaptive_pnl = self._get_adaptive_stagnation_pnl(position)
@@ -492,8 +507,9 @@ class PositionManager:
             self.positions[position_id] = position
 
         logger.info(
-            f"Position opened: {position_id} | {trade_plan.symbol} {trade_plan.direction} "
-            f"| Entry: {entry_price} | Qty: {quantity} | SL: {trade_plan.stop_loss.level} "
+            f"Position recorded: {position_id} | {trade_plan.symbol} {trade_plan.direction} "
+            f"| Status: {position.status.value} | Remaining: {position.remaining_quantity} "
+            f"| Entry: {position.entry_price} | Qty: {quantity} | SL: {trade_plan.stop_loss.level} "
             f"| Type: {trade_type} | Stagnation: {adaptive_hours:.1f}h / {adaptive_pnl:.2f}% "
             f"(regime: trend={regime_trend}, vol={regime_volatility})"
         )
@@ -634,6 +650,10 @@ class PositionManager:
         4. Breakeven logic
         5. Trailing stop update
         """
+        if position.exchange_close_pending and not (self.receipt_execution and
+                (position.pending_exit_reason or position.pending_target is not None)):
+            logger.warning('EXCHANGE_CLOSE_EVIDENCE_PENDING %s; software exit deferred', position.position_id)
+            return
         # Fetch current price
         try:
             current_price = self.price_fetcher(position.symbol)
@@ -659,6 +679,10 @@ class PositionManager:
         # throws before reaching this line, the stamp never updates, triggering orphan.
         position._last_monitored_at = datetime.now(timezone.utc)
 
+        if self.receipt_execution and (position.pending_exit_reason or position.pending_target is not None):
+            await self._retry_pending_reduction(position, current_price)
+            return
+
         # --- Check Stop Loss FIRST ---
         # Must run before stagnation to ensure stop-level exits are classified
         # as "stop_loss" and not "stagnation" when both conditions are true.
@@ -669,6 +693,7 @@ class PositionManager:
                 f"P&L: {position.total_pnl:.2f}"
             )
 
+            success = True
             if self.order_executor:
                 # Execute market close
                 success = await self._execute_exit(position, current_price, "STOP_LOSS")
@@ -678,7 +703,9 @@ class PositionManager:
             # Apply stop-loss slippage: stops fill slightly worse than the trigger price
             # in real execution (0.05% is conservative for crypto; reality can be 0.1-0.5%).
             _STOP_SLIPPAGE_PCT = 0.0005
-            if position.direction == "LONG":
+            if isinstance(success, ExecutionReceipt):
+                settlement_price = success.average_price
+            elif position.direction == "LONG":
                 settlement_price = current_price * (1 - _STOP_SLIPPAGE_PCT)
             else:
                 settlement_price = current_price * (1 + _STOP_SLIPPAGE_PCT)
@@ -715,6 +742,8 @@ class PositionManager:
                 success = await self._execute_exit(position, current_price, "MAX_HOURS_OPEN")
                 if not success:
                     return  # Retry next tick
+                if isinstance(success, ExecutionReceipt):
+                    current_price = success.average_price
             with self._lock:
                 position.update_unrealized_pnl(current_price)
                 position.realized_pnl += position.unrealized_pnl
@@ -827,6 +856,8 @@ class PositionManager:
                     success = await self._execute_exit(position, current_price, "TIME_STAGNATION")
                     if not success:
                         return  # Persistent retry on next monitor cycle
+                    if isinstance(success, ExecutionReceipt):
+                        current_price = success.average_price
 
                 with self._lock:
                     # Settle P&L before zeroing remaining_quantity
@@ -867,7 +898,7 @@ class PositionManager:
             )
 
             # Calculate quantity to close
-            close_qty = (target_hit.percentage / 100) * position.quantity
+            close_qty = min((target_hit.percentage / 100) * position.quantity, position.remaining_quantity)
 
             if close_qty <= 0:
                 logger.error(
@@ -881,47 +912,18 @@ class PositionManager:
                     position.targets_hit.append(target_hit)
                 return
 
+            settlement_price = current_price
+            if self.receipt_execution:
+                position.pending_target = target_hit
+                position.pending_target_quantity = close_qty
             if self.order_executor:
                 success = await self._execute_partial_exit(position, current_price, close_qty)
                 if not success:
                     return  # Target stays active for next cycle
+                if isinstance(success, ExecutionReceipt):
+                    settlement_price = success.average_price
 
-            with self._lock:
-                # Update position state
-                position.remaining_quantity -= close_qty
-                position.targets.remove(target_hit)
-                position.targets_hit.append(target_hit)
-
-                # Update realized P&L
-                if position.direction == "LONG":
-                    partial_pnl = (current_price - position.entry_price) * close_qty
-                else:
-                    partial_pnl = (position.entry_price - current_price) * close_qty
-                position.realized_pnl += partial_pnl
-
-                # Update status
-                if position.remaining_quantity < 1e-9 or not position.targets:  # All targets hit or no targets left
-                    position.status = PositionStatus.CLOSED
-                    position.exit_reason = "target"
-                    position.exit_price = current_price  # Record at trigger time, not sync time
-                    position.remaining_quantity = 0.0  # Zero out any residue
-                    # P&L DOUBLE-COUNT FIX (2026-06-27): clear the stale cycle-top unrealized_pnl now
-                    # that the whole position is realized into realized_pnl. EVERY other exit path
-                    # (stop/stagnation/max-hours/close_position) does this; the target path was the
-                    # only one that omitted it, so total_pnl (= realized + unrealized) read 2x the
-                    # true P&L on target exits — overstating journal/edge measurement. The closed
-                    # slice's profit is already in realized_pnl (line above); unrealized must be 0.
-                    position.unrealized_pnl = 0.0
-                else:
-                    position.status = PositionStatus.PARTIAL
-                    # Partial exit: recompute unrealized on the REDUCED remaining_quantity so
-                    # total_pnl reflects only the surviving slice, not the stale full-qty value the
-                    # cycle-top update computed before this partial close.
-                    position.update_unrealized_pnl(current_price)
-
-            # Check if should move to breakeven
-            if len(position.targets_hit) >= self.breakeven_after_target:
-                self._move_to_breakeven(position)
+            self._settle_target(position, target_hit, close_qty, settlement_price, current_price)
 
         # --- Update Trailing Stop ---
         if position.trailing_active:
@@ -1081,6 +1083,70 @@ class PositionManager:
         else:  # SHORT
             return current_price >= position.stop_loss
 
+    def reconcile_execution_progress(self, position_id, progress, current_price=None):
+        """Set cumulative owned execution state; never add the same partial twice."""
+        with self._lock:
+            return self._apply_execution_progress(self.positions[position_id], progress, current_price)
+
+    def _apply_execution_progress(self, position, progress, current_price=None):
+        """Validate before mutation; caller owns the lock or an unpublished candidate."""
+        from backend.bot.executor.execution_reports import numeric
+        if (not progress.ready or progress.entry_order_id != position.entry_order_id
+                or progress.side != ('BUY' if position.direction == 'LONG' else 'SELL')
+                or progress.entry_quantity != Decimal(str(position.quantity))):
+            raise ValueError('POSITION_EXECUTION_PROGRESS_UNVERIFIED')
+        remaining = numeric(progress.remaining_quantity)
+        gross = numeric(progress.realized_gross)
+        with localcontext() as context:
+            context.prec = 256
+            entry_price = numeric(progress.entry_cost / progress.entry_quantity, positive=True)
+            exit_price = numeric(progress.exit_cost / progress.exit_quantity, positive=True) if progress.exit_quantity else None
+        target = native = None
+        target_left = None
+        if position.native_target_order_id:
+            native = next((r for r in progress.exits if r.order_id == position.native_target_order_id), None)
+            matches = [t for t in position.targets if t.level == position.native_target_level]
+            if native is None or len(matches) != 1 or position.native_target_quantity is None:
+                raise ValueError('NATIVE_TARGET_ALLOCATION_UNVERIFIED')
+            target = matches[0]
+            requested = Decimal(position.native_target_quantity)
+            if not requested.is_finite() or requested <= 0 or native.quantity > requested:
+                raise ValueError('NATIVE_TARGET_QUANTITY_CONFLICT')
+            target_left = requested - native.quantity
+            with localcontext() as context:
+                context.prec = 256
+                percentage_left = numeric(target_left / progress.entry_quantity * 100)
+        # Everything above validates candidates before changing manager state.
+        changed = position.remaining_quantity != remaining or position.realized_pnl != gross
+        previous_remaining = position.remaining_quantity
+        position.entry_price = entry_price
+        position.remaining_quantity = remaining
+        position.realized_pnl = gross
+        if type(current_price) in (int, float) and math.isfinite(current_price) and current_price > 0:
+            position.update_unrealized_pnl(current_price)
+        elif previous_remaining > 0:
+            position.unrealized_pnl *= remaining / previous_remaining
+        if native:
+            if target_left == 0 and native.terminal:
+                target.percentage = float(requested / progress.entry_quantity * 100)
+                position.targets.remove(target)
+                position.targets_hit.append(target)
+            else:
+                target.percentage = percentage_left
+            if native.terminal:
+                position.native_target_order_id = None
+        if remaining == 0:
+            position.status = PositionStatus.CLOSED
+            position.exit_reason = 'exchange_exit'
+            position.exit_price = exit_price
+            position.unrealized_pnl = 0.0
+        elif progress.exit_quantity:
+            position.status = PositionStatus.PARTIAL
+        if changed:
+            position.updated_at = datetime.now(timezone.utc)
+        position.exchange_close_pending = False
+        return changed
+
     def _check_targets_hit(self, position: PositionState, current_price: float) -> Optional[Target]:
         """
         Check if any targets were hit.
@@ -1104,6 +1170,10 @@ class PositionManager:
         stagnation / max_hours_open paths will close it normally.
         """
         if not position.targets:
+            return None
+        if position.native_target_order_id:
+            logger.debug('NATIVE_TARGET_OWNS_EXIT %s order=%s; waiting for execution reconciliation',
+                         position.position_id, position.native_target_order_id)
             return None
 
         # In simulation (no live executor), enforce minimum hold to prevent same-candle exits.
@@ -1426,21 +1496,84 @@ class PositionManager:
                     f"Stop: {old_stop:.2f} -> {new_stop:.2f}"
                 )
 
-    async def _execute_exit(self, position: PositionState, price: float, reason: str) -> bool:
+    def _settle_target(self, position, target_hit, close_qty, settlement_price, current_price):
+        with self._lock:
+            # Update position state
+            position.remaining_quantity -= close_qty
+            position.targets.remove(target_hit)
+            position.targets_hit.append(target_hit)
+
+            # Update realized P&L
+            if position.direction == "LONG":
+                partial_pnl = (settlement_price - position.entry_price) * close_qty
+            else:
+                partial_pnl = (position.entry_price - settlement_price) * close_qty
+            position.realized_pnl += partial_pnl
+
+            # Update status
+            if position.remaining_quantity < 1e-9:
+                position.status = PositionStatus.CLOSED
+                position.exit_reason = "target"
+                position.exit_price = settlement_price
+                position.remaining_quantity = 0.0  # Zero out any residue
+                # P&L DOUBLE-COUNT FIX (2026-06-27): clear the stale cycle-top unrealized_pnl now
+                # that the whole position is realized into realized_pnl. EVERY other exit path
+                # (stop/stagnation/max-hours/close_position) does this; the target path was the
+                # only one that omitted it, so total_pnl (= realized + unrealized) read 2x the
+                # true P&L on target exits — overstating journal/edge measurement. The closed
+                # slice's profit is already in realized_pnl (line above); unrealized must be 0.
+                position.unrealized_pnl = 0.0
+            else:
+                position.status = PositionStatus.PARTIAL
+                # Partial exit: recompute unrealized on the REDUCED remaining_quantity so
+                # total_pnl reflects only the surviving slice, not the stale full-qty value the
+                # cycle-top update computed before this partial close.
+                position.update_unrealized_pnl(current_price)
+
+        # Check if should move to breakeven
+        if len(position.targets_hit) >= self.breakeven_after_target:
+            self._move_to_breakeven(position)
+
+        position.pending_target = None
+        position.pending_target_quantity = None
+
+    async def _retry_pending_reduction(self, position, current_price):
+        """Once submitted, an exit must finish even after its trigger price recrosses."""
+        if position.pending_target is not None:
+            target, quantity = position.pending_target, position.pending_target_quantity
+            result = await self._execute_partial_exit(position, current_price, quantity)
+            if isinstance(result, ExecutionReceipt) and result.confirms(quantity):
+                self._settle_target(position, target, quantity, result.average_price, current_price)
+            return
+        reason = position.pending_exit_reason
+        result = await self._execute_exit(position, current_price, reason)
+        if not isinstance(result, ExecutionReceipt):
+            return
+        label = {'STOP_LOSS': 'stop_loss', 'MAX_HOURS_OPEN': 'max_hours_open',
+                 'TIME_STAGNATION': 'stagnation'}.get(reason, reason.lower())
+        if reason == 'TIME_STAGNATION' and position.targets_stripped_count > 0 and not position.targets and not position.targets_hit:
+            label = 'target_strip'
+        self.close_position(position.position_id, label, result.average_price)
+        if reason == 'STOP_LOSS':
+            position.status = PositionStatus.STOPPED_OUT
+
+    async def _execute_exit(self, position: PositionState, price: float, reason: str) -> bool | ExecutionReceipt:
         """Execute full position exit.
 
-        ``order_executor`` contract: ``async (symbol, side, quantity, price) ->``
-        truthy on a CONFIRMED fill, falsy on failure. This return value is
-        load-bearing — ``_monitor_position`` only settles the PositionState when
-        it is True, so dropping a falsy result would strand a live position open
-        on the exchange (the native stop is cancelled before this fires). See
-        decisions/2026-05-29__fix-design__execute-exit-discarded-return.md.
+        Runtime callbacks return a priced ExecutionReceipt; simulation retains
+        the boolean contract. Entry identity travels with each real reduction.
+        Failure or incomplete evidence leaves the position open for recovery.
         """
         executor = self.order_executor
         if not executor:
             logger.warning("No order executor configured - simulating exit")
             return True
 
+        if self.receipt_execution:
+            if position.pending_target is not None:
+                logger.warning('TARGET_REDUCTION_PENDING %s; full exit deferred', position.position_id)
+                return False
+            position.pending_exit_reason = position.pending_exit_reason or reason
         try:
             # Execute market order to close
             order_side = "SELL" if position.direction == "LONG" else "BUY"
@@ -1449,7 +1582,12 @@ class PositionManager:
                 side=order_side,
                 quantity=position.remaining_quantity,
                 price=price,
+                **({'entry_order_id': position.entry_order_id} if position.entry_order_id else {}),
             )
+            if isinstance(ok, ExecutionReceipt) and not ok.confirms(position.remaining_quantity):
+                logger.error('EXIT_RECEIPT_INCOMPLETE %s order=%s reasons=%s',
+                             position.position_id, ok.order_id, ok.reasons)
+                return False
             if not ok:
                 logger.error(
                     f"Exit NOT confirmed for {position.position_id} | {reason} | "
@@ -1461,12 +1599,16 @@ class PositionManager:
                 f"Exit executed: {position.position_id} | {reason} | "
                 f"Qty: {position.remaining_quantity} @ {price}"
             )
-            return True
+            if self.receipt_execution:
+                if not isinstance(ok, ExecutionReceipt):
+                    raise ValueError('RUNTIME_EXIT_RECEIPT_REQUIRED')
+                position.pending_exit_reason = None
+            return ok if isinstance(ok, ExecutionReceipt) else True
         except Exception as e:
             logger.error(f"Failed to execute exit for {position.position_id}: {e}")
             return False
 
-    async def _execute_partial_exit(self, position: PositionState, price: float, quantity: float) -> bool:
+    async def _execute_partial_exit(self, position: PositionState, price: float, quantity: float) -> bool | ExecutionReceipt:
         """Execute partial position exit at target.
 
         ``order_executor`` return is load-bearing (see ``_execute_exit``): a falsy
@@ -1481,8 +1623,13 @@ class PositionManager:
         try:
             order_side = "SELL" if position.direction == "LONG" else "BUY"
             ok = await executor(
-                symbol=position.symbol, side=order_side, quantity=quantity, price=price
+                symbol=position.symbol, side=order_side, quantity=quantity, price=price,
+                **({'entry_order_id': position.entry_order_id} if position.entry_order_id else {}),
             )
+            if isinstance(ok, ExecutionReceipt) and not ok.confirms(quantity):
+                logger.error('PARTIAL_EXIT_RECEIPT_INCOMPLETE %s order=%s reasons=%s',
+                             position.position_id, ok.order_id, ok.reasons)
+                return False
             if not ok:
                 logger.error(
                     f"Partial exit NOT confirmed for {position.position_id} | "
@@ -1493,7 +1640,9 @@ class PositionManager:
             logger.info(
                 f"Partial exit executed: {position.position_id} | " f"Qty: {quantity} @ {price}"
             )
-            return True
+            if self.receipt_execution and not isinstance(ok, ExecutionReceipt):
+                raise ValueError('RUNTIME_EXIT_RECEIPT_REQUIRED')
+            return ok if isinstance(ok, ExecutionReceipt) else True
         except Exception as e:
             logger.error(f"Failed to execute partial exit for {position.position_id}: {e}")
             return False
@@ -1531,94 +1680,41 @@ class PositionManager:
             return self.positions.pop(position_id, None)
 
     def emergency_close_all(self, reason: str = "EMERGENCY"):
+        """Run to completion in sync callers; return an awaitable task inside a loop.
+
+        Local closure follows confirmed execution. Failed exits remain open.
         """
-        Emergency close all open positions.
+        async def close_confirmed():
+            logger.critical("EMERGENCY CLOSE ALL: %s", reason)
+            for position in self.get_open_positions():
+                try:
+                    price = self.price_fetcher(position.symbol)
+                    if (isinstance(price, bool) or not isinstance(price, (int, float))
+                            or not math.isfinite(price) or price <= 0):
+                        raise ValueError("EMERGENCY_EXIT_PRICE_UNAVAILABLE")
+                    if self.receipt_execution and (position.pending_target is not None or position.pending_exit_reason):
+                        await self._retry_pending_reduction(position, price)
+                        if position.pending_target is not None or position.pending_exit_reason or position.remaining_quantity <= 0:
+                            continue
+                    result = await self._execute_exit(position, price, reason)
+                    if not result:
+                        continue
+                    settled = result.average_price if isinstance(result, ExecutionReceipt) else price
+                    self.close_position(position.position_id, f"EMERGENCY: {reason}", settled)
+                    with self._lock:
+                        position.status = PositionStatus.EMERGENCY_EXIT
+                except Exception:
+                    logger.exception("Emergency exit unconfirmed for %s", position.position_id)
 
-        Calls order_executor for each position so the executor's position dict
-        and balance are correctly updated — without this, the executor's margin
-        accounting would still show open positions after an emergency shutdown.
-
-        Use in case of system shutdown, critical error, or risk event.
-        """
-        logger.critical(f"EMERGENCY CLOSE ALL: {reason}")
-
-        open_positions = self.get_open_positions()
-
-        for position in open_positions:
-            try:
-                current_price = self.price_fetcher(position.symbol)
-
-                # Fire exit order through executor BEFORE settling the PositionState
-                # so the executor's positions dict and balance reflect the close.
-                if self.order_executor and position.remaining_quantity > 0 and current_price > 0:
-                    import asyncio
-                    order_side = "SELL" if position.direction == "LONG" else "BUY"
-                    try:
-                        # order_executor is async; emergency_close_all may be
-                        # called from either an async context (shutdown hook)
-                        # or a sync thread (signal handler / tests).
-                        #
-                        # ``asyncio.get_event_loop()`` is deprecated in 3.12+
-                        # when there is no running loop: prefer
-                        # ``get_running_loop`` (which raises cleanly if none
-                        # exists) and fall back to creating a fresh loop only
-                        # as a last resort.
-                        try:
-                            running_loop = asyncio.get_running_loop()
-                        except RuntimeError:
-                            running_loop = None
-
-                        if running_loop is not None:
-                            asyncio.ensure_future(
-                                self.order_executor(
-                                    symbol=position.symbol,
-                                    side=order_side,
-                                    quantity=position.remaining_quantity,
-                                    price=current_price,
-                                ),
-                                loop=running_loop,
-                            )
-                        else:
-                            # No running loop — create a throwaway one so the
-                            # executor coroutine runs to completion before we
-                            # settle the position. Closed explicitly to avoid
-                            # ResourceWarning.
-                            _tmp_loop = asyncio.new_event_loop()
-                            try:
-                                _tmp_loop.run_until_complete(
-                                    self.order_executor(
-                                        symbol=position.symbol,
-                                        side=order_side,
-                                        quantity=position.remaining_quantity,
-                                        price=current_price,
-                                    )
-                                )
-                            finally:
-                                _tmp_loop.close()
-                    except Exception as exec_err:
-                        logger.warning(
-                            f"Emergency executor close failed for {position.position_id}: {exec_err}"
-                        )
-
-                # Settle all position fields under the lock so no concurrent
-                # monitor tick reads a partially-updated state.
-                with self._lock:
-                    position.status = PositionStatus.EMERGENCY_EXIT
-                    position.exit_reason = f"EMERGENCY: {reason}"
-                    if current_price is not None:
-                        position.update_unrealized_pnl(current_price)
-                        position.realized_pnl += position.unrealized_pnl
-                        position.unrealized_pnl = 0.0
-                    position.remaining_quantity = 0.0
-                    position.exit_price = current_price
-                    position.updated_at = datetime.now(timezone.utc)
-
-                logger.info(
-                    f"Emergency closed: {position.position_id} | "
-                    f"Total P&L: {position.total_pnl:.2f} ({position.pnl_percentage:.2f}%)"
-                )
-            except Exception as e:
-                logger.error(f"Failed to emergency close {position.position_id}: {e}")
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(close_confirmed())
+        existing = getattr(self, "_emergency_task", None)
+        if existing is not None and not existing.done():
+            return existing
+        self._emergency_task = loop.create_task(close_confirmed())
+        return self._emergency_task
 
     def find_position_by_order_id(self, order_id: str) -> Optional[PositionState]:
         """Find an open/partial position linked to a specific entry order ID."""

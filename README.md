@@ -12,6 +12,15 @@ A working FastAPI backend + React HUD frontend that scans crypto markets across 
 
 Not a blueprint. The scanner is built and runs.
 
+## Working on the code
+
+Start with the [current architecture index](docs/ARCHITECTURE_INDEX.md) and its
+evidence/coverage links. Identify the affected contracts and upstream/downstream
+owners, read the current implementation, reproduce assumptions, and run the
+relevant isolated checks. Update the map and ledger when behavior changes.
+The index is navigation, not a substitute for source inspection; older architecture
+and operating notes may describe superseded behavior.
+
 ## Stack
 
 - **Backend** — Python 3.10+, FastAPI, uvicorn (port 8000), ccxt for exchange connectivity

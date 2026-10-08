@@ -78,12 +78,14 @@ class Order:
     quantity: float
     price: Optional[float] = None
     filled_quantity: float = 0.0
-    average_fill_price: float = 0.0
+    average_fill_price: Optional[float] = 0.0  # Live confirmed quantity may lack verified cost.
     status: OrderStatus = OrderStatus.PENDING
     stop_price: Optional[float] = None
     rejection_reason: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    parent_entry_order_id: Optional[str] = None
+    reduction_root_order_id: Optional[str] = None
 
     @property
     def remaining_quantity(self) -> float:

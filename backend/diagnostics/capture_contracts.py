@@ -3,9 +3,9 @@ Contract capture + diff for SniperSight backend integrity (CLAUDE.md §20).
 
 Captures frozen snapshots of:
   - API route inventory (path, method, response model name)
-  - Telemetry event types + factory function payload keys
+  - Telemetry event types + factory function parameter names (not runtime payload validation)
   - SniperContext field set
-  - SQLite + JSONL schemas
+  - Production SQLite declarations and selected JSONL writer implementation fingerprints
 
 Two modes:
   python -m backend.diagnostics.capture_contracts capture   # re-baseline
@@ -143,119 +143,23 @@ def capture_pipeline_contracts() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-_CREATE_TABLE_RE = re.compile(
-    r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\((.*?)\)",
-    re.IGNORECASE | re.DOTALL,
-)
-
-
 def _parse_create_tables(source: str) -> List[Dict[str, Any]]:
-    """Parse all CREATE TABLE statements from a Python source string."""
-    out: List[Dict[str, Any]] = []
-    for match in _CREATE_TABLE_RE.finditer(source):
-        table = match.group(1)
-        body = match.group(2)
-        # Extract column names — first token of each comma-separated entry
-        cols: List[str] = []
-        for part in body.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            # Skip standalone constraints (PRIMARY KEY, FOREIGN KEY, etc when not inline)
-            if part.upper().startswith(("PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK", "CONSTRAINT")):
-                continue
-            tok = part.split()[0].strip('`"[]')
-            if tok and tok.isidentifier():
-                cols.append(tok)
-        out.append({"table": table, "columns": sorted(cols)})
-    out.sort(key=lambda x: x["table"])
-    return out
+    """Inspect literal declarations with SQLite; reject unresolved DDL."""
+    from backend.diagnostics.storage_contracts import sqlite_tables
+    tables, unresolved = sqlite_tables(source)
+    if unresolved:
+        raise ValueError('; '.join(unresolved))
+    return tables
 
 
 def capture_db_contracts() -> Dict[str, Any]:
-    """Scan storage / persistence modules for CREATE TABLE schemas + JSONL key samples."""
-    db_tables: List[Dict[str, Any]] = []
+    """Production SQLite declarations and JSONL writer evidence, independent of history.
 
-    # Telemetry storage
-    telemetry_storage = REPO_ROOT / "backend" / "bot" / "telemetry" / "storage.py"
-    if telemetry_storage.exists():
-        src = telemetry_storage.read_text(encoding="utf-8", errors="ignore")
-        for t in _parse_create_tables(src):
-            t["source"] = "backend/bot/telemetry/storage.py"
-            db_tables.append(t)
-
-    # Other persistence (best-effort: scan backend/bot for CREATE TABLE).
-    # Skips logged to stderr per §11 loud-failure preference.
-    skipped: List[str] = []
-    for py in (REPO_ROOT / "backend").rglob("*.py"):
-        if "venv" in py.parts or "__pycache__" in py.parts:
-            continue
-        if py == telemetry_storage:
-            continue
-        try:
-            src = py.read_text(encoding="utf-8", errors="ignore")
-        except Exception as exc:
-            rel = str(py.relative_to(REPO_ROOT)).replace("\\", "/")
-            print(f"[capture_contracts] skipped {rel}: {exc!r}", file=sys.stderr)
-            skipped.append(rel)
-            continue
-        if "CREATE TABLE" not in src:
-            continue
-        for t in _parse_create_tables(src):
-            t["source"] = str(py.relative_to(REPO_ROOT)).replace("\\", "/")
-            db_tables.append(t)
-
-    db_tables.sort(key=lambda x: (x["source"], x["table"]))
-
-    # JSONL contracts — sniff canonical key set from first line of each .jsonl.
-    # Exclude:
-    #   - venv / __pycache__: artifact dirs
-    #   - logs/ at repo root: runtime-emitted per-session signals.jsonl files
-    #     (gitignored under the existing `logs` + `*.log` patterns in
-    #     .gitignore; each paper-trader session creates a new path which
-    #     would drift the baseline without representing an actual schema
-    #     change). Canonical JSONLs live under backend/cache/.
-    #   The logs/ check is anchored to the FIRST path component relative to
-    #   REPO_ROOT to avoid false positives on incidental "logs" segments in
-    #   absolute paths (e.g. usernames containing "logs").
-    jsonl_files: List[Dict[str, Any]] = []
-    for jsonl_glob in ("**/signals.jsonl", "**/trade_journal.jsonl"):
-        for path in REPO_ROOT.rglob(jsonl_glob):
-            if "venv" in path.parts or "__pycache__" in path.parts:
-                continue
-            try:
-                rel_parts = path.relative_to(REPO_ROOT).parts
-            except ValueError:
-                rel_parts = path.parts
-            if rel_parts and rel_parts[0] == "logs":
-                continue
-            try:
-                with path.open("r", encoding="utf-8", errors="ignore") as fh:
-                    first = fh.readline().strip()
-                if not first:
-                    continue
-                obj = json.loads(first)
-                if isinstance(obj, dict):
-                    jsonl_files.append(
-                        {
-                            "path": str(path.relative_to(REPO_ROOT)).replace("\\", "/"),
-                            "keys": sorted(list(obj.keys())),
-                        }
-                    )
-            except Exception as exc:
-                rel = str(path.relative_to(REPO_ROOT)).replace("\\", "/")
-                print(f"[capture_contracts] skipped {rel}: {exc!r}", file=sys.stderr)
-                skipped.append(rel)
-                continue
-
-    jsonl_files.sort(key=lambda x: x["path"])
-    return {
-        "sqlite_tables": db_tables,
-        "jsonl_files": jsonl_files,
-        "table_count": len(db_tables),
-        "jsonl_count": len(jsonl_files),
-        "skipped_paths": sorted(skipped),
-    }
+    Writer fingerprints are implementation-change detectors, not inferred schemas.
+    No historical database or JSONL file is opened by this capture.
+    """
+    from backend.diagnostics.storage_contracts import capture_storage
+    return capture_storage(REPO_ROOT)
 
 
 # ---------------------------------------------------------------------------
@@ -278,34 +182,50 @@ def _write(payload: Dict[str, Any], target: Path) -> None:
         fh.write("\n")
 
 
+def _capture_problem(data: Any) -> Optional[str]:
+    """A matching failure record is never a successful contract capture."""
+    if not isinstance(data, dict):
+        return "capture must return an object"
+    if "error" in data:
+        return f"capture error: {data['error']!r}"
+    if data.get("unresolved"):
+        return str(data["unresolved"])
+    return None
+
+
 def cmd_capture() -> int:
-    """Capture current state as the new baseline."""
+    """Capture all inventories successfully before replacing any baseline."""
     print("[capture_contracts] Capturing baselines -> %s" % CONTRACTS_DIR)
-    results: List[str] = []
+    snapshots = []
+    errors = []
     for filename, label, fn in CAPTURES:
         try:
             data = fn()
         except Exception as exc:
             data = {"error": f"capture failed: {exc!r}"}
+        problem = _capture_problem(data)
+        if problem:
+            errors.append(f"  - {label}: INCOMPLETE ({problem})")
+        snapshots.append((filename, label, data))
+    if errors:
+        print("\n".join(errors))
+        print("[capture_contracts] No baselines changed; incomplete capture.")
+        return 1
+    for filename, label, data in snapshots:
         target = CONTRACTS_DIR / filename
         _write(data, target)
-        marker = "OK"
-        if "error" in data:
-            marker = f"ERR ({data['error']})"
-        results.append(f"  - {label}: {marker} -> {target.relative_to(REPO_ROOT)}")
-    print("\n".join(results))
+        print(f"  - {label}: OK -> {target}")
     print("[capture_contracts] done.")
     return 0
 
 
 def _diff_dicts(label: str, baseline: Any, current: Any, path: str = "") -> List[str]:
-    """Recursively diff two JSON-like structures. Returns list of human lines."""
+    """Recursively diff inventories; index lists only by unique complete identities."""
     lines: List[str] = []
     if type(baseline) is not type(current):
-        lines.append(f"  {label}{path}: type changed ({type(baseline).__name__} → {type(current).__name__})")
-        return lines
+        return [f"  {label}{path}: type changed ({type(baseline).__name__} → {type(current).__name__})"]
     if isinstance(baseline, dict):
-        b_keys, c_keys = set(baseline.keys()), set(current.keys())
+        b_keys, c_keys = set(baseline), set(current)
         for k in sorted(b_keys - c_keys):
             lines.append(f"  {label}{path}: removed key '{k}'")
         for k in sorted(c_keys - b_keys):
@@ -313,50 +233,63 @@ def _diff_dicts(label: str, baseline: Any, current: Any, path: str = "") -> List
         for k in sorted(b_keys & c_keys):
             lines.extend(_diff_dicts(label, baseline[k], current[k], path + f".{k}"))
     elif isinstance(baseline, list):
-        # For lists of dicts with a stable identifying field, do a set-style diff
-        if baseline and isinstance(baseline[0], dict):
-            idx_field = None
-            for f in ("path", "table", "name", "id"):
-                if f in baseline[0]:
-                    idx_field = f
-                    break
-            if idx_field:
-                b_idx = {item.get(idx_field): item for item in baseline if isinstance(item, dict)}
-                c_idx = {item.get(idx_field): item for item in current if isinstance(item, dict)}
-                for k in sorted(b_idx.keys() - c_idx.keys(), key=lambda x: str(x)):
-                    lines.append(f"  {label}{path}: removed item ({idx_field}={k!r})")
-                for k in sorted(c_idx.keys() - b_idx.keys(), key=lambda x: str(x)):
-                    lines.append(f"  {label}{path}: added item ({idx_field}={k!r})")
-                for k in sorted(b_idx.keys() & c_idx.keys(), key=lambda x: str(x)):
-                    lines.extend(_diff_dicts(label, b_idx[k], c_idx[k], path + f"[{idx_field}={k!r}]"))
+        items = baseline + current
+        if items and all(isinstance(item, dict) for item in items):
+            candidates = (("source", "table"), ("source", "symbol"), ("path", "methods"),
+                          ("path",), ("table",), ("name",), ("id",))
+            for fields in candidates:
+                if not all(all(field in item for field in fields) for item in items):
+                    continue
+                def identity(item):
+                    return tuple(json.dumps(item[field], sort_keys=True) for field in fields)
+                b_idx = {identity(item): item for item in baseline}
+                c_idx = {identity(item): item for item in current}
+                if len(b_idx) != len(baseline) or len(c_idx) != len(current):
+                    continue
+                key_label = ",".join(fields)
+                for key in sorted(b_idx.keys() - c_idx.keys()):
+                    lines.append(f"  {label}{path}: removed item ({key_label}={key!r})")
+                for key in sorted(c_idx.keys() - b_idx.keys()):
+                    lines.append(f"  {label}{path}: added item ({key_label}={key!r})")
+                for key in sorted(b_idx.keys() & c_idx.keys()):
+                    lines.extend(_diff_dicts(label, b_idx[key], c_idx[key], path + f"[{key_label}={key!r}]"))
                 return lines
         if baseline != current:
             lines.append(f"  {label}{path}: list changed (len {len(baseline)} → {len(current)})")
-    else:
-        if baseline != current:
-            lines.append(f"  {label}{path}: {baseline!r} → {current!r}")
+    elif baseline != current:
+        lines.append(f"  {label}{path}: {baseline!r} → {current!r}")
     return lines
 
 
 def cmd_diff() -> int:
-    """Compare current code against baseline; non-zero exit on drift."""
+    """Compare current code against baseline; incomplete evidence always fails."""
     print("[capture_contracts] Diffing current vs baseline...")
     total_drift = 0
     summary_lines: List[str] = []
     detail_lines: List[str] = []
-
     for filename, label, fn in CAPTURES:
         target = CONTRACTS_DIR / filename
-        if not target.exists():
-            summary_lines.append(f"  - {label}: NO BASELINE ({target.relative_to(REPO_ROOT)} missing)")
-            total_drift += 1
-            continue
         try:
             current = fn()
         except Exception as exc:
             current = {"error": f"capture failed: {exc!r}"}
-        with target.open("r", encoding="utf-8") as fh:
-            baseline = json.load(fh)
+        problem = _capture_problem(current)
+        if problem:
+            summary_lines.append(f"  - {label}: INCOMPLETE ({problem})")
+            total_drift += 1
+            continue
+        try:
+            with target.open("r", encoding="utf-8") as fh:
+                baseline = json.load(fh)
+        except (OSError, UnicodeError, ValueError) as exc:
+            summary_lines.append(f"  - {label}: BASELINE UNAVAILABLE ({exc})")
+            total_drift += 1
+            continue
+        problem = _capture_problem(baseline)
+        if problem:
+            summary_lines.append(f"  - {label}: INVALID BASELINE ({problem})")
+            total_drift += 1
+            continue
         diffs = _diff_dicts(label, baseline, current)
         if diffs:
             summary_lines.append(f"  - {label}: DRIFT ({len(diffs)} changes)")
@@ -364,14 +297,12 @@ def cmd_diff() -> int:
             total_drift += len(diffs)
         else:
             summary_lines.append(f"  - {label}: clean")
-
-    # §12 paste-friendly: summary first, detail second, raw last
     print("\n=== SUMMARY ===")
     print("\n".join(summary_lines))
     if detail_lines:
         print("\n=== DETAIL ===")
         print("\n".join(detail_lines))
-    print(f"\n=== RESULT: {'DRIFT' if total_drift else 'CLEAN'} ({total_drift} changes) ===")
+    print(f"\n=== RESULT: {'DRIFT/INCOMPLETE' if total_drift else 'CLEAN'} ({total_drift} changes) ===")
     return 0 if total_drift == 0 else 1
 
 

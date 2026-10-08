@@ -123,6 +123,7 @@ class ScannerService:
         orchestrator,
         exchange_adapters: Dict[str, Any],
         log_handler=None,
+        orchestrator_lock=None,
     ):
         """
         Initialize the scanner service.
@@ -133,8 +134,11 @@ class ScannerService:
             log_handler: Optional log handler to capture scan logs
         """
         self._orchestrator = orchestrator
+        self._orchestrator_lock = orchestrator_lock if orchestrator_lock is not None else threading.Lock()
         self._exchange_adapters = exchange_adapters
         self._log_handler = log_handler
+        # Do not fill the shared thread pool with workers waiting for one engine.
+        self._worker_slots = asyncio.Semaphore(1)
 
         # Job tracking
         self._jobs: Dict[str, ScanJob] = {}
@@ -202,16 +206,16 @@ class ScannerService:
             return jobs[:limit]
 
     def cancel_job(self, run_id: str) -> bool:
-        """Cancel a running scan job."""
-        job = self.get_job(run_id)
-        if not job:
-            return False
-
-        if job.task and not job.task.done():
-            job.task.cancel()
-            job.status = "cancelled"
-            job.completed_at = datetime.now(timezone.utc)
-            return True
+        """Cancel publication immediately without releasing an active worker's lock."""
+        with self._jobs_lock:
+            job = self._jobs.get(run_id)
+            if not job or job.status in ("completed", "failed", "cancelled"):
+                return False
+            if job.task and not job.task.done():
+                job.status = "cancelled"
+                job.completed_at = datetime.now(timezone.utc)
+                job.task.cancel()
+                return True
         return False
 
     def cleanup_old_jobs(self):
@@ -243,143 +247,175 @@ class ScannerService:
                         del self._jobs[job.run_id]
 
     async def _execute_scan(self, job: ScanJob):
-        """Execute scan in background, updating job status as it progresses."""
-        # Set this job as the current log recipient
-        if self._log_handler:
-            self._log_handler.set_current_job(job)
-
+        """Cancelled callers leave admission and engine ownership with the worker."""
         try:
-            job.status = "running"
-            job.started_at = datetime.now(timezone.utc)
-
-            params = job.params
-
-            # Resolve exchange adapter
-            exchange_key = params["exchange"].lower()
-            if exchange_key not in self._exchange_adapters:
-                raise ValueError(f"Unsupported exchange: {exchange_key}")
-
-            current_adapter = self._exchange_adapters[exchange_key]()
-
-            # Configure adapter for market type (if supported)
-            market_type = params.get("market_type", "swap")
-            if hasattr(current_adapter, "default_type"):
-                current_adapter.default_type = market_type
-                logger.info(f"Configured {exchange_key} adapter for {market_type} markets")
-
-            # Resolve mode
+            await self._worker_slots.acquire()
             try:
-                mode = get_mode(params["sniper_mode"])
-            except ValueError as e:
-                raise ValueError(f"Invalid mode: {e}") from e
+                worker = asyncio.get_running_loop().run_in_executor(None, self._run_scan, job)
+            except BaseException:
+                self._worker_slots.release()
+                raise
 
-            effective_min = params["min_score"] if params["min_score"] > 0 else mode.min_confluence_score
+            def worker_finished(future):
+                self._worker_slots.release()
+                if not future.cancelled() and future.exception() is not None:
+                    logger.error("Scan worker %s failed: %s", job.run_id, future.exception())
 
-            # Apply mode to orchestrator
-            self._orchestrator.apply_mode(mode)
-            self._orchestrator.config.min_confluence_score = effective_min
-            self._orchestrator.config.macro_overlay_enabled = params["macro_overlay"]
-            # Inject leverage for proper stop validation
-            try:
-                setattr(self._orchestrator.config, "leverage", params["leverage"])
-            except Exception as e:
-                logger.warning(
-                    "Failed to inject leverage=%s into orchestrator config: %s. "
-                    "Defaulting to 1x to prevent incorrect stop sizing.",
-                    params.get("leverage"),
-                    e,
-                )
-                try:
-                    setattr(self._orchestrator.config, "leverage", 1)
-                except Exception:
-                    pass
-            self._orchestrator.exchange_adapter = current_adapter
-            self._orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
-
-            # Resolve symbols via centralized selector (or use target_symbol if provided)
-            target_symbol = params.get("target_symbol")
-            if target_symbol:
-                logger.info(f"Targeted scan for single symbol: {target_symbol}")
-                symbols = [target_symbol]
-            else:
-                # Run symbol selection in thread pool to avoid blocking event loop
-                loop = asyncio.get_event_loop()
-                symbols = await loop.run_in_executor(
-                    None,
-                    select_symbols,
-                    current_adapter,
-                    params["limit"],
-                    params["majors"],
-                    params["altcoins"],
-                    params["meme_mode"],
-                    params["leverage"],
-                    market_type,
-                )
-            
-            if not symbols:
-                raise ValueError("No symbols selected for scanning")
-            job.total = len(symbols)
-
-            # Define progress callback to update job state
-            def update_progress(completed: int, total: int, current_symbol: str):
-                job.progress = completed
-                job.current_symbol = current_symbol
-                logger.debug("Scan progress: %d/%d - %s", completed, total, current_symbol)
-
-            # Run scan in thread pool to avoid blocking event loop
-            loop = asyncio.get_event_loop()
-            trade_plans, rejection_summary = await loop.run_in_executor(
-                None,  # Uses default ThreadPoolExecutor
-                self._orchestrator.scan,
-                symbols,
-                update_progress,  # Pass progress callback
-            )
-
-            # Transform results to API format with live price validation
-            signals, rejected_signals = self._transform_signals(trade_plans, mode, current_adapter)
-
-            # Merge late rejections (e.g. price validation)
-            stale_filtered_count = len(rejected_signals)
-
-            if stale_filtered_count > 0:
-                rejection_summary["total_rejected"] += stale_filtered_count
-                # Ensure risk_validation key exists
-                if "risk_validation" not in rejection_summary["by_reason"]:
-                    rejection_summary["by_reason"]["risk_validation"] = 0
-                rejection_summary["by_reason"]["risk_validation"] += stale_filtered_count
-
-                if "risk_validation" in rejection_summary["details"]:
-                    rejection_summary["details"]["risk_validation"].extend(rejected_signals)
-
-            job.signals = signals
-            job.rejections = rejection_summary
-            job.metadata = {
-                "total": len(signals),
-                "scanned": len(symbols),
-                "rejected": len(symbols) - len(signals),
-                "mode": mode.name,
-                "applied_timeframes": mode.timeframes,
-                "effective_min_score": effective_min,
-                "exchange": exchange_key,
-                "leverage": params["leverage"],
-            }
-            job.status = "completed"
-            job.completed_at = datetime.now(timezone.utc)
-            job.progress = job.total
-
+            worker.add_done_callback(worker_finished)
+            await asyncio.shield(worker)
         except asyncio.CancelledError:
-            job.status = "cancelled"
-            job.completed_at = datetime.now(timezone.utc)
+            with self._jobs_lock:
+                job.status = "cancelled"
+                job.completed_at = datetime.now(timezone.utc)
             raise
-        except Exception as e:
-            logger.error("Scan job %s failed: %s", job.run_id, e)
-            job.status = "failed"
-            job.error = str(e)
-            job.completed_at = datetime.now(timezone.utc)
-        finally:
-            # Clear the current job from log handler
+        except Exception as exc:
+            logger.error("Scan job %s could not run: %s", job.run_id, exc)
+            with self._jobs_lock:
+                if job.status != "cancelled":
+                    job.status = "failed"
+                    job.error = str(exc)
+                    job.completed_at = datetime.now(timezone.utc)
+
+    def _run_scan(self, job: ScanJob):
+        """Serialize configuration, selection, execution and publication."""
+        with self._orchestrator_lock:
+            # This worker owns the shared engine until physical execution finishes.
+            with self._jobs_lock:
+                if job.status == "cancelled":
+                    return
+                job.status = "running"
+                job.started_at = datetime.now(timezone.utc)
+            # Set this job as the current log recipient
             if self._log_handler:
-                self._log_handler.set_current_job(None)
+                self._log_handler.set_current_job(job)
+
+            try:
+                params = job.params
+
+                # Resolve exchange adapter
+                exchange_key = params["exchange"].lower()
+                if exchange_key not in self._exchange_adapters:
+                    raise ValueError(f"Unsupported exchange: {exchange_key}")
+
+                current_adapter = self._exchange_adapters[exchange_key]()
+
+                # Configure adapter for market type (if supported)
+                market_type = params.get("market_type", "swap")
+                if callable(getattr(current_adapter, "set_market_type", None)):
+                    current_adapter.set_market_type(market_type)
+                elif hasattr(current_adapter, "default_type"):
+                    current_adapter.default_type = market_type
+                    logger.info(f"Configured {exchange_key} adapter for {market_type} markets")
+
+                # Resolve mode
+                try:
+                    mode = get_mode(params["sniper_mode"])
+                except ValueError as e:
+                    raise ValueError(f"Invalid mode: {e}") from e
+
+                effective_min = params["min_score"] if params["min_score"] > 0 else mode.min_confluence_score
+
+                # Apply mode to orchestrator
+                self._orchestrator.apply_mode(mode)
+                self._orchestrator.config.min_confluence_score = effective_min
+                self._orchestrator.config.macro_overlay_enabled = params["macro_overlay"]
+                # Inject leverage for proper stop validation
+                try:
+                    setattr(self._orchestrator.config, "leverage", params["leverage"])
+                except Exception as e:
+                    logger.warning(
+                        "Failed to inject leverage=%s into orchestrator config: %s. "
+                        "Defaulting to 1x to prevent incorrect stop sizing.",
+                        params.get("leverage"),
+                        e,
+                    )
+                    try:
+                        setattr(self._orchestrator.config, "leverage", 1)
+                    except Exception:
+                        pass
+                self._orchestrator.exchange_adapter = current_adapter
+                self._orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
+
+                # Resolve symbols via centralized selector (or use target_symbol if provided)
+                target_symbol = params.get("target_symbol")
+                if target_symbol:
+                    logger.info(f"Targeted scan for single symbol: {target_symbol}")
+                    symbols = [target_symbol]
+                else:
+                    symbols = select_symbols(
+                        current_adapter,
+                        params["limit"],
+                        params["majors"],
+                        params["altcoins"],
+                        params["meme_mode"],
+                        params["leverage"],
+                        market_type,
+                    )
+
+                if not symbols:
+                    raise ValueError("No symbols selected for scanning")
+                job.total = len(symbols)
+
+                # Define progress callback to update job state
+                def update_progress(completed: int, total: int, current_symbol: str):
+                    with self._jobs_lock:
+                        if job.status == "cancelled":
+                            return
+                        job.progress = completed
+                        job.current_symbol = current_symbol
+                    logger.debug("Scan progress: %d/%d - %s", completed, total, current_symbol)
+
+                with self._jobs_lock:
+                    if job.status == "cancelled":
+                        return
+                trade_plans, rejection_summary = self._orchestrator.scan(symbols, update_progress)
+
+                # Transform results to API format with live price validation
+                signals, rejected_signals = self._transform_signals(trade_plans, mode, current_adapter)
+
+                # Merge late rejections (e.g. price validation)
+                stale_filtered_count = len(rejected_signals)
+
+                if stale_filtered_count > 0:
+                    rejection_summary["total_rejected"] += stale_filtered_count
+                    # Ensure risk_validation key exists
+                    if "risk_validation" not in rejection_summary["by_reason"]:
+                        rejection_summary["by_reason"]["risk_validation"] = 0
+                    rejection_summary["by_reason"]["risk_validation"] += stale_filtered_count
+
+                    if "risk_validation" in rejection_summary["details"]:
+                        rejection_summary["details"]["risk_validation"].extend(rejected_signals)
+
+                with self._jobs_lock:
+                    if job.status == "cancelled":
+                        return
+                    job.signals = signals
+                    job.rejections = rejection_summary
+                    job.metadata = {
+                        "total": len(signals),
+                        "scanned": len(symbols),
+                        "rejected": len(symbols) - len(signals),
+                        "mode": mode.name,
+                        "applied_timeframes": mode.timeframes,
+                        "effective_min_score": effective_min,
+                        "exchange": exchange_key,
+                        "leverage": params["leverage"],
+                    }
+                    job.status = "completed"
+                    job.completed_at = datetime.now(timezone.utc)
+                    job.progress = job.total
+
+            except Exception as e:
+                logger.error("Scan job %s failed: %s", job.run_id, e)
+                with self._jobs_lock:
+                    if job.status != "cancelled":
+                        job.status = "failed"
+                        job.error = str(e)
+                        job.completed_at = datetime.now(timezone.utc)
+            finally:
+                # Clear the current job from log handler
+                if self._log_handler:
+                    self._log_handler.set_current_job(None)
 
     def _transform_signals(self, trade_plans: List, mode, adapter=None) -> tuple:
         """
@@ -515,11 +551,12 @@ def get_scanner_service() -> Optional[ScannerService]:
 
 
 def configure_scanner_service(
-    orchestrator, exchange_adapters: Dict[str, Any], log_handler=None
+    orchestrator, exchange_adapters: Dict[str, Any], log_handler=None, orchestrator_lock=None
 ) -> ScannerService:
-    """Configure and return the singleton ScannerService."""
+    """Configure the service with the same ownership lock as synchronous callers."""
     global _scanner_service
     _scanner_service = ScannerService(
-        orchestrator=orchestrator, exchange_adapters=exchange_adapters, log_handler=log_handler
+        orchestrator=orchestrator, exchange_adapters=exchange_adapters,
+        log_handler=log_handler, orchestrator_lock=orchestrator_lock,
     )
     return _scanner_service

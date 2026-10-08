@@ -2,6 +2,8 @@
 
 Audit date: **2026-10-07**, America/New_York. This is a bounded Phase 1 checkpoint, not a completed system audit or trading-performance assessment.
 
+**Current navigation, 2026-10-08:** discovery observations and their original commit remain below as history. The local execution/accounting work now extends committed baseline `140f42e92addec5e66e8547cbb9b800bb24e4f43`; use the [current execution/accounting map](#current-execution-and-accounting-map--2026-10-08) and the final checkpoint entries for current source ownership and verification. The completed offline review and explicit coverage limits are summarized in the current index and disposition below. Current implementation work is local, not deployed.
+
 **First finding, now fixed locally in the approved batch: paper checkpoint replacement failed on Windows.** Discovery reproduced the actual `_save_state` method in isolation: first save succeeded; second save left `state.json` stale and logged `WinError 183`. Existing logs contain the same failure. The approved fix changes checkpoint publication from `Path.rename` to `Path.replace`; seven isolated checks pass, including warning/preservation on denied publication and successful retry. No credentials were loaded, bot started, orders submitted, deployment performed, or Git commit/push made. Broader system inspection remains partial.
 
 ## Fresh-review scope reset — 2026-10-07
@@ -9,6 +11,27 @@ Audit date: **2026-10-07**, America/New_York. This is a bounded Phase 1 checkpoi
 The user explicitly superseded project-local rules and skills as stale: **“we're taking a new look at everything instead.”** Treat historical instructions, audit gates, protected-tool rules, mode/threshold calibration and past decisions as hypotheses/context to verify. They do not constrain this fresh assessment. Existing raw audit results are historical verification evidence, not current authorization gates. Do not infer that a behavior is sound because old guidance calls it a standing fix.
 
 The original user-authored audit boundaries remain: preserve the recognizable product and historical records; no live orders, production credentials, deployments, pushes or destructive operations; propose bounded production implementation changes before applying them. No project-wide guidance file has been rewritten. The D2 checker-edit permission requirement is superseded; its technical defect remains recorded. **D3 sizing, D4/D7 reconciliation, D5/D6 adoption/protection, D8 valuation/reservations, D9 acknowledgment recovery and approved D10A/D10B lifecycle and durable recovery are locally verified. Latest: 465 focused backend tests, 11 process-death checks, 16 lifecycle checks, 7 checkpoint checks and structural smoke pass. A's 27 frontend tests/typecheck remain its last verification; B changes no frontend files. New execution-journal tables are an expected contract delta; D2 historical-row drift remains unresolved.**
+
+## Latest local checkpoint — 2026-10-08
+
+The offline review and bounded repair pass are complete; start with the
+[current architecture index](../ARCHITECTURE_INDEX.md) and
+[current disposition](#current-disposition-and-follow-up-plan).
+Execution/accounting recovery, request isolation, candle/source integrity,
+replay honesty, formation-time validity, evidence labels, volatility validity
+and final paper/testnet risk have selected regression coverage.
+
+Latest verification: **1,691 selected backend tests**, **36 selected frontend
+tests**, clean TypeScript, four clean contract groups and eight clean smoke
+categories. Backend warnings: 47 existing deprecations. No full-repository,
+browser, real-exchange or production-readiness claim.
+
+**Material correction:** earlier broad tests appended 130 test-time rows to the
+real telemetry DB because their guard omitted SQLite connections. The exact
+[ID manifest](SYSTEM_DISCOVERY_2026-10-07_test_telemetry.json) and corrected runner
+are recorded below. No historical repair was attempted; trade-journal and other
+protected hashes remain unchanged. Current work is local, with no new push or
+deployment.
 
 ## Evidence and baseline
 
@@ -45,6 +68,55 @@ Existing checks: pytest is configured in `pyproject.toml` for `backend/tests`; f
 Guidance drift: `AGENTS.md` references `.Codex/ROUTER.md` and `.Codex/AUDIT_RUBRIC.md`; the discovered files are under `.claude/`. Graphify queried successfully but warns its older node-ID scheme can collide on same-name files. Graph output was used only to orient. Historical architecture prose and the untracked 2.0 pivot note are background, not current authorization; this review preserves the original product as requested.
 
 ## Architecture index
+
+### Current execution and accounting map — 2026-10-08
+
+This supplement describes the current local changes, not a new production deployment. Exact source hashes and scope are in the incremental evidence/coverage entries; the discovery map below remains pinned to its original working tree.
+
+| Owner / key symbols | Responsibility and contract | Current limit |
+|---|---|---|
+| `backend/bot/executor/accounting_runtime.py:AccountRuntime` | Validated combined account observation owns wallet, free/used margin, mark equity and exposure; revision/freshness/commitments govern entry admission | No local fill-based cash mutation; no claim that equity change is strategy profit |
+| `backend/data/adapters/phemex_accounting.py:normalize_account, normalize_order, normalize_execution` | Raw USDT unit-one linear-contract evidence; decimal quantity/cost/fees, explicit absence/conflicts | Unified inferred fields and unsupported units cannot establish financial completeness |
+| `backend/bot/executor/execution_journal.py:ExecutionJournal.record_execution` | Schema-v3 lifecycle and financial evidence commit atomically before publication; immutable parent entry in exit intent | Actual older user stores are not automatically upgraded; unparented history remains unallocated |
+| `backend/bot/executor/live_executor.py:LiveExecutor` | Shared live/testnet order identity, reservations, protection, durable financial projection and restart recovery | Restart restores evidence, not strategy ownership |
+| `backend/bot/executor/execution_outcomes.py:ExecutionReceipt, calculate_outcome` | A priced confirmed slice; pure attributed cost/actual-fee outcome with exact quantity reconciliation | Funding/transfers excluded; incomplete fees/costs cannot produce complete P&L |
+| `backend/bot/executor/position_manager.py:PositionManager` | Trigger evaluation and managed quantities; verified execution progress precedes late-adoption publication; runtime callbacks return receipt prices; simulation keeps boolean callbacks | Owned native TP/stop slices reconcile once after account matching; ambiguous changes remain pending |
+| Both trading services: `_execute_exit_order`, `_sync_closed_positions` | Carry entry/exit IDs and explicit remainder links; preserve uncertain requests; persist history before completion/stats; rollback failed derived statistics | Runtime reports require actual complete execution outcomes; simulation retains its original path |
+| `backend/bot/trade_journal.py:TradeJournalService.upsert` | Identical-ID retry, conflict visibility, OS writer exclusion, fsync/atomic JSONL replacement; existing bytes retained | Completed trades only; full-file write cost scales with history; no actual history repair |
+| `PhemexAdapter.fetch_execution_history_page`, live `_run_backfill_once` | Scoped raw v2 history log, bounded page/count consistency and durable dedupe | Retained available history is not proof of complete exchange retention or a remote snapshot |
+| `PhemexAdapter.fetch_trade_execution_page`, `LiveExecutor.import_execution_history` | Explicit-window identified trade/fee evidence feeds the same durable reducer | Bounded worker in both services; missing retained fees remain pending |
+| `src/services/accounting.ts`, bot/training status views | Shared null handling and account-mark versus simulation basis | No browser-render or real-exchange proof is implied by unit/type checks |
+
+```mermaid
+flowchart LR
+  AC[Raw combined account observation] --> AR[AccountRuntime]
+  AR --> RISK[Entry admission and sizing]
+  AR --> UI[Account status and UI]
+  RW[Raw REST and WS orders] --> N[Raw normalization]
+  H[Bounded identified trade history worker] --> N
+  N --> J[ExecutionJournal v3 atomic evidence and lifecycle]
+  J --> E[LiveExecutor published financial state]
+  E --> RC[Priced execution receipt]
+  E --> O[Pure attributed outcome]
+  RC --> PM[PositionManager closure or pending reconciliation]
+  PM --> S[Service completed-trade construction]
+  O --> R[Durable report context and prepared snapshot]
+  R --> S
+  R --> REC[Restart report delivery without strategy replay]
+  S --> TJ[Atomic deduplicated trade history]
+  TJ --> ST[Completion markers and session statistics]
+```
+
+| Decision/state input | Units / time and freshness | Source of truth → consumers |
+|---|---|---|
+| Account wallet/free/used/equity | USDT; one combined observation; monotonic receipt age bounded by twice configured account interval | Validated raw account → admission, sizing, status. Unknown remains null |
+| Order execution and fees | Decimal contract/base quantity for supported multiplier one; raw cumulative value in USDT; actual fee currency preserved | Identified raw order/fact → transactional reducer → receipts. Overlapping cumulative and individual evidence is compared, not added |
+| Exit receipt | Exact quantity and known average execution price; terminal/priced slice required | Durable evidence → software stop/target/age/shutdown settlement; trigger quote cannot supply missing fill cost |
+| Attributed outcome | Gross and execution-fee-adjusted USDT; entry/exit quantities must balance; every required cost/fee known | Explicit immutable entry parent → pure outcome. Funding and transfers remain outside this basis |
+| Trade-history query | Explicit millisecond start/end and offset; raw execution timestamp is nanoseconds | Documented raw API → known-order facts. A page alone establishes neither retention completeness nor a closed trade |
+| Completed report | Existing serialized trade shape; publish only after durable identical-ID upsert | Service candidate → JSONL → completion/stats. Runtime financial fields come from complete execution evidence; funding/transfers excluded |
+
+### Original discovery index
 
 All paths are relative to the pinned working tree. Parentheses identify inspection depth; see the ledger for precise scopes.
 
@@ -646,3 +718,262 @@ API, telemetry and pipeline contracts are clean. DB checking reports eight textu
 The [decision record](../../backend/diagnostics/decisions/2026-10-07__accounting-authority-proposal.md#fv1-implementation-and-verification--2026-10-08) and `accounting_foundation_implementation` evidence/coverage entry contain the exact files, hashes, runners, outputs, backup and limits. The code is local and inactive; financial consumers have not switched over.
 
 **Resume here:** honor the fresh-review override. FV1 is complete within the approved five-file boundary; `accounting_foundation_implementation` is the latest implementation/evidence entry. Stop before FV2, which must coordinate executor/account ownership, risk eligibility, paper-testnet, WS and status consumers. R1 outcomes/history, stale-positive-price monitoring, D2 checker accuracy and broader scanner/configuration coverage remain open. Extra High remains appropriate for the coupled runtime work. No live orders, production credentials, actual store migration, deployment or publishing occurred. Whole-system correctness and strategy edge remain unverified.
+
+### FV2 — concrete integration plan prepared, 2026-10-08
+
+The user subsequently authorized commit/push of the completed audit work: `140f42e92addec5e66e8547cbb9b800bb24e4f43` is verified on `origin/claude/decision-core-heart`. Their next “Ok” accepted preparation of the FV2 integration plan. Earlier no-push and local-only statements above describe their historical checkpoints.
+
+The [FV2 decision record](../../backend/diagnostics/decisions/2026-10-07__accounting-authority-proposal.md#fv2-decision-record--coordinated-runtime-integration-2026-10-08) specifies **17 production files** and a coordinated account/execution/risk/status cutover. It includes paper-testnet, the shared training screen and preflight display, alongside live execution. New integration constraints: legacy durable state cannot represent confirmed quantity with unknown cost; lifecycle and financial publication need one transaction; raw WS execution quantity needs an alias; repeated `execSeq` cannot be treated as a unique order revision. Proposed schema v3 makes the compatibility change explicit; automatic real-store migration is excluded.
+
+The new offline `accounting_cutover_diagnostic.py` ran **14 design probes**, covering both directions with positive controls: all match expected results and inspected production source hashes remain unchanged. These reproduce integration gaps rather than proving repaired accounting. The script constructs no service, exchange client or actual store. Existing 708-test verification remains the prior FV1 result; it was not rerun or presented as verification of an unimplemented FV2.
+
+**Current resume point:** `accounting_runtime_plan` in evidence/coverage contains source anchors/hashes, the exact proposed production scope, raw diagnostic result and exclusions. Preparation is complete. FV2 production implementation awaits approval of the concrete plan under the original Phase 4 boundary. R1 receipt/history work and broader scanner/configuration review remain later stages. No production code, actual account/store, baseline or historical journal changed in this preparation; no further commit/push occurred. Extra High remains recommended.
+
+### FV2 — offline runtime integration, 2026-10-08
+
+The user's subsequent instruction grants authority to complete successive sessions without approval check-ins. This supersedes the preceding pending-batch checkpoint. Continue bounded work at Extra High; exchange requests, actual-store migration and deployment remain outside this offline review.
+
+The 17-file integration now gives validated account observations sole ownership of wallet/free margin/mark equity/positions. Raw order and execution evidence commits with lifecycle state in schema v3 before publication. Unknown cost remains null; fees come from actual execution evidence. A bounded WS queue invalidates entry eligibility before processing and drains before ownership release. Service sizing, freshness, pending entries and shared status/UI use this boundary. Pure simulation retains its arithmetic. Late-priced entries retain protection; a triggered protector prevents resurrection. Orphan reduce-only stops block further entries until cancellation is confirmed. No existing user store was upgraded.
+
+**Verification:** 748 guarded backend tests pass, TypeScript passes, 20 frontend tests pass, 11 runtime crash/old-reader cases pass, nine foundation crash cases pass, 16 lifecycle checks pass and eight structural smoke checks are clean. API/telemetry/pipeline contracts are clean; the same eight known DB textual differences remain. At 10,000 disposable requests, FULL-synchronous publication is approximately 8 ms and full replay 3.62 seconds. A real-journal 200-event duplicate burst retains one fill and an event-loop heartbeat below the test's 0.5-second bound. Full consistency validation still detects unexpected internal or external SQLite writes.
+
+The evidence/coverage entry `accounting_runtime_implementation` records exact hashes, guarded commands/artifacts, preservation checks and limitations. The lifecycle diagnostic's old fixture was migrated to v3/raw evidence after it correctly failed the new reader boundary. Older accounting discovery scripts still contain pre-runtime fixtures; their historical results are not presented as current verification. No browser-render or real exchange guarantee is inferred from unit tests. Connection sequence is not assumed contiguous or comparable across channels.
+
+**Resume here:** FV2 is integrated and verified offline within its bounded scope. Continue R1 completed-outcome/fee attribution and fill-history completeness; then D2 checker accuracy and the remaining scanner/configuration/strategy/replay coverage. Completed-trade values remain explicitly legacy estimates pending R1. Preserve the original inventory and incremental evidence rather than claiming whole-system completion. All current edits are local; this session has not committed, pushed, deployed or restarted production.
+
+### R1a history and R1b testnet Stop containment — 2026-10-08
+
+R1a replaces the timestamp-plus-one backfill with explicit raw USDT history pages. The documented page/count envelope is validated before use; financial strings are retained without converting history enums into WS evidence. A sweep detects duplicate pages, count changes, identity conflicts and a changed first page, and stops after 50 pages. Consistency means the available history survived those checks, not that remote retention or snapshot isolation is proven. Raw rows are durably deduplicated in an account/environment-scoped log; no historical journal or user store was modified. The 201-equal-timestamp reproduction now saves all 201 executions across repeated sweeps. The updated boundary diagnostic passes all 12 checks; the selected backend suite passes 761 tests. Original full-run fixture failures were traced to a missing `asyncio.Lock` in an AST test namespace and corrected without weakening assertions.
+
+A subsequent trace reproduced **D18: paper-testnet Stop locally closes positions without an exit request**, through `_stop_session -> _close_all_positions -> PositionManager.close_position`. Four LONG/SHORT confirmation cases failed before repair. The bounded R1b correction requires the existing original-ID reduce-only exit to complete, retains unconfirmed positions, resolves pending entry remainders and allows repeated Stop to retry while scanning remains stopped. Pure simulation retains its existing close behavior. Six focused tests and the expanded **767-test** suite pass. This fixes exposure confirmation, not final receipt-price/fee accounting.
+
+Current next step: finish R1 execution-backed settlement and outcome persistence. Trade P&L remains labeled estimated; native-exit attribution, unknown fees, historical funding and persistence retry must not be represented as complete. The unused-by-static-callers `PositionManager.emergency_close_all` also appears to ignore confirmation; reachability and containment remain to be resolved. D2 and the broader decision-system review remain after execution correctness. Continuing authorization still applies; no new permission checkpoint is required.
+
+### R1c — attribution and outcome foundation, 2026-10-08
+
+The four-file foundation persists an immutable entry parent on reductions/protectors and validates it against original submission evidence on replay. It exposes exact-cost receipts and execution-fee-adjusted outcomes, with explicit incomplete reasons and funding/transfers excluded. Twenty-five focused tests and the expanded 792-test suite pass; 11 runtime crash cases and 16 lifecycle checks hold. The current 10,000-request profile measures 7.48–8.43 ms publication and 4.03-second replay. `execution_outcome_foundation` contains hashes and artifacts. Manager/report consumers still require integration; unknown fees are not zero, and historical rows remain unallocated.
+
+Continuing next into receipt propagation and confirmed local settlement. Fourteen new regression cases reproduce trigger-price settlement and truthy-but-incomplete receipt errors before repair. This is an intermediate checkpoint, not whole-system completion.
+
+The receipt handoff now passes **822 selected backend tests** (30 new cases), lifecycle 16/16, smoke 8/8, with API/telemetry/pipeline contracts clean and the same eight known DB text differences. Six additional counterexamples reproduced direction-flip/emergency closure without confirmation before repair. Runtime exits carry the entry ID and return a priced receipt. Stops, target slices, timed exits and shutdown use actual execution price. Missing/conflicting cost retains the request. A final target cannot erase an unfilled remainder. Native absence requires attributed execution evidence; unexplained partial changes suspend software exits with `exchange_close_pending` until reconciled. Historical rows and protected hashes remain unchanged. `execution_receipt_handoff` records exact scope/artifacts. Native partial reconciliation and final fee-backed reporting remain incomplete.
+
+### R1d — retryable completed-trade publication, 2026-10-08
+
+Both services now persist an identical, deduplicated trade before publishing completion/removing it from management. Failed writes retain retry state; derived-stat failures restore counters and peak equity. The JSONL writer uses an OS writer lock and same-directory fsync/atomic replacement, preserving prior bytes. It refuses conflicting trade IDs and damaged prior rows instead of silently skipping evidence. No actual journal was opened for mutation or migrated.
+
+Thirteen pre-repair regression cases failed. **Twenty-two new publication tests pass; the expanded affected-path suite passes 911 tests**, including existing classification and journal metadata consumers (four existing `datetime.utcnow` deprecation warnings). Real child processes confirm old/new complete files after interruption before/after replacement, and cross-process writer exclusion. Lifecycle remains 16/16. A 10,000-row fixture using the actual trade serializer is 16.23 MB; publication took 285 ms. This synchronous full-file path is for completed trades, not fills. The test is not hardware power-failure proof; the POSIX directory-fsync branch was not exercised on Windows.
+
+`trade_publication_recovery` records hashes, raw results and unchanged protected files. Continue R1 actual fee import, complete outcome reporting/restart recovery and native partial reconciliation; then D2 and the remaining decision-system review. Completed reports still carry the legacy-estimate label until those consumers are integrated. All new work remains local, with no further commit/push or deployment.
+
+### R1e — identified fee-history contract, 2026-10-08
+
+The raw per-symbol trade reader preserves execution quantity/value/fee strings in an explicit time window and rejects malformed envelopes, foreign symbols/currency, numeric history enums, missing identities and invalid times. The documented empty client ID is treated as absent; the exchange order ID must still establish ownership. The executor imports facts for one explicit known request through its existing atomic reducer. Missing fees stay unknown; zero/rebate fees and late enrichment are supported; conflicting fees invalidate completeness. Restart enrichment emits no strategy fill or cash delta.
+
+The 29 new tests and the expanded **940-test** suite pass (four existing planner datetime warnings); lifecycle remains 16/16. `execution_fee_history_contract` records exact hashes and official protocol evidence. These methods are callable but not yet scheduled by services. Continuing next into bounded background recovery and final outcome consumers, without exchange requests or production activation during development.
+
+### R1f — background recovery and shutdown ownership
+
+Both services now own a bounded, fair history worker that keeps blocking reads off the monitor event loop and imports only identified execution facts. Exit requests run before history drain; storage ownership persists until the worker finishes. A new repeated-Stop counterexample failed before repair. Ten focused cases are covered by the **950 passing** selected tests (four existing planner warnings); lifecycle 16/16 and smoke 8/8 hold. API/telemetry/pipeline shape checks remain clean; known DB drift is unchanged. `execution_fee_recovery` records exact scope and protected hashes. No real transport/store operation occurred. Final outcome reporting, restart materialization and native partial reconciliation remain R1 work.
+
+### R1g — actual outcomes and durable report delivery
+
+Both services now publish runtime trade results only after identified entry/exits reconcile with known cost and actual fees. Missing evidence is pending and excluded from completed statistics. Report context, the prepared immutable snapshot, and delivery acknowledgement survive in the existing execution journal; retry never submits another order. Reports use stable account/entry IDs, decimal evidence, preparation time and metadata provenance. A later financial conflict remains visible alongside the original snapshot. Restart reconstructs opted-in reports without strategy positions; older requests without that reporting marker are not guessed or duplicated. The UI distinguishes pending/review-needed reports and states the exclusion of funding/transfers.
+
+**984 selected backend tests pass**, including 34 new report cases; 25 frontend tests and TypeScript pass. Lifecycle 16/16, storage interruption/compatibility 11/11, and smoke 8/8 hold. The shallow contract checker retains the same eight DB differences. The 10,000-request runtime profile is 7.05–7.83 ms publication and 3.93 s replay; that is not a 10,000-report workload. `execution_report_outbox` records exact source hashes, contracts, artifacts and bounds. Protected historical data and baselines remain untouched. Continue partial-exit reconciliation and the remaining audit; this is not a whole-system completion or operational release.
+
+### R1h — native target ownership and partial settlement
+
+Eight LONG/SHORT counterexamples reproduced a software profit-taking request while an acknowledged, uncertain or filled native TP already owned the same slice. Runtime native TP identity now defers software profit targets until reconciliation; stop exits stay available. Cumulative owned exit cost/quantity, matched to a current combined account observation, updates remaining quantity and realized gross once. Partial/cancelled native TP leaves only its unfilled target quantity available; full native TP releases the next software targets. Periodic reconciliation runs before software monitoring, and an unresolved discrepancy is no longer overwritten by an unconditional successful state.
+
+**1,015 selected backend tests pass**, including 31 new native/progress cases; lifecycle 16/16 and smoke 8/8 hold. `native_target_reconciliation` records exact sources and bounds. This finishes the explicit native-TP path, not all partial-exit recovery: terminal partial software requests, paper-testnet native stops and fixed-stop sizing/liveness are next. All work remains offline/local.
+
+### R1i — terminal partial market reductions
+
+Eight service/direction/quantity cases reproduced a cancelled partial exit that could never satisfy the original whole-request receipt. Remainder requests now retain immutable links to that original goal; the aggregate receipt uses actual fills/cost. Only terminal priced partials with a matching current owned/account position can submit the exact remainder. Working/unknown requests keep their IDs, rejected zero-progress attempts stop retry flooding, concurrent callbacks cannot duplicate a remainder, and pending manager exits survive trigger-price recrossing. The durable links replay without resuming strategy or allowing new requests after restart.
+
+**1,048 selected backend tests pass**, including 33 new cases; lifecycle 16/16 and smoke 8/8 hold. Evidence key `terminal_partial_reduction` records scope, hashes and test repairs. Native-stop reconciliation and protection size/liveness are next; broader decision-system review remains incomplete. All work remains local/offline.
+
+### R1j — adopted native stops and protection validity
+
+Both runtime service paths now reconcile adopted native stops from original exit identities and a matching current account observation. Cumulative partial fills update quantity/gross once; working stop remainders defer duplicate software exits, while terminal partial stops preserve intent to close what remains. Live stop health now checks identity/status/quantity/level, and a delayed wrong-sized replacement acknowledgement cannot cancel the old protection. Shutdown and emergency closure first settle an already-requested target slice, then close the remainder.
+
+**1,076 selected backend tests pass**, with 22 native-stop cases and six shutdown cases added; lifecycle 16/16 and smoke 8/8 hold. Evidence key `native_stop_reconciliation` records exact bounds and source hashes. Pre-adoption native fills and testnet protection replacement remain the next execution checks. The whole-system decision review is still incomplete; no operational deployment or historical-store change occurred.
+
+### R1k — native fills before adoption and testnet protection maintenance
+
+Eight early-native-fill cases reproduced entry plans retained indefinitely after their protector filled. Both services now initialize manager records from verified owned progress before publication: already-flat entries appear closed, partial exits appear with only actual remaining exposure/gross. Original entry identity and plan metadata are retained. Testnet protection tracks changed quantities and stop levels, preserves uncertain replacement IDs, accepts replacements before cancelling old protection, and retries orphaned older protectors after owned closure. Explicit replacement rejection leaves software risk management active.
+
+**1,094 selected backend tests pass**, including 18 new cases; lifecycle 16/16 and smoke 8/8 hold. The new flat-cleanup test caught and corrected a protection-classification mismatch. Evidence key `pre_adoption_protection` records exact source/protected hashes and limits. Next are the obsolete accounting diagnostic and D2 contract checker, then the remaining scanner/regime/macro/decision/replay review. This checkpoint is local verification, not whole-system readiness.
+
+### R2a — current accounting diagnostic
+
+`python -B backend/diagnostics/live_accounting_diagnostic.py` now runs against the runtime schema and raw account/execution contracts. Its 37 current cases pass with five controls and unchanged source hashes; it previously stopped before testing at the obsolete-schema guard. It exercises identified actual fees and durable trade reports, cumulative/duplicate fills, late costs, account-versus-strategy values, feed failures, unverified closure and WS drain in both directions. Fixture logs and stores remain disposable. `runtime_accounting_diagnostic` records evidence; this does not establish real-exchange incidence or performance. Production logic is unchanged by this batch. D2 is next.
+
+### D2 — persistence contract checker completed locally
+
+The checker now inventories six production SQLite declarations with full constraints/columns and eleven selected JSONL writer implementation fingerprints. Historical rows never define the current contract; tests and diagnostic databases are excluded. Fingerprints and key hints explicitly do not claim complete JSON schemas. Unresolved captures cannot replace baselines or pass a matching diff, and duplicate route/table names cannot hide changes. Twenty-three focused tests pass after reproducing twelve original failures. The reviewed DB baseline was intentionally updated; API, telemetry, pipeline and persistence inventories now compare clean under the offline wrapper. Actual trade history and unrelated settings are unchanged. Exact old/new baseline hashes, source hashes, reproductions and limits are under `persistence_contract_inventory` in both ledgers. The broader decision-system audit resumes next.
+
+### D11 — shared scanner request isolation
+
+Two controlled reproductions proved concurrent requests and cancelled callers could replace an active scan's mode, leverage and exchange. The background service now shares the application engine lock with synchronous/debug scans and SMC updates; physical workers keep ownership until they return. Pending background requests wait outside the shared thread pool, and cancelled jobs cannot publish later results. Blocking routes run in workers so the API event loop remains available. Bot session engines and strategy thresholds are unchanged. Ten new regression cases pass; 47 combined scanner/contract cases and all structural checks pass. See `scanner_request_isolation` in the ledgers and the [decision record](../../backend/diagnostics/decisions/2026-10-08__scanner-request-isolation.md). Global bot-log attribution and mode/threshold precedence remain open review questions.
+
+### D12 — candle boundaries and weekly grid
+
+Seven reproductions showed valid Monday weekly observations could disappear during Sunday-anchored gap filling, while epoch-based close checks could accept unfinished weekly candles from Thursday onward. Duplicate timestamps, multiple future rows and off-grid row loss exposed related normalization failures. Weekly increments now preserve the supplied anchor, duplicates resolve before reindex, off-grid rows reject explicitly, and every known-duration row must satisfy `open + duration <= clock`. Existing gap-fill policy and score/gate thresholds are unchanged. Eleven new cases and 42 combined timing/cache/scanner tests pass; contract and structural smoke checks remain clean. Evidence and limits are under `candle_timing_contract`. This establishes local input invariants, not past signal performance. Cache source/depth and replay causality are next.
+
+### D13 — OHLCV source identity and depth
+
+Six reproductions confirmed cross-exchange/market/environment cache reuse, short-history reuse and a chart showing the wrong venue. The shared cache now requires matching public-source identity and adequate original fetch depth. Unknown sources skip shared reuse; anonymous compatibility reads cannot access scoped production data. Scanner/bot/replay ingestion, chart lookup and pure-paper fallback use their own source. Chart cold fetch uses the actual adapter signature and rejects an unconfigured market instead of substituting it. Cache-entry diagnostics add a source hash and requested depth. Fifteen new cases pass. The broader selected backend suite now passes **1,188 tests** (62.48 s), with six existing deprecation warnings; four contract inventories and eight smoke categories remain clean. `ohlcv_source_identity` records hashes, artifacts and limits. No live calls, historical rewrites or deployment. Replay causal state/time/price is the next focus.
+
+### D14a — replay navigation and analysis-state isolation
+
+Eight failures reproduced repeated/end-index crashes, later-state reuse after backtracking, cursor advance on failed computation, concurrent-step reordering and stale regime/macro reuse. Navigation now serializes per session, repeated positions return cached output, backwards resume rebuilds a fresh prefix, and failed computations do not advance the cursor. Replay owns its domain services and mode-aware regime detector without mutating live service registries or using wall-clock regime TTLs. Ten new tests and 56 combined replay/decision/worker/scanner tests pass; contracts and smoke remain clean. `replay_navigation_state` records evidence. **Replay is still not certified for historical decisions:** present-time dominance, prices and time-sensitive scoring remain open, and historical external context/original configuration are not supplied.
+
+### D14b — replay time and price provenance
+
+Thirteen failing cases reproduced current-clock or ticker contamination and mixed UTC timestamp errors. Replay time now reaches OB filter/aggregate freshness and session scoring; replay geometry and validation use the sliced candle price. Live ticker behavior remains separately tested. Nineteen new cases, 65 focused tests and 1,448 broader selected backend tests pass; contract and smoke inventories remain clean. An obsolete standalone HTF-proximity test also failed against committed HEAD; its replacement verifies bullish/bearish proximity through the existing single HTF Composite, with no strategy change. The `replay_analysis_inputs` ledger entry contains exact artifacts/hashes. Historical dominance/macro/original configuration remain absent, so these checks do not certify historical replay.
+
+### D15a — decision-input ownership and mitigation
+
+Controlled fixtures proved mode changes left SMC/detector settings at STEALTH and DataFrame truth evaluation skipped OB/FVG mitigation on 15m/1H frames. Selected modes now reach SMC and private detectors; actual mode changes reset cached/hysteresis state, repeated modes preserve it. Explicit frame selection restores existing mitigation/fill logic for both directions. Consumer tracing also repaired paper advisory ownership/dimension access and replay regime serialization. Nineteen new cases, 1,465 broader tests before the last two consumer repairs, and 65 final focused tests pass. Contracts remain clean. `decision_input_cohesion` records evidence and open issues.
+
+The same diagnostic confirms unresolved input hazards: unavailable dominance becomes `alt_season` (85); arbitrarily stale dominance is returned without an age guard; current dominance changes a fixed replay bar; cycle context exceptions are suppressed. These are defects/evidence gaps, not proof that the trading strategy has or lacks an edge.
+
+### D15b — unavailable input contract and honest replay
+
+Missing dominance no longer becomes an alt-season score: current decision input must pass the existing one-hour TTL and percentage validity checks. Required global/macro inputs reject macro-enabled scans before scoring; technical-only scans retain their explicit option. Fixed historical candles no longer query present-day dominance. Replay preserves candle/SMC inspection, reports missing historical context/configuration, and cannot emit historical trade signals without that evidence. Its UI and signal-search response explain this limit. Market-regime API returns 503 when inputs are unavailable instead of fabricated neutral/dominance data. Twenty-five new cases, 1,490 broader tests before the two search cases, 71 final focused tests, clean contracts/smoke and TypeScript compilation establish this bounded behavior. `market_input_validity` records hashes and evidence.
+
+D15b visibility addendum: Gauntlet and Scanner now display missing current/historical context. Four new UI cases and 32 scoped frontend cases pass; TypeScript is clean. Test selection included three old worktrees, now excluded in the verification command. The pre-existing scan-history test expected the wrong saved-entry identity; only its fixture changed. See `market_input_ui_visibility`.
+
+### D15c — formation-time integrity
+
+Mixed timezone awareness caused mitigation to evaluate the entire history, including candles before formation; lifecycle comparisons could fail outright. A shared UTC comparison now admits only later candles. Invalid timestamps raise through the service instead of leaving zones apparently fresh. Twenty meaningful pre-fix cases failed; six additional service cases initially had incomplete test data, corrected before verifying propagation. All 34 new cases and **1,526 selected backend tests** pass (31 existing deprecation warnings); contracts are clean. See `smc_formation_time`. This does not certify detector confirmation-time conventions or introduce trading-threshold changes.
+
+### D16 — decision evidence labels and rejection arithmetic
+
+The score-to-probability claim had no calibration: the same numerical tie-break now carries `ranking_heuristic` with `calibrated=false`; no active consumer reads it as probability/EV. Cycle failures now surface while the dormant path remains inactive. Gauntlet compares stored scores against catalog thresholds, without claiming mode replay or diagnosing causes from frequencies. Unknown reasons stay in the logged-rejection denominator. Scanner uses the backend run-rejection total, separates universe/feature diagnostics and preserves other/unknown gates. Three backend before-cases and four UI before-cases failed; 1,528 backend cases, 36 frontend cases and TypeScript pass. See `decision_evidence_labels`.
+
+### Historical evidence sample — read-only
+
+The complete journal contains 384 valid unique trade IDs across 43 sessions: 188 reported positive, 195 negative, one zero outcome. These are recorded results, not verified actual-fee profits. No journal row carries a frozen candle bundle, original code revision, configuration identity or identified exchange-execution/actual-fee package. Three latest-by-mtime sessions per service were read, not a representative performance sample. The paper samples contain 6,835 / 6,679 / 5,884 signal entries; `no_thesis` is the largest recorded rejection reason in all three. Their saved configuration has macro overlay off. Zero-score LONG filtered entries are numerous; current paper logging fabricates LONG when direction is absent, so these counts cannot establish bullish strategy bias.
+
+The three latest inserted completed telemetry runs (3e55fe9f, 6df11171, bedfdc86) have matching generated/rejected event counts, one start event each, no missing-symbol outcomes and populated reason/gate fields. This sampled bookkeeping check is not full historical telemetry coverage. The [sanitized evidence report](SYSTEM_DISCOVERY_2026-10-07_historical.json) includes immutable file hashes, selected configs and accepted/rejected/reported positive/negative examples. Missing original inputs prevent exact causal replay; no current inputs were substituted. Journal hash remains unchanged. Local Git history places the dormant cycle expression and heuristic probability formula in initial commit 8e8f01e (2026-02-27); thesis-mode behavior was added in June, but sessions do not pin a revision/flag bundle.
+
+### D18 — exact market sources and precision
+
+Nine offline failures reproduced spot/swap source confusion and a direct REST fallback that parsed interval/previous-close fields as prices. Public market requests now resolve from explicit metadata, scanner transport/cache defaults agree, and failed CCXT candle reads remain unavailable. The faulty fallback no longer supplies analysis. Four more cases exposed integer tick-size interpretation and zero/missing precision substitution; one consumer case found the scanner swallowing that error. Explicit precision units and worker-level rejection now preserve the failure. Seventeen focused cases and **1,583 selected backend tests** pass (31 existing warnings); four contract inventories and eight smoke categories are clean. The [decision record](../../backend/diagnostics/decisions/2026-10-08__market-data-contract.md) explains source evidence, alternatives, availability impact and rollback. No real exchange request or operational change occurred. D17's read-only history diagnostic also passes eight fixture cases.
+
+### D19 — volatility input validity
+
+The raw-ATR fallback classified unknown price units as volatility, and missing
+indicators could manufacture a normal/75 result. The detector now requires
+finite nonnegative ATR and finite positive reference price; the planner bridge
+passes its price explicitly. Existing percentage bands and expansion threshold
+are unchanged. Eighteen focused cases pass (15 original failures), including
+consumer checks in the selected suite. An available indicator frame supplies
+its last close; legacy snapshots can still supply their band midpoint when no
+price/frame is available. This is not a calibration of daily bands for every TF.
+
+### D20 — paper/testnet final-entry risk
+
+A 1.2 regime multiplier produced $12 planned loss for a configured $10 allowance.
+Existing snap adjustment preserved that excess and could produce off-lot
+quantities. Sizing now caps configured/adapted/sensitivity/regime risk, checks
+finite inputs and directional stop geometry, and re-evaluates final price risk
+and free margin before submission. Testnet prices/amounts use exchange precision;
+the farther planned/native stop determines distance. Sixty focused cases cover
+both directions, snaps, reductions, invalid values and exact order-block wiring.
+The first attempt included six fixture-scope errors and four tests for the newly
+introduced helper; forty failures directly exercised old sizing behavior.
+The fixture errors were corrected before the final pass.
+
+This bounds planned stop-price loss, not fees, gaps, slippage or total correlated
+portfolio loss. It does not recalibrate regime policies. Roll back both initial
+and final sizing together, with the regression tests, if this boundary changes.
+
+### D21 — scoring failure preservation and reusable checks
+
+An exception before fusion initialization was replaced by UnboundLocalError in
+the finally block. A reproduction now proves the original reason survives and
+the profile is unchanged. Fusion state initializes before the try block.
+
+The portable offline wrapper and explicit 86-module manifest replace temporary
+test commands. CI no longer turns smoke/lint/Vitest failures into success; smoke
+uses the guarded pipeline check. This does not certify the full lint/test suite,
+GitHub execution, dependency reproducibility or Windows CI. No remote job ran.
+
+### Verification isolation correction — material exception to earlier claims
+
+**Earlier claims that all historical stores remained untouched were too broad.**
+The temporary broad pytest runner blocked Python file writes but omitted the
+SQLite connection audit event. Default telemetry uses an absolute source-relative
+database. Some tests therefore appended to the actual telemetry DB.
+
+Read-only investigation found **130 test-time rows, IDs 2992099–2992228**:
+128 info_message rows and two alt_stop_suggested rows for TEST/USDT. See the
+[exact ID/payload-hash manifest](SYSTEM_DISCOVERY_2026-10-07_test_telemetry.json).
+The creation-time/payload pattern ties these to the test runs; no pre-run full DB
+hash exists to prove absence of every other mutation. No rows were removed.
+Exclude the manifest IDs in future historical analysis; do not use a broad
+date-based deletion. Physical repair would require a separate backed-up operation.
+
+The trade-journal SHA256 remains
+5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a.
+The protected checker/baseline/user-setting hashes also remain unchanged from
+their recorded post-D2 baseline. No orders, credentials, deployment or bot
+startup were involved.
+
+The portable runner now redirects default telemetry before consumer imports,
+checks SQLite paths and file URIs, denies external writes/processes/transport,
+and exercises seven denial events. Descriptor wrapping and in-memory/temporary
+SQLite remain supported. After correcting the wrapper, **1,691 selected backend
+tests pass (47 existing deprecation warnings)**. Earlier tests' pass counts
+remain behavioral evidence but their stronger isolation claims are superseded.
+A post-incident full telemetry hash is recorded for the remaining checks.
+
+## Current disposition and follow-up plan
+
+The requested offline system map, cohesion review, historical-evidence assessment,
+bounded repairs, reproducible checks and contributor navigation are delivered.
+Use [ARCHITECTURE_INDEX.md](../ARCHITECTURE_INDEX.md) for current ownership/contracts;
+older sections above intentionally retain original observations and proposals.
+No subsystem is certified exhaustively, and this is not a live-readiness verdict.
+
+The remaining items below are explicit dispositions, not silent “passes.”
+They need distinct contracts or evidence before another trading-behavior batch.
+No scores, weights or threshold calibration were changed to increase signal count.
+
+| Priority / type | Evidence and consequence | Concrete next batch / verification / rollback |
+|---|---|---|
+| P1 confirmed validation defect: ML chronology | Journal query is newest-first; feature dataset preserves order; combined training concatenates trades and signals. The synthetic probe trains on day 28 and tests on day 19. Purge is positional; computed embargo is unused. Filtered signals become weak negative labels without realized outcomes; missing P&L defaults to zero. Trained legacy paper gate can consume this model; thesis bypasses it. Current saved model and its actual activation were not read. | Define chronological observation/label-availability times, eliminate outcome-unknown loss labels, prevent duplicate trade/signal leakage, and validate on forward untouched cohorts. Version the dataset and invalidate incompatible model artifacts. Compare calibration and abstention, not just accuracy. Preserve old artifact for rollback; do not silently retrain or load it during audit. |
+| P1 conflicting universe contract | Controlled majors-only fixture selects DOGE and ADA while reporting both bucket_excluded. Older selection tests explicitly expect category backfill; reporting tests expect exclusion. Fallback/perp substitution can also revisit earlier exclusions. This affects both trading universe and macro basket. | Choose strict inclusion versus priority-with-backfill, then change selector, UI wording and conservation tests together. Require selected ∩ dropped = empty plus all-toggle/fallback fixtures. Do not infer intended behavior solely from stale comments. Revert the complete selection/reporting batch together. |
+| P1 architecture risk: shared/blocking API work | Market-regime endpoint synchronously calls shared scanner engine without its scan lock; replay async endpoints invoke synchronous load/step/jump. These can block event-loop work; shared mode context can race. Code trace only, no production load probe. | Give market reads immutable/private context and move blocking work off loop with bounded ownership/cancellation. Test concurrent modes, scan/read overlap, delete/step and cancelled workers. Keep endpoint schemas; roll back service/route ownership together. |
+| P1 evidence integrity: rejection direction | Paper rejection logging constructs a fallback LONG when direction is absent. Historical samples contain many zero-score LONG rows; not every one can be attributed to that fallback. | Introduce explicit unknown direction across producer, JSONL contract, TypeScript consumers and diagnostics. Test unknown/both directions; preserve old records without guessing. Do not interpret old direction counts as directional edge. |
+| P1 evidence limitation: historical reconstruction | 384 unique journal IDs and three clean completed telemetry-run count reconciliations; frozen candles, revision, effective flags and complete execution-fee attribution are absent. Current replay correctly declares missing historical context. | Define minimal immutable decision package and retention before collecting a new paper baseline. Include source/as-of, effective config hash, revision, candidate/rejection identity and execution links. Reconstruct one accepted/rejected/winning/losing case exactly before claiming causal performance. |
+| P2 confirmed field mismatch / strategy interaction | Confluence post-score bonus reads global_regime.trend although source is dimensions.trend: fixture gets +2, not intended +5. Trend already affects composite/alignment, macro, gates and sizing. | Decide whether this bonus should exist using controlled ablation. Fixing the field alone activates additional correlated weight. Keep existing value until that change has a measured baseline; rollback by explicit config version. |
+| P2 config cohesion | Policy object and cached thesis flag are captured at construction while downstream branches reread environment. Mode → user score/sensitivity/soft-floor/planner/fusion overrides differ across scanner/paper/live. Some policy fields (allow_in_risk_off, rr_adjustment) have no active production reads located; adjustment helper is uncalled. | One immutable effective session configuration with provenance and a precedence table, then parity tests for intended differences. Do not merge modes or enforce a stale score floor by assumption. Preserve original resolved config for rollback. |
+| P2 dormant cycles / causal clocks | Cycle context currently fails on DataFrame truthiness or missing names; failure is now visible. Separate symbol-cycle detection exists. Activating the dormant branch would affect decisions; related detector uses wall clock. | Choose supported cycle owner, add as-of/confirmation-time contracts, and baseline its effect before activation. Test prefixes and backward replay. Current pass exposes failure without activating an unmeasured strategy input. |
+| P2 regime semantics / calibration | Volatility is now percentage based, but daily bands are used for other TFs. Global derivatives is balanced/50 by construction. Strong-down size substring maps to down before strong_down; clamp raises configured zero multiplier to .3. D20 prevents any >1 multiplier from raising the risk allowance. | Separate availability/proxy labels from observations; fix regime lookup semantics in a measured policy batch. Test every label and both directions, honor deliberate zero versus missing, and compare effective decision/size distributions. No arbitrary tuning in this review. |
+| P2 macro redundancy hypothesis | Active macro uses BTC price change, selected-basket breadth and stable-flow proxy; another helper uses dominance change without elapsed-time normalization. Similar names do not establish equivalent inputs. | Record units/provenance first. Run factor/gate/macro ablations on frozen inputs before consolidation. Do not replace one with the other by name. |
+| P2 market-data coverage | Phemex identity/normalization/precision verified with fixtures; other adapters, delistings, transport limits, monthly 1M normalization, complete warm-up matrix and all detector confirmation clocks remain partial. | Extend source/TF fixture matrix; reject unsupported TFs explicitly; require closed-prefix reproducibility. Adapter-specific contract edits and rollback, not a generic scale guess. |
+| P2 operational evidence | Actual exchange acknowledgments, history retention, rate limits, adverse fills, account transitions and v3 store cutover were simulated only. | Separate backed-up cutover rehearsal and controlled paper/testnet verification under explicit operational authorization. Preserve store/version rollback; do not deploy this large local diff as an unreviewed release. |
+| P3 diagnostic quality | session_debrief silently skips malformed records and mixes missing P&L with zero; factor matching is nearest symbol/direction/time; rejection audit health can overstate empty/negative coverage cases. New historical inspector is read-only and makes limited claims. | Unify validity and identity reporting without rewriting historical data. Test malformed/missing/duplicate/ambiguous records. Correlations remain hypotheses, not causal proof. |
+| P3 verification/environment | Source tests, old nested worktrees and split dependency declarations complicate runs. CI false-green handling fixed, full lint/Linux/Windows/browser suites still not certified. | Pin reproducible dependency environments, keep old worktrees excluded from scope, add Windows storage job and route/visual checks. First establish real failures; no suppressions to make CI green. |
+
+### Cleanup classification and bounded sequence
+
+| Classification | Concrete scope | Disposition |
+|---|---|---|
+| Active | Scanner, paper/live services, orchestrator, decision/planner, Phemex data, executors, journals and current HUD | Keep; use contract-scoped edits. Giant service/engine decomposition comes after behavior fixtures. |
+| Conditional | Thesis/legacy flag, fusion, macro toggle, testnet executor, ML gate, research/replay routes, CVD capture | Preserve flag and runtime call paths; locate actual use before deletion. CVD/OI is observational on the traced paper path, not a scored factor. |
+| Legacy / test-only | Phemex _derive_fallback_scale after normalized fetch repair; archived MissionStats ev reader | No active production caller found in inspected references. Candidate cleanup only after CLI/dynamic/reference check; existing helper tests are still real callers. |
+| Duplicated responsibility | Service-specific config/admission/sizing and context construction; old diagnostic parsers | Consolidate a contract at a time with parity fixtures. Similar function names are insufficient evidence of equivalent semantics. |
+| Unreachable on reproduced path | Dormant cycle try-body cannot supply a valid context for exercised frames; uncalled regime-adjustment helper | Preserve as a documented design decision until activation/removal effects are tested. This does not prove every branch/file unreachable. |
+| Unresolved | Other adapters, ML artifact versions, backtest/research variants, archived UI/CLI/plugin/dynamic modules | Inventory is not deletion evidence. No bulk deletion or recursive cleanup performed. |
+| Generated/vendor | Dependency/build output and derived graph artifacts | Excluded from first-party behavior claims; do not confuse regeneration with source verification. |
+
+Recommended order: fix evidence/ownership contracts (P1), collect reproducible
+forward paper cases, then evaluate strategy interactions (P2), then decompose or
+delete proven redundant code. Each batch should update the existing index and
+ledger, preserve exact rollback boundaries, and keep performance claims separate
+from software correctness.

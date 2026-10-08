@@ -8,6 +8,8 @@ to prevent regime flip-flopping.
 from typing import List, Optional
 from datetime import datetime
 import logging
+import math
+import numpy as np
 
 from backend.shared.models.regime import MarketRegime, RegimeDimensions, SymbolRegime
 from backend.shared.models.data import MultiTimeframeData
@@ -671,7 +673,7 @@ class RegimeDetector:
         trend, score, _ = self.analyze_timeframe_trend(df, htf)
         return trend, score
 
-    def _detect_volatility(self, indicators: IndicatorSet):
+    def _detect_volatility(self, indicators: IndicatorSet, current_price: Optional[float] = None):
         """
         Detect volatility regime from ATR as PERCENTAGE of price.
 
@@ -682,63 +684,39 @@ class RegimeDetector:
 
         Returns: (vol_label, score)
         """
-        # Type check: ensure we received IndicatorSet, not IndicatorSnapshot
-        if not hasattr(indicators, "by_timeframe"):
-            logger.error(
-                "CRITICAL: _detect_volatility received %s instead of IndicatorSet. "
-                "Check get_atr_regime() call chain.",
-                type(indicators).__name__,
-            )
-            return "normal", 75.0
-
-        if not indicators.by_timeframe:
-            return "normal", 75.0
-
-        # Get highest timeframe indicator (by real DURATION, not lexicographic).
-        # The old `sorted(keys, reverse=True)[0]` returned '5m' (lowest TF),
-        # pinning structural volatility to 5-minute ATR%.
+        if not getattr(indicators, "by_timeframe", None):
+            raise ValueError("VOLATILITY_INPUT_UNAVAILABLE: missing timeframe indicators")
         primary_tf = _highest_duration_tf(indicators.by_timeframe.keys())
         if primary_tf is None:
-            return "normal", 75.0
+            raise ValueError("VOLATILITY_INPUT_UNAVAILABLE: missing primary timeframe")
         ind = indicators.by_timeframe[primary_tf]
-
-        if ind.atr is None:
-            return "normal", 75.0
-
-        # CRITICAL: Get current price to calculate ATR%
-        current_price = None
-
-        # Try to get price from indicator dataframe
-        if (
-            hasattr(ind, "dataframe")
-            and ind.dataframe is not None
-            and "close" in ind.dataframe.columns
-        ):
-            current_price = ind.dataframe["close"].iloc[-1]
-
-        # Try to get price from bb_middle (it's close to current price)
-        if current_price is None and ind.bb_middle is not None:
-            current_price = ind.bb_middle
-
-        if current_price is None or current_price <= 0:
-            logger.warning("Cannot determine current price for ATR%%, using raw ATR fallback")
-            # Fallback: assume reasonable normalized ATR
-            atr = ind.atr
-            if atr < 100:
-                return "compressed", 60.0
-            elif atr < 300:
-                return "normal", 75.0
-            else:
-                return "elevated", 55.0
-
-        # Calculate ATR as PERCENTAGE of price (this is the critical fix)
-        atr_pct = (ind.atr / current_price) * 100
+        atr_value = getattr(ind, "atr", None)
+        frame = getattr(ind, "dataframe", None)
+        if frame is not None and "close" in frame.columns:
+            if frame.empty:
+                raise ValueError("VOLATILITY_INPUT_UNAVAILABLE: empty price frame")
+            current_price = frame["close"].iloc[-1]
+        elif current_price is None:
+            # Legacy snapshots may only retain their BB middle price proxy.
+            current_price = getattr(ind, "bb_middle", None)
+        try:
+            if isinstance(atr_value, (bool, np.bool_)) or isinstance(current_price, (bool, np.bool_)):
+                raise ValueError("boolean ATR or price")
+            atr = float(atr_value)
+            current_price = float(current_price)
+            if not math.isfinite(atr) or atr < 0 or not math.isfinite(current_price) or current_price <= 0:
+                raise ValueError("ATR/price must be finite with ATR >= 0 and price > 0")
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"VOLATILITY_INPUT_UNAVAILABLE: {exc}") from exc
+        atr_pct = (atr / current_price) * 100
+        if not math.isfinite(atr_pct):
+            raise ValueError("VOLATILITY_INPUT_UNAVAILABLE: nonfinite ATR percentage")
 
         # Also check ATR trend (expanding = building momentum)
         atr_series = getattr(ind, "atr_series", None)
         atr_expanding = False
 
-        if atr_series and len(atr_series) >= 10:
+        if atr_series is not None and len(atr_series) >= 10:
             recent_atr = atr_series[-5:]
             older_atr = atr_series[-10:-5]
             recent_avg = sum(recent_atr) / len(recent_atr)
@@ -759,14 +737,14 @@ class RegimeDetector:
         if atr_pct < 2.5:
             # Compressed — genuinely dead daily range (below pooled ~p10)
             logger.info(
-                f"Volatility: compressed (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
+                f"Volatility: compressed (ATR={atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
             )
             return "compressed", 60.0
 
         elif atr_pct < 5.0:
             # Normal healthy daily volatility (~p10..p50)
             logger.info(
-                f"Volatility: normal (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
+                f"Volatility: normal (ATR={atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
             )
             return "normal", 75.0
 
@@ -774,26 +752,26 @@ class RegimeDetector:
             # Elevated but manageable (~p50..p80)
             if atr_expanding:
                 logger.info(
-                    f"Volatility: elevated_expanding (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
+                    f"Volatility: elevated_expanding (ATR={atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
                 )
                 return "elevated", 55.0
             else:
                 logger.info(
-                    f"Volatility: elevated (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
+                    f"Volatility: elevated (ATR={atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
                 )
                 return "elevated", 60.0
 
         elif atr_pct < 9.5:
             # High volatility - caution (~p80..p95)
             logger.info(
-                f"Volatility: volatile (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
+                f"Volatility: volatile (ATR={atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
             )
             return "volatile", 40.0
 
         else:
             # Chaotic/crash conditions (>~p95 daily ATR%)
             logger.warning(
-                f"Volatility: chaotic (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
+                f"Volatility: chaotic (ATR={atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
             )
             return "chaotic", 20.0
 
@@ -897,9 +875,8 @@ class RegimeDetector:
                     return "balanced", 60.0
 
         except Exception as e:
-            # Fallback if DominanceService unavailable
-            logger.debug(f"Risk appetite detection fallback: {e}")
-            return "balanced", 50.0
+            logger.warning("RISK_APPETITE_UNAVAILABLE: %s", e)
+            raise ValueError(f"DOMINANCE_UNAVAILABLE: {e}") from e
 
     def _generate_composite_label(self, dim: RegimeDimensions) -> str:
         """Generate composite regime label from dimensions."""

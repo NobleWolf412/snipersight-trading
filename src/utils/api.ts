@@ -1,3 +1,4 @@
+import type { AccountBalance, AccountingStatus } from '../services/accounting';
 /**
  * API Client for SniperSight Backend
  * 
@@ -1301,15 +1302,10 @@ export interface PaperTradingActivity {
   data: Record<string, any>;
 }
 
-export interface PaperTradingBalance {
-  initial: number;
-  current: number;
-  equity: number;
-  pnl: number;
-  pnl_pct: number;
-}
+export interface PaperTradingBalance extends AccountBalance {}
 
 export interface PaperTradingStatusResponse {
+  accounting?: AccountingStatus;
   status: 'idle' | 'running' | 'paused' | 'stopped' | 'error';
   session_id: string | null;
   started_at: string | null;

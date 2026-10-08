@@ -262,125 +262,52 @@ async def get_candles(
     exchange: str | None = Query(default=None),
     market_type: str = Query(default="swap"),
 ):
-    """Get candlestick data via selected exchange adapter or cache."""
-    try:
+    """Read the requested feed; never borrow another venue or market's cache."""
+    def read_candles():
+        from backend.data.ohlcv_cache import adapter_cache_namespace
         exchange_key = (exchange or "phemex").lower()
-
-        # Normalize symbol for cache lookup
-        logger.info(f"🔍 [CACHE DEBUG] Requested symbol: {symbol}, Timeframe: {timeframe.value}")
-
-        # First, try to get data from OHLCV cache (scanner's cached data)
-        cache = get_ohlcv_cache()
-        if cache:
-            # Note: Accessing private _cache for debugging purposes only
-            logger.info(
-                f"🔍 [CACHE DEBUG] Cache available, keys: {list(cache._cache.keys())[:10]}"
-            )  # Show first 10 keys
-            cached_df = cache.get(symbol, timeframe.value)
-            logger.info(
-                f"🔍 [CACHE DEBUG] Cache lookup result: {'HIT' if cached_df is not None and not cached_df.empty else 'MISS'}"
-            )
-            if cached_df is not None and not cached_df.empty:
-                logger.info(
-                    f"Serving {symbol} {timeframe.value} from OHLCV cache ({len(cached_df)} candles)"
-                )
-                df = cached_df.tail(limit) if len(cached_df) > limit else cached_df
-
-                candles = []
-                for _, row in df.iterrows():
-                    candles.append(
-                        {
-                            "timestamp": row["timestamp"].to_pydatetime().isoformat(),
-                            "open": float(row["open"]),
-                            "high": float(row["high"]),
-                            "low": float(row["low"]),
-                            "close": float(row["close"]),
-                            "volume": float(row["volume"]),
-                        }
-                    )
-
-                return {
-                    "symbol": symbol,
-                    "timeframe": timeframe.value,
-                    "candles": candles,
-                }
-
-        # Cache miss - try to fetch fresh data
-        logger.debug(f"Cache miss for {symbol} {timeframe.value}, attempting fresh fetch")
-
-        # Use the HTF opportunities singleton adapter for phemex (it's warm and works)
-        if exchange_key == "phemex":
-            adapter = get_htf_phemex_adapter()
-        else:
-            adapter = get_or_create_adapter(exchange_key)
+        try:
+            adapter = (get_htf_phemex_adapter() if exchange_key == "phemex"
+                       else get_or_create_adapter(exchange_key))
             if adapter is None:
                 raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange_key}")
-
-        # Try to fetch with requested market type, fallback to opposite if it fails
-        df = pd.DataFrame()
-        error_msg = None
-
-        # For Phemex, don't pass market_type (it's ignored and causes issues)
-        if exchange_key == "phemex":
-            try:
-                # Phemex API often fails with "Check input arguments" when limit < 500
-                # Enforce minimum limit of 500 to match working scanner configuration
-                request_limit = max(500, limit)
-                df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=request_limit)
-
-                if not df.empty and limit < len(df):
-                    df = df.iloc[-limit:]  # Slice back to requested limit
-                if df.empty:
-                    error_msg = "No data returned from Phemex"
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"Error fetching {symbol} {timeframe.value} from Phemex: {e}")
-        else:
-            # For other exchanges, try with market_type parameter
-            for attempt_market_type in [market_type, "spot" if market_type == "swap" else "swap"]:
-                try:
-                    df = adapter.fetch_ohlcv(
-                        symbol, timeframe.value, limit=limit, market_type=attempt_market_type
-                    )
-                    if not df.empty:
-                        if attempt_market_type != market_type:
-                            logger.info(f"Fell back to {attempt_market_type} market for {symbol}")
-                        break
-                except Exception as e:
-                    error_msg = str(e)
-                    logger.debug(f"Failed to fetch {symbol} as {attempt_market_type}: {e}")
-                    continue
-
-        if df.empty:
-            raise HTTPException(
-                status_code=502,
-                detail=f"No cached data available and fresh fetch failed for {symbol}. Try running a scan first to populate the cache.",
-            )
-        candles = []
-        if not df.empty:
-            for _, row in df.iterrows():
-                candles.append(
-                    {
-                        "timestamp": row["timestamp"].to_pydatetime().isoformat(),
-                        "open": float(row["open"]),
-                        "high": float(row["high"]),
-                        "low": float(row["low"]),
-                        "close": float(row["close"]),
-                        "volume": float(row["volume"]),
-                    }
+            options = getattr(getattr(adapter, "exchange", None), "options", {})
+            configured_market = options.get("defaultType") if isinstance(options, dict) else None
+            if configured_market != market_type:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Requested market {market_type} is not configured for {exchange_key}",
                 )
+            namespace = adapter_cache_namespace(adapter)
+            cache = get_ohlcv_cache()
+            df = (cache.get(symbol, timeframe.value, namespace=namespace, requested_limit=limit)
+                  if cache is not None and namespace is not None else None)
+            if df is None or df.empty:
+                request_limit = max(500, limit) if exchange_key == "phemex" else limit
+                # Adapter methods already own their configured market and symbol mapping.
+                # Raw chart candles are not inserted into the closed-candle analysis cache.
+                df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=request_limit)
+            if df is None or df.empty:
+                raise HTTPException(
+                    status_code=502, detail=f"No candle data returned for {symbol} on {exchange_key}"
+                )
+            candles = [
+                {
+                    "timestamp": pd.Timestamp(row["timestamp"]).isoformat(),
+                    "open": float(row["open"]), "high": float(row["high"]),
+                    "low": float(row["low"]), "close": float(row["close"]),
+                    "volume": float(row["volume"]),
+                }
+                for _, row in df.tail(limit).iterrows()
+            ]
+            return {"symbol": symbol, "timeframe": timeframe.value, "candles": candles}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error("Failed to fetch candles for %s on %s: %s", symbol, exchange_key, exc)
+            raise HTTPException(status_code=502, detail="Failed to fetch candles from exchange") from exc
 
-        return {
-            "symbol": symbol,
-            "timeframe": timeframe.value,
-            "candles": candles,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to fetch candles for %s on %s: %s", symbol, exchange or "phemex", e)
-        raise HTTPException(status_code=502, detail="Failed to fetch candles from exchange") from e
+    return await asyncio.to_thread(read_candles)
 
 
 # =============================================================================

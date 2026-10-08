@@ -2479,6 +2479,7 @@ def calculate_confluence_score(
     # Symbol-specific regime from RegimeDetector
     regime: Optional["SymbolRegime"] = None,
     symbol: str = "Unknown",
+    as_of: Optional[datetime] = None,
 ) -> ConfluenceBreakdown:
     """
     Calculate comprehensive confluence score for a trade setup.
@@ -2595,7 +2596,8 @@ def calculate_confluence_score(
         # FIX: removed circular self-import; get_current_kill_zone is imported from sessions at top of file
         # and _score_kill_zone_incremental is defined in this same module — both are already in scope
         from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
+        now = as_of if as_of is not None else datetime.now(timezone.utc)
+        now = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
         curr_kz = get_current_kill_zone(now)
         kz_result = _score_kill_zone_incremental(now, curr_kz)
         kz_score = kz_result["score"]

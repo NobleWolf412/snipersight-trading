@@ -5,9 +5,10 @@ The engine pre-fetches a multi-timeframe window of historical OHLCV data
 for a chosen symbol (+ BTC for regime context), then on each `step()` call
 slices each timeframe's DataFrame to the rows whose bars have FULLY CLOSED
 at the synthetic playback timestamp and feeds the sliced snapshot into a
-replay-mode Orchestrator. The Orchestrator runs the full scoring /
-SMC / planning / risk pipeline and stashes the populated SniperContext for
-the engine to render back to the operator.
+replay-mode Orchestrator. Closed-candle indicators and SMC are available for
+inspection. Historical macro/regime inputs and original configuration are not
+supplied, so the pipeline reports historical_context_unavailable before scoring
+or planning instead of substituting present-day inputs.
 
 Slicing semantics (correctness-critical, see CLAUDE.md §10):
 
@@ -32,11 +33,9 @@ Six-concern table (CLAUDE.md §16 Rubric 1):
        collision probability negligible. Run-ids prefixed with "replay-".
     2. Concurrency: (a) _REPLAY_ENGINE singleton guarded by _REPLAY_ENGINE_LOCK
        at module level. (b) ReplayEngine._sessions dict guarded by self._lock.
-       (c) Per-session state (step_index, ring_buffer, orchestrator) is NOT
-       lock-guarded — the router contract is single-threaded per session_id
-       (frontend issues serial step calls, never parallel). Documented here
-       and in ReplaySession docstring. If a future change introduces parallel
-       per-session traffic, add a session-scoped lock.
+       (c) Session navigation is guarded by a per-session reentrant lock.
+       Cached backward displays mark analysis state for a fresh prefix rebuild
+       before forward computation. Different sessions retain independent locks.
     3. Silent-failure: _slice_to_bar_close asserts mass conservation runtime
        (catches "row vanished" bug class). _serialize_smc logs every
        per-item exception (no silent suppression per CLAUDE.md §15).
@@ -144,6 +143,8 @@ class ReplaySession:
     bar_timestamps: List[datetime]  # tf_step bar opens inside the window
     orchestrator: Orchestrator
     step_index: int = -1  # -1 = not yet stepped (no current bar)
+    navigation_lock: Any = field(default_factory=threading.RLock, repr=False)
+    rebuild_required: bool = False
     ring_buffer: Deque[StepResult] = field(
         default_factory=lambda: deque(maxlen=RING_BUFFER_DEPTH)
     )
@@ -389,11 +390,12 @@ def _serialize_plan(plan) -> Optional[Dict[str, Any]]:
 def _serialize_regime(regime) -> Optional[Dict[str, Any]]:
     if regime is None:
         return None
+    dimensions = getattr(regime, "dimensions", regime)
     return {
         "composite": getattr(regime, "composite", None),
         "score": float(getattr(regime, "score", 0)),
-        "trend": getattr(regime, "trend", None),
-        "volatility": getattr(regime, "volatility", None),
+        "trend": getattr(dimensions, "trend", None),
+        "volatility": getattr(dimensions, "volatility", None),
     }
 
 
@@ -537,25 +539,27 @@ class ReplayEngine:
         if session is None:
             raise KeyError(f"Session {session_id} not found or expired")
 
-        target = session.step_index + n
-        # Clamp target into valid range. Index 0 = first bar; -1 means "not started"
-        if target < 0:
-            target = 0
-        if target >= session.total_bars:
-            target = session.total_bars - 1
+        with session.navigation_lock:
+            target = session.step_index + n
+            # Clamp target into valid range. Index 0 = first bar; -1 means "not started"
+            if target < 0:
+                target = 0
+            if target >= session.total_bars:
+                target = session.total_bars - 1
 
-        return self._goto_index(session, target)
+            return self._goto_index(session, target)
 
     def goto(self, session_id: str, index: int) -> StepResult:
         """Jump to absolute index (used by timeline-scrub and jump-to-signal)."""
         session = self.get_session(session_id)
         if session is None:
             raise KeyError(f"Session {session_id} not found or expired")
-        if index < 0 or index >= session.total_bars:
-            raise IndexError(
-                f"Index {index} out of range [0, {session.total_bars - 1}] for session {session_id}"
-            )
-        return self._goto_index(session, index)
+        with session.navigation_lock:
+            if index < 0 or index >= session.total_bars:
+                raise IndexError(
+                    f"Index {index} out of range [0, {session.total_bars - 1}] for session {session_id}"
+                )
+            return self._goto_index(session, index)
 
     def jump_to_next_signal(
         self, session_id: str, max_lookahead: int = 100
@@ -568,53 +572,58 @@ class ReplayEngine:
         if session is None:
             raise KeyError(f"Session {session_id} not found or expired")
 
-        bars_advanced = 0
-        # Start from the bar after the current position
-        start = session.step_index + 1
-        end = min(start + max_lookahead, session.total_bars)
-        for idx in range(start, end):
-            result = self._goto_index(session, idx)
-            bars_advanced += 1
-            if result.signal_fired:
-                return result, bars_advanced
-        # No signal found
-        return None, bars_advanced
+        with session.navigation_lock:
+            bars_advanced = 0
+            # Start from the bar after the current position
+            start = session.step_index + 1
+            end = min(start + max_lookahead, session.total_bars)
+            for idx in range(start, end):
+                result = self._goto_index(session, idx)
+                bars_advanced += 1
+                if result.signal_fired or (result.rejection or {}).get("reason_type") == "historical_context_unavailable":
+                    return result, bars_advanced
+            # No signal found
+            return None, bars_advanced
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
     def _goto_index(self, session: ReplaySession, target: int) -> StepResult:
-        """Move to absolute `target` index. Honors ring buffer; recomputes
-        if target is outside the cached range."""
-        # Ring buffer lookup — only valid for back-scrubs within depth
-        if target < session.step_index:
-            for cached in reversed(session.ring_buffer):
-                if cached.index == target:
-                    session.step_index = target
-                    logger.debug(
-                        "Replay: back-scrub hit ring buffer at idx=%d (session=%s)",
-                        target, session.session_id,
-                    )
-                    return cached
-            # Back-scrub beyond ring → reset and recompute up to target
-            logger.info(
-                "Replay: back-scrub beyond ring depth — recomputing 0..%d (session=%s)",
-                target, session.session_id,
-            )
-            session.ring_buffer.clear()
-            session.step_index = -1
+        """Display cached history, rebuilding analysis state before forward work."""
+        with session.navigation_lock:
+            if target <= session.step_index:
+                for cached in reversed(session.ring_buffer):
+                    if cached.index == target:
+                        if target < session.step_index:
+                            session.rebuild_required = True
+                        session.step_index = target
+                        return cached
+                session.rebuild_required = True
 
-        # Compute the missing bars sequentially up to target. For a single
-        # forward step this is just one compute. For a deep back-scrub it
-        # may be many — frontend shows the "recomputing…" indicator.
-        result: Optional[StepResult] = None
-        while session.step_index < target:
-            session.step_index += 1
-            result = self._compute_step(session, session.step_index)
-            session.ring_buffer.append(result)
-        assert result is not None, "Should have computed at least one bar"
-        return result
+            if session.rebuild_required:
+                logger.info(
+                    f"Replay: rebuilding causal prefix 0..{target} for session={session.session_id}"
+                )
+                fresh = self._build_orchestrator(get_mode(session.mode_name))
+                session.orchestrator = fresh
+                session.ring_buffer.clear()
+                session.step_index = -1
+                session.rebuild_required = False
+
+            result = None
+            while session.step_index < target:
+                next_index = session.step_index + 1
+                try:
+                    result = self._compute_step(session, next_index)
+                except Exception:
+                    # The computation may have partially mutated the engine.
+                    session.rebuild_required = True
+                    raise
+                session.ring_buffer.append(result)
+                session.step_index = next_index
+            assert result is not None, "Target must be cached or computed"
+            return result
 
     def _compute_step(self, session: ReplaySession, index: int) -> StepResult:
         """Slice data, run orchestrator, return StepResult. Pure of side
@@ -718,24 +727,19 @@ class ReplayEngine:
         window_end: datetime,
         mode_profile: str,
     ) -> Dict[str, pd.DataFrame]:
-        """Fetch + normalize each TF up to window_end. Reuses the
-        IngestionPipeline so the live OHLCV cache is consulted first
-        (historical HTF candles accumulated by the live bot avoid the
-        Phemex ~500-candle-per-request ceiling that limits cold cold-starts).
+        """Fetch the available recent window and trim to window_end.
 
-        For windows beyond what the cache holds, the adapter request is
-        capped at 500 candles (Phemex error 30000 threshold). 30-day stealth
-        replay typically cache-hits because the bot has been streaming
-        those TFs continuously; a cold cache may force shorter windows.
+        The cache replaces frames; it does not accumulate historical candles.
+        This path requests at most 500 recent candles without since/pagination,
+        so old or long windows may be incomplete or unavailable. It does not
+        establish historical warm-up or original decision-input provenance.
         """
-        # The pipeline's fetch_multi_timeframe handles cache + adapter call
-        # + normalize_and_validate in one shot. Use mode profile so per-TF
-        # limits scale (swing modes get more HTF candles).
+        # The pipeline handles source-scoped cache, adapter fetch and normalization.
         try:
             mtf = self._pipeline.fetch_multi_timeframe(
                 symbol=symbol,
                 timeframes=[tf.lower() for tf in timeframes],
-                limit=500,  # Phemex error-30000-safe ceiling; cache fills the rest
+                limit=500,  # Recent-window ceiling; no historical pagination here
             )
         except Exception as e:
             raise ValueError(f"Pipeline fetch failed for {symbol}: {e}")

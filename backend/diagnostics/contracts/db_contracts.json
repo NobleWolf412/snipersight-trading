@@ -1,22 +1,33 @@
 {
-  "jsonl_count": 1,
-  "jsonl_files": [
+  "jsonl_writers": [
     {
-      "keys": [
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "6e2e69fb7acf9b0b7d3a66785b7e5fee1aba8806a77a94400affdf1019ad4e72",
+      "literal_key_hints": [
         "alt_velocity_1h_at_entry",
         "btc_velocity_1h_at_entry",
         "confidence_score",
         "conviction_class",
+        "cvd_coverage_at_entry",
+        "cvd_divergence_at_entry",
+        "cvd_n_trades_at_entry",
+        "cvd_slope_1h_at_entry",
+        "cvd_z_at_entry",
         "direction",
         "entry_key_levels",
         "entry_price",
         "entry_time",
+        "execution_accounting",
+        "execution_fees",
         "execution_mode",
+        "execution_report_prepared_at",
         "exit_price",
         "exit_reason",
         "exit_time",
         "final_targets_remaining",
+        "gross_pnl",
         "htf_aligned_at_entry",
+        "initial_stop_loss",
         "kill_zone",
         "macro_state_at_entry",
         "max_adverse",
@@ -25,6 +36,8 @@
         "nearest_same_side_pool_label",
         "nearest_same_side_pool_price",
         "nearest_same_side_pool_swept",
+        "open_interest_at_entry",
+        "outcome_basis",
         "plan_type",
         "pnl",
         "pnl_pct",
@@ -32,9 +45,9 @@
         "quantity",
         "realized_rr",
         "regime",
+        "regime_labeled_at",
         "regime_trend_at_entry",
         "risk_reward_ratio",
-        "session_id",
         "setup_qualifier",
         "stop_distance_atr",
         "stop_loss_level",
@@ -47,27 +60,424 @@
         "tp1_clamped",
         "tp1_realized_rr",
         "trade_id",
-        "trade_type"
+        "trade_type",
+        "trailing_activated",
+        "trailing_final_stop"
       ],
-      "path": "backend/cache/trade_journal.jsonl"
-    }
-  ],
-  "skipped_paths": [],
-  "sqlite_tables": [
-    {
-      "columns": [
-        "created_at",
-        "data_json",
-        "event_type",
-        "id",
-        "run_id",
-        "symbol",
-        "timestamp"
-      ],
-      "source": "backend/bot/telemetry/storage.py",
-      "table": "telemetry_events"
+      "source": "backend/bot/paper_trading_service.py",
+      "symbol": "CompletedTrade.to_dict"
     },
     {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "f63ddb96869ccd4582b4284c58dca6797fac9303a0f034bd98f891d97f52294b",
+      "literal_key_hints": [],
+      "source": "backend/bot/paper_trading_service.py",
+      "symbol": "CompletedTrade.apply_execution_report"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "dda69c249112887f212a7fa5ae7dafeb7e93e3ad9b47e388a3400bf32d36798f",
+      "literal_key_hints": [
+        "session_id"
+      ],
+      "source": "backend/bot/trade_journal.py",
+      "symbol": "TradeJournalService._classified"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "a495b944488c24f8419982df2b33529ccac0660b0ed86e1a214cbafb803cfd2a",
+      "literal_key_hints": [],
+      "source": "backend/bot/exit_classification.py",
+      "symbol": "enrich"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "80a7a2929f76e28e71c69eef07e4fdefbd7245f59bc2c02977ac0b6360bdc579",
+      "literal_key_hints": [],
+      "source": "backend/bot/executor/execution_reports.py",
+      "symbol": "financial_fields"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "78ebdf6549fba0aaae3e8f90878e3235ebb98ffa6143b4e28e98df25df88bdc6",
+      "literal_key_hints": [],
+      "source": "backend/bot/executor/execution_reports.py",
+      "symbol": "ExecutionReportPublisher.capture"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "870514cd90128af5ca7af16843620a34c95ccb617759e073dade4ccb44b29f91",
+      "literal_key_hints": [
+        "entry_order_id",
+        "execution_report_prepared_at",
+        "reasons",
+        "session_id",
+        "state",
+        "trade"
+      ],
+      "source": "backend/bot/executor/execution_reports.py",
+      "symbol": "ExecutionReportPublisher._publish"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "e631f389964294b9072b8057e9194d0d1ee6f5e9bb2d4d6b05c1d0618538aeb4",
+      "literal_key_hints": [
+        "entry_order_id",
+        "reasons",
+        "state"
+      ],
+      "source": "backend/bot/executor/execution_reports.py",
+      "symbol": "ExecutionReportPublisher.recover"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "d234458f67e0c4fcbd57595c856ced6a8e157a24ab3670fe57603ddb57a86089",
+      "literal_key_hints": [],
+      "source": "backend/bot/executor/execution_outcomes.py",
+      "symbol": "ExecutionOutcome.to_dict"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "8f7dce5469c1a087c86536dab049d7463b38e60c38fd60cec0632f625b5ca22c",
+      "literal_key_hints": [
+        "confluence",
+        "conviction_class",
+        "direction",
+        "entry_zone",
+        "execution_mode",
+        "kill_zone",
+        "name",
+        "plan",
+        "plan_type",
+        "pullback_probability",
+        "rationale",
+        "reason",
+        "regime",
+        "result",
+        "rr",
+        "scan_number",
+        "score",
+        "setup_type",
+        "stop_loss",
+        "symbol",
+        "timeframe",
+        "timestamp",
+        "trade_type",
+        "weight",
+        "weighted"
+      ],
+      "source": "backend/bot/paper_trading_service.py",
+      "symbol": "PaperTradingService._log_signal"
+    },
+    {
+      "evidence": "writer implementation; hints include nested/conditional keys, not a complete JSON schema",
+      "implementation_sha256": "5bf01611b95df8de4c1b405e0d1a1c21ab9ee3ff1dcc372dab36299e504d2f09",
+      "literal_key_hints": [
+        "confluence",
+        "conviction_class",
+        "direction",
+        "entry_zone",
+        "id",
+        "kill_zone",
+        "plan_type",
+        "pullback_probability",
+        "reason",
+        "regime",
+        "result",
+        "rr",
+        "scan_number",
+        "setup_type",
+        "stop_loss",
+        "symbol",
+        "timeframe",
+        "timestamp",
+        "trade_type"
+      ],
+      "source": "backend/bot/live_trading_service.py",
+      "symbol": "LiveTradingService._log_signal"
+    }
+  ],
+  "limitations": [
+    "Conditional declarations are inventoried, not proof that a branch runs.",
+    "Known CREATE TABLE expressions outside literal execute calls are unresolved; assembled keywords/external SQL require separate inspection.",
+    "Writer fingerprints detect changes; they do not validate runtime payloads or all dynamically added keys.",
+    "Historical JSONL files are never read or changed."
+  ],
+  "scope": "production literal SQLite declarations and selected JSONL writer implementations",
+  "sqlite_tables": [
+    {
+      "column_contracts": [
+        {
+          "default": null,
+          "name": "sequence",
+          "not_null": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "order_id",
+          "not_null": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "kind",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "source",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "observed_at",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "payload",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        }
+      ],
+      "columns": [
+        "kind",
+        "observed_at",
+        "order_id",
+        "payload",
+        "sequence",
+        "source"
+      ],
+      "declaration": "CREATE TABLE events (sequence INTEGER PRIMARY KEY, order_id TEXT, kind TEXT NOT NULL, source TEXT NOT NULL, observed_at TEXT NOT NULL, payload TEXT NOT NULL)",
+      "source": "backend/bot/executor/execution_journal.py",
+      "table": "events"
+    },
+    {
+      "column_contracts": [
+        {
+          "default": null,
+          "name": "symbol",
+          "not_null": true,
+          "primary_key": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "execution_id",
+          "not_null": true,
+          "primary_key": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "order_id",
+          "not_null": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "payload",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "event_sequence",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "columns": [
+        "event_sequence",
+        "execution_id",
+        "order_id",
+        "payload",
+        "symbol"
+      ],
+      "declaration": "CREATE TABLE execution_facts (symbol TEXT NOT NULL, execution_id TEXT NOT NULL, order_id TEXT REFERENCES requests(order_id), payload TEXT NOT NULL, event_sequence INTEGER NOT NULL REFERENCES events(sequence), PRIMARY KEY(symbol,execution_id))",
+      "source": "backend/bot/executor/execution_journal.py",
+      "table": "execution_facts"
+    },
+    {
+      "column_contracts": [
+        {
+          "default": null,
+          "name": "order_id",
+          "not_null": false,
+          "primary_key": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "payload",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "event_sequence",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "columns": [
+        "event_sequence",
+        "order_id",
+        "payload"
+      ],
+      "declaration": "CREATE TABLE financial_orders (order_id TEXT PRIMARY KEY REFERENCES requests(order_id), payload TEXT NOT NULL, event_sequence INTEGER NOT NULL REFERENCES events(sequence))",
+      "source": "backend/bot/executor/execution_journal.py",
+      "table": "financial_orders"
+    },
+    {
+      "column_contracts": [
+        {
+          "default": null,
+          "name": "singleton",
+          "not_null": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "version",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "store_id",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "binding",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "clean",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "columns": [
+        "binding",
+        "clean",
+        "singleton",
+        "store_id",
+        "version"
+      ],
+      "declaration": "CREATE TABLE metadata (singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL, store_id TEXT NOT NULL, binding TEXT NOT NULL, clean INTEGER NOT NULL)",
+      "source": "backend/bot/executor/execution_journal.py",
+      "table": "metadata"
+    },
+    {
+      "column_contracts": [
+        {
+          "default": null,
+          "name": "order_id",
+          "not_null": false,
+          "primary_key": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "intent",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "state",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        }
+      ],
+      "columns": [
+        "intent",
+        "order_id",
+        "state"
+      ],
+      "declaration": "CREATE TABLE requests (order_id TEXT PRIMARY KEY, intent TEXT NOT NULL, state TEXT NOT NULL)",
+      "source": "backend/bot/executor/execution_journal.py",
+      "table": "requests"
+    },
+    {
+      "column_contracts": [
+        {
+          "default": null,
+          "name": "id",
+          "not_null": false,
+          "primary_key": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "name": "event_type",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "timestamp",
+          "not_null": true,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "run_id",
+          "not_null": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "symbol",
+          "not_null": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "name": "data_json",
+          "not_null": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "CURRENT_TIMESTAMP",
+          "name": "created_at",
+          "not_null": false,
+          "primary_key": 0,
+          "type": "TEXT"
+        }
+      ],
       "columns": [
         "created_at",
         "data_json",
@@ -77,9 +487,13 @@
         "symbol",
         "timestamp"
       ],
-      "source": "backend/tests/diagnostics/test_autopsy_report.py",
+      "declaration": "CREATE TABLE telemetry_events (\n                    id INTEGER PRIMARY KEY AUTOINCREMENT,\n                    event_type TEXT NOT NULL,\n                    timestamp TEXT NOT NULL,\n                    run_id TEXT,\n                    symbol TEXT,\n                    data_json TEXT,\n                    created_at TEXT DEFAULT CURRENT_TIMESTAMP\n                )",
+      "source": "backend/bot/telemetry/storage.py",
       "table": "telemetry_events"
     }
   ],
-  "table_count": 2
+  "table_count": 6,
+  "unresolved": [],
+  "version": 2,
+  "writer_count": 11
 }

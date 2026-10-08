@@ -1,3 +1,4 @@
+import type { AccountBalance, AccountingStatus, ExecutionReportState, ExecutionHistoryStatus, ExecutionOutcomeSnapshot } from './accounting';
 const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE
   ? (import.meta as any).env.VITE_API_BASE
   : '/api';
@@ -79,6 +80,10 @@ export interface CompletedLiveTrade {
   max_adverse: number;
   trade_type: string;
   confidence_score: number;
+  execution_accounting?: ExecutionOutcomeSnapshot;
+  execution_report_prepared_at?: string;
+  gross_pnl?: number;
+  execution_fees?: Record<string, string>;
 }
 
 export interface LiveLifecycle {
@@ -114,6 +119,7 @@ export function liveShutdownMessage(state?: LiveLifecycle): string {
   if (state.phase === 'stopped' && state.account_state === 'flat_confirmed' && !state.recovery_required) {
     return `${scope} observed flat${state.observed_at ? ` at ${state.observed_at}` : ''}.`;
   }
+  if (state.account_state === 'flat_confirmed') return `${scope} observed flat. Session recovery is still finishing.${state.reason ? ` ${state.reason}` : ''}`;
   if (state.account_state === 'exposure_present') return 'Scanning stopped. Orders or positions remain; recovery is required.';
   return `Scanning stopped. Account closure is unconfirmed; recovery remains required.${state.reason ? ` ${state.reason}` : ''}`;
 }
@@ -146,13 +152,11 @@ export interface LiveTradingStatus {
     volatility?: string;
   } | null;
   positions: LivePosition[];
-  balance: {
-    initial: number;
-    current: number;
-    equity: number;
-    pnl: number;
-    pnl_pct: number;
-  };
+  balance: AccountBalance;
+  accounting?: AccountingStatus;
+  outcome_basis?: 'legacy_estimate' | 'executions_excluding_funding_and_transfers';
+  execution_reporting?: Record<string, ExecutionReportState>;
+  execution_history?: ExecutionHistoryStatus;
   statistics: {
     total_trades: number;
     winning_trades: number;
@@ -187,7 +191,9 @@ export interface LiveTradingStatus {
 
 export interface PreflightResult {
   ok: boolean;
-  balance: number;
+  balance: number | null;
+  equity?: number | null;
+  basis?: 'exchange_mark';
   open_positions: { symbol: string; size: number }[];
   issues: string[];
 }

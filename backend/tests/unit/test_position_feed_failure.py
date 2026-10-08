@@ -15,6 +15,7 @@ import backend.bot.executor.position_manager as manager_module
 from backend.bot.executor.position_manager import PositionManager, PositionState, PositionStatus
 from backend.bot.executor.execution_journal import ExecutionJournal
 from backend.bot.executor.live_executor import LiveExecutor
+from backend.tests.unit.runtime_fixtures import prepare_adapter, initialize_fixture
 from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus
 from backend.bot.live_trading_service import LiveTradingService
 from backend.bot.paper_trading_service import PaperTradingService
@@ -127,8 +128,11 @@ def test_service_completion_cannot_archive_or_unprotect_feed_orphan(position, se
                 fetch_balance=lambda: {"free": {"USDT": 1000}},
                 create_order=Mock(return_value={"id": "stop-remote", "status": "open", "filled": 0}),
                 cancel_order=Mock(return_value={"id": "stop-remote", "status": "canceled", "filled": 0}))
+    prepare_adapter(adapter, SYMBOL, "offline-orphan")
     ex = (PaperExecutor(initial_balance=1000) if service_kind == "paper" else
-          LiveExecutor(adapter, journal=ExecutionJournal(tmp_path / "execution.sqlite3", "offline-orphan")))
+          LiveExecutor(adapter, journal=ExecutionJournal(tmp_path / "execution.sqlite3", "offline-orphan", runtime=True, environment="testnet")))
+    if service_kind != "paper":
+        initialize_fixture(ex)
     svc.executor = ex
     svc.position_manager = PositionManager(svc._get_price, svc._execute_exit_order)
     svc.position_manager.positions[position.position_id] = position

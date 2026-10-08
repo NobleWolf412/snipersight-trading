@@ -16,12 +16,14 @@ orchestrator._detect_smc_patterns()
 """
 
 import logging
+from datetime import datetime, timezone
 import pandas as pd
 from typing import Dict, List, Any, Optional
 
 from backend.shared.models.data import MultiTimeframeData
 from backend.shared.models.smc import SMCSnapshot
 from backend.shared.config.smc_config import SMCConfig, get_tf_smc_config, MODE_SWEEP_TIMEFRAMES
+from backend.shared.config.scanner_modes import get_mode
 
 # SMC Detection functions
 from backend.strategy.smc.order_blocks import (
@@ -45,7 +47,9 @@ from backend.strategy.smc.liquidity_sweeps import (
     track_pool_sweeps,
 )
 from backend.strategy.smc.swing_structure import detect_swing_structure
-from backend.strategy.smc.mitigation_tracker import update_ob_mitigation, update_fvg_fill_status
+from backend.strategy.smc.mitigation_tracker import (
+    FormationTimeError, update_ob_mitigation, update_fvg_fill_status,
+)
 from backend.strategy.smc.consolidation_detector import detect_consolidations
 from backend.indicators.volatility import compute_atr
 
@@ -98,8 +102,10 @@ class SMCDetectionService:
     def update_config(self, config: SMCConfig, mode: Optional[str] = None):
         """Update SMC configuration dynamically."""
         self._smc_config = config
-        if mode:
-            self._mode = mode.lower()
+        if mode is not None:
+            selected_mode = get_mode(mode)
+            self._mode = selected_mode.name
+            self._mode_profile = selected_mode.profile
 
     def _create_tf_smc_config(self, tf_config: dict) -> SMCConfig:
         """
@@ -137,7 +143,10 @@ class SMCDetectionService:
         # Create new SMCConfig with merged values
         return SMCConfig(**base_dict)
 
-    def detect(self, multi_tf_data: MultiTimeframeData, current_price: float) -> SMCSnapshot:
+    def detect(
+        self, multi_tf_data: MultiTimeframeData, current_price: float,
+        *, as_of: Optional[datetime] = None,
+    ) -> SMCSnapshot:
         """
         Detect Smart Money Concept patterns across all timeframes.
 
@@ -148,6 +157,8 @@ class SMCDetectionService:
         Returns:
             SMCSnapshot with all detected patterns
         """
+        # One analysis clock for every timeframe and aggregate freshness.
+        as_of = as_of if as_of is not None else datetime.now(timezone.utc)
         self._diagnostics = {"smc_rejections": []}
         self._filter_stats = {}  # Reset filter stats
 
@@ -213,7 +224,7 @@ class SMCDetectionService:
                         continue
 
                 # Detect core SMC patterns
-                patterns = self._detect_timeframe_patterns(timeframe, df, current_price)
+                patterns = self._detect_timeframe_patterns(timeframe, df, current_price, as_of=as_of)
 
                 all_order_blocks.extend(patterns["order_blocks"])
                 all_fvgs.extend(patterns["fvgs"])
@@ -400,7 +411,7 @@ class SMCDetectionService:
         key_levels_data = self._detect_key_levels(multi_tf_data, current_price)
 
         # Update OB mitigation
-        all_order_blocks = self._update_mitigation(multi_tf_data, all_order_blocks)
+        all_order_blocks = self._update_mitigation(multi_tf_data, all_order_blocks, as_of=as_of)
 
         # Update FVG fill lifecycle (mirrors OB mitigation — previously FVGs had no state tracking)
         all_fvgs = self._update_fvg_fill(multi_tf_data, all_fvgs)
@@ -440,7 +451,7 @@ class SMCDetectionService:
         )
 
     def _detect_timeframe_patterns(
-        self, timeframe: str, df, current_price: float
+        self, timeframe: str, df, current_price: float, *, as_of: Optional[datetime] = None
     ) -> Dict[str, Any]:
         """Detect all SMC patterns for a single timeframe."""
         result = {
@@ -542,8 +553,6 @@ class SMCDetectionService:
 
                 # NEW: Mode-specific filtering (Gap #1 - SMC Enhancements)
                 # Filter OBs by mode requirements (TF, mitigation, freshness)
-                from datetime import datetime
-
                 pre_filter_count = len(result["order_blocks"])
 
                 # Track for UI stats
@@ -554,7 +563,7 @@ class SMCDetectionService:
                 result["order_blocks"] = filter_obs_by_mode(
                     result["order_blocks"],
                     mode_profile=self._mode_profile,
-                    current_time=datetime.now(),
+                    current_time=as_of if as_of is not None else datetime.now(timezone.utc),
                 )
                 filtered_count = pre_filter_count - len(result["order_blocks"])
                 if filtered_count > 0:
@@ -792,16 +801,19 @@ class SMCDetectionService:
             logger.debug("Key levels detection failed: %s", e)
         return None
 
-    def _update_mitigation(self, multi_tf_data: MultiTimeframeData, order_blocks: List) -> List:
+    def _update_mitigation(
+        self, multi_tf_data: MultiTimeframeData, order_blocks: List,
+        *, as_of: Optional[datetime] = None,
+    ) -> List:
         """Update order block mitigation status AND freshness scores."""
         if not order_blocks:
             return order_blocks
 
         try:
-            ltf_df = (
-                multi_tf_data.timeframes.get("15m")
-                or multi_tf_data.timeframes.get("1H")
-                or multi_tf_data.timeframes.get("1h")
+            ltf_df = next(
+                (frame for tf in ("15m", "1H", "1h")
+                 if (frame := multi_tf_data.timeframes.get(tf)) is not None and not frame.empty),
+                None,
             )
             if ltf_df is not None and len(ltf_df) > 0:
                 order_blocks, mitigation_status = update_ob_mitigation(
@@ -816,18 +828,20 @@ class SMCDetectionService:
                         mitigation_status.partially_mitigated_count,
                         mitigation_status.fresh_count,
                     )
+        except FormationTimeError:
+            # An unverified zone cannot retain its previous "fresh" status.
+            raise
         except Exception as e:
-            logger.debug("Mitigation tracking failed: %s", e)
+            logger.warning("SMC_MITIGATION_FAILED: %s", e)
 
         # FIXED: Recalculate freshness for ALL OBs after aggregation
         # This ensures structural OBs don't retain stale 100% freshness
         _pre_recalc_count = len(order_blocks)
         try:
-            from datetime import datetime
             from dataclasses import replace
             from backend.strategy.smc.order_blocks import calculate_freshness
 
-            current_time = datetime.now()
+            current_time = as_of if as_of is not None else datetime.now(timezone.utc)
             updated_obs = []
             for ob in order_blocks:
                 new_freshness = calculate_freshness(ob, current_time)
@@ -857,10 +871,10 @@ class SMCDetectionService:
             return fvgs
 
         try:
-            ltf_df = (
-                multi_tf_data.timeframes.get("15m")
-                or multi_tf_data.timeframes.get("1H")
-                or multi_tf_data.timeframes.get("1h")
+            ltf_df = next(
+                (frame for tf in ("15m", "1H", "1h")
+                 if (frame := multi_tf_data.timeframes.get(tf)) is not None and not frame.empty),
+                None,
             )
             if ltf_df is not None and len(ltf_df) > 0:
                 fvgs, fill_status = update_fvg_fill_status(fvgs, ltf_df, max_fill=0.5)
@@ -871,8 +885,11 @@ class SMCDetectionService:
                         fill_status.partially_mitigated_count,
                         fill_status.fresh_count,
                     )
+        except FormationTimeError:
+            # An unverified zone cannot retain its previous "fresh" status.
+            raise
         except Exception as e:
-            logger.debug("FVG fill tracking failed: %s", e)
+            logger.warning("SMC_FVG_FILL_FAILED: %s", e)
 
         return fvgs
 

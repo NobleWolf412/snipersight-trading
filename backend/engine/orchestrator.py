@@ -239,13 +239,21 @@ class Orchestrator:
 
         # Initialize Domain Services
         # These encapsulate the core logic for indicators, SMC, and scoring
-        self.indicator_service = configure_indicator_service(scanner_mode=self.scanner_mode)
-        self.smc_service = configure_smc_service(
-            smc_config=self.smc_config, mode=self.scanner_mode.name
-        )
-        self.confluence_service = configure_confluence_service(
-            scanner_mode=self.scanner_mode, config=self.config
-        )
+        if self.replay_mode:
+            from backend.services.indicator_service import IndicatorService
+            from backend.services.smc_service import SMCDetectionService
+            from backend.services.confluence_service import ConfluenceService
+            self.indicator_service = IndicatorService(scanner_mode=self.scanner_mode)
+            self.smc_service = SMCDetectionService(smc_config=self.smc_config, mode=self.scanner_mode.name)
+            self.confluence_service = ConfluenceService(scanner_mode=self.scanner_mode, config=self.config)
+        else:
+            self.indicator_service = configure_indicator_service(scanner_mode=self.scanner_mode)
+            self.smc_service = configure_smc_service(
+                smc_config=self.smc_config, mode=self.scanner_mode.name
+            )
+            self.confluence_service = configure_confluence_service(
+                scanner_mode=self.scanner_mode, config=self.config
+            )
 
         # Diagnostics storage
         self.diagnostics: Dict[str, Any] = {
@@ -287,8 +295,8 @@ class Orchestrator:
         # This ensures planner uses mode-specific thresholds, not ScanConfig defaults
         self.apply_mode(self.scanner_mode)
 
-        # Regime detection
-        self.regime_detector = get_regime_detector()
+        # Each engine owns its mode thresholds, caches and hysteresis.
+        self.regime_detector = self._create_regime_detector(self.config.profile)
         self.regime_policy = get_regime_policy(self.scanner_mode.name)
         self.current_regime: Optional[MarketRegime] = None
         # Macro context (dominance/flows); compute once per scan when available
@@ -528,7 +536,8 @@ class Orchestrator:
                     tick_size = info.get("tick_size", 0.0)
                     lot_size = info.get("lot_size", 0.0)
             except Exception as e:
-                logger.debug(f"Failed to get precision for {sym}: {e}")
+                tick_size = lot_size = None
+                logger.warning("MARKET_PRECISION_UNAVAILABLE: %s: %s", sym, e)
 
             worker_args.append((
                 sym,
@@ -574,7 +583,7 @@ class Orchestrator:
                 reason = (rej_info or {}).get("reason_type")
                 if reason == "no_data":
                     record_no_data_failure(sym)
-                elif reason == "errors":
+                elif reason in ("errors", "market_precision_unavailable"):
                     # Ambiguous: timeout could mean data fetch hung, OR an
                     # indicator/SMC math exception fired after data was
                     # fetched. Preserve current counter state.
@@ -858,7 +867,7 @@ class Orchestrator:
         # Sort by Confidence (descending) then EV (descending)
         # Prioritize high-confidence, high-value setups
         signals.sort(
-            key=lambda s: (s.confidence_score, (s.metadata.get("ev") or 0.0)), reverse=True
+            key=lambda s: (s.confidence_score, ((s.metadata.get("ranking_heuristic") or {}).get("value") or 0.0)), reverse=True
         )
 
         # Assign rank metadata
@@ -1137,8 +1146,8 @@ class Orchestrator:
         run_id: str,
         timestamp: datetime,
         prefetched_data: Optional[MultiTimeframeData] = None,
-        tick_size: float = 0.0,
-        lot_size: float = 0.0,
+        tick_size: Optional[float] = 0.0,
+        lot_size: Optional[float] = 0.0,
     ) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]]]:
         """
         Process single symbol through complete pipeline.
@@ -1152,6 +1161,13 @@ class Orchestrator:
         Returns:
             Tuple of (TradePlan if qualifying, rejection_info dict if rejected)
         """
+        if tick_size is None or lot_size is None:
+            logger.warning("%s: MARKET_PRECISION_UNAVAILABLE before analysis", symbol)
+            return None, {
+                "symbol": symbol, "reason_type": "market_precision_unavailable",
+                "reason": "Exchange market precision could not be verified for this scan",
+            }
+
         # Generate trace_id for correlation
         trace_id = f"{run_id}_{symbol.replace('/', '_')}_{int(timestamp.timestamp())}"
 
@@ -1406,7 +1422,10 @@ class Orchestrator:
             # Get current price for P/D zones
             current_price = context.multi_tf_data.get_current_price() or 0
 
-            context.smc_snapshot = self.smc_service.detect(context.multi_tf_data, current_price)
+            context.smc_snapshot = self.smc_service.detect(
+                context.multi_tf_data, current_price,
+                **({"as_of": context.timestamp} if self.replay_mode else {}),
+            )
             logger.debug("%s [%s]: SMC detection completed", symbol, trace_id)
 
             # Merge diagnostics
@@ -1522,8 +1541,22 @@ class Orchestrator:
         except Exception as e:
             logger.debug("Volume profile calculation skipped: %s", e)
 
+        context_rejection = self._analysis_context_rejection(context)
+        if context_rejection is not None:
+            context.metadata["analysis_input_status"] = "unavailable"
+            context.metadata["missing_analysis_inputs"] = context_rejection["missing_inputs"]
+            logger.warning("%s: %s", symbol, context_rejection["reason"])
+            self.telemetry.log_event(create_signal_rejected_event(
+                run_id=run_id, symbol=symbol, reason=context_rejection["reason"],
+                gate_name=context_rejection["reason_type"],
+                diagnostics={"missing_inputs": context_rejection["missing_inputs"]},
+            ))
+            context_rejection["__telemeterized"] = True
+            return None, context_rejection
+
         # Stage 5: Confluence scoring (Delegated to service)
         logger.info("%s [%s]: 📊 Starting confluence scoring", symbol, trace_id)
+        _fusion_active = False
         try:
             # --- Inline Context Detection ---
             # Get current price once for all context detectors below
@@ -1575,8 +1608,11 @@ class Orchestrator:
                         logger.debug("%s: Symbol cycle merge skipped: %s", symbol, e)
                     # ─────────────────────────────────────────────────────────────
 
-            except Exception:
-                pass
+            except Exception as exc:
+                context.metadata["cycle_context_status"] = {
+                    "status": "unavailable", "error_type": type(exc).__name__, "reason": str(exc),
+                }
+                logger.warning("%s: CYCLE_CONTEXT_UNAVAILABLE: %s", symbol, exc)
 
             # 2. Reversal Context
             rev_ctx_long = None
@@ -1647,7 +1683,6 @@ class Orchestrator:
             # trending markets, then restores the original profile in finally.
             # Scanner always uses pure Stealth (enable_fusion defaults to False).
             _original_profile = self.config.profile
-            _fusion_active = False
             if (
                 getattr(self.config, "enable_fusion", False)
                 and _original_profile.lower() in ("stealth", "stealth_balanced")
@@ -2453,7 +2488,7 @@ class Orchestrator:
         # uses the fresh price. Falls back to current_price on fetch failure (loud, never silent).
         # Flag OFF -> plan_price == current_price -> byte-identical. §15 design entry 2026-06-25.
         plan_price = current_price
-        if is_fresh_entry_price() and self.exchange_adapter is not None and current_price > 0:
+        if not self.replay_mode and is_fresh_entry_price() and self.exchange_adapter is not None and current_price > 0:
             _fresh_px = self._fetch_fresh_price(context.symbol)
             if _fresh_px and _fresh_px > 0:
                 # Outlier guard (adversarial-review): use the fresh tick ONLY for MODEST drift.
@@ -2740,6 +2775,31 @@ class Orchestrator:
             self.diagnostics["data_failures"].append({"symbol": symbol, "error": str(e)})
             return None
 
+    def _analysis_context_rejection(self, context: SniperContext) -> Optional[Dict[str, Any]]:
+        """Require the evidence requested by this analysis before scoring."""
+        if self.replay_mode:
+            return {
+                "symbol": context.symbol,
+                "reason_type": "historical_context_unavailable",
+                "reason": "Candle and structure inspection only: historical macro/regime inputs and original configuration are unavailable; no historical trade signal can be established.",
+                "missing_inputs": ["historical_macro_regime", "original_configuration"],
+            }
+        if not getattr(self.config, "macro_overlay_enabled", False):
+            return None
+        missing = []
+        if context.macro_context is None:
+            missing.append("macro_context")
+        if context.metadata.get("global_regime") is None:
+            missing.append("global_regime")
+        if missing:
+            return {
+                "symbol": context.symbol,
+                "reason_type": "market_context_unavailable",
+                "reason": "Macro-enabled analysis requires current market context: " + ", ".join(missing),
+                "missing_inputs": missing,
+            }
+        return None
+
     def process_symbol_for_replay(
         self,
         symbol: str,
@@ -2779,11 +2839,13 @@ class Orchestrator:
             run_id: Replay session run id
             playback_index: 0-based index into the playback bar_timestamps
             session_id: Replay session identifier
-            prefetched_btc_data: BTC data sliced to the same timestamp, used
-                to drive the regime detector. Mandatory for correctness —
-                without it the regime is computed from live BTC and
-                contaminates the historical signal.
-            macro_context: Optional pre-computed macro context
+            prefetched_btc_data: BTC candles sliced to the same timestamp. They
+                cannot establish historical dominance; replay never calls the
+                present-day global regime classifier.
+            macro_context: Optional pre-computed context. This alone does not
+                establish historical regime/configuration provenance. Current
+                replay returns inspection data and an explicit missing-input
+                rejection before scoring or planning.
 
         Returns:
             (plan, rejection_info, captured_context) — context is None only
@@ -2795,44 +2857,17 @@ class Orchestrator:
                 "Construct with Orchestrator(replay_mode=True, ...)."
             )
 
-        # Drive regime detector from sliced BTC data — protects historical
-        # signal accuracy against contamination by live BTC state.
-        #
-        # Keep-last-good policy (symmetry-guard FIX-02-SUSPECT 2026-05-25):
-        # if a single step's regime detection fails (e.g. too few BTC bars
-        # at very-early indices), retain the previous step's regime instead
-        # of clobbering to None. A regime flicker between None and a real
-        # label across consecutive bars would produce confluence-score
-        # noise unrelated to actual market state.
+        # This step's input owns context. Missing input cannot borrow the
+        # regime/macro of a later bar visited before a backwards scrub.
+        self.current_regime = None
+        self.macro_context = macro_context
         if prefetched_btc_data is not None:
             try:
-                fresh_regime = self._detect_global_regime(
+                self.current_regime = self._detect_global_regime(
                     prefetched_btc_data=prefetched_btc_data
                 )
-                if fresh_regime is not None:
-                    self.current_regime = fresh_regime
-                else:
-                    logger.debug(
-                        "Replay regime: detector returned None at step, "
-                        "keeping previous regime=%s",
-                        getattr(self.current_regime, "composite", None),
-                    )
-            except Exception as e:
-                logger.warning(
-                    "Replay regime detection raised at step, keeping previous: %s", e
-                )
-
-        # Inject macro context if pre-computed (else _process_symbol uses None).
-        # OBS-02-SUSPECT (2026-05-25): replay does NOT auto-compute
-        # macro_context from the sliced data each step — that adds another
-        # _compute_macro_context_from_data call per bar (which is heavy:
-        # iterates every symbol in prefetched_data computing pct_change /
-        # dominance). Caller may pass macro_context= to backfill if needed;
-        # otherwise replay runs without macro overlay (functional gap vs
-        # live but predictable: the SAME bar replayed twice produces the
-        # SAME result regardless of when it was replayed).
-        if macro_context is not None:
-            self.macro_context = macro_context
+            except Exception as exc:
+                logger.warning("Replay regime unavailable for current step: %s", exc)
 
         # Stash replay metadata for the capture hook to write into context.metadata
         self._last_replay_context = None
@@ -2921,6 +2956,8 @@ class Orchestrator:
         symbol then spot). Returns None on ANY failure so the caller falls back to the candle close
         (loud at the call site). Used only by the SS_FRESH_ENTRY_PRICE plan-geometry path
         (heart-change Form-A); the revalidation keeps its own inline fetch unchanged."""
+        if self.replay_mode:
+            return None  # Historical analysis cannot acquire a present-day ticker.
         try:
             ex = getattr(self.exchange_adapter, "exchange", None)
             if ex is None or not hasattr(ex, "fetch_ticker"):
@@ -3509,32 +3546,32 @@ class Orchestrator:
                 except Exception:
                     pass
 
-            # Compute simple EV estimate for ranking/prioritization.
-            # Guard plan-is-None: the planner returns None on a legitimate decline
-            # (reachability, entry-depth gate, etc.). Without this guard, `plan.risk_reward`
-            # threw AttributeError, and the except handler's own `plan.metadata["ev"] = None`
-            # RE-THREW 'NoneType' object has no attribute 'metadata', which escaped to the
-            # outer catch and OVERWROTE the real decline reason with the generic NoneType
-            # error — masking ~half the planner rejections. See decisions log (reason-mask bug).
+            # Preserve the existing ranking formula without claiming calibration.
+            # A score-derived coefficient is neither a measured win probability
+            # nor evidence of expected profit. None plans retain their real decline reason.
             if plan is not None:
                 try:
-                    # Map confluence score (0-100) to win prob (0.35-0.70)
                     score = float(context.confluence_breakdown.total_score)
-                    p_win = max(0.35, min(0.70, 0.35 + (score / 100.0) * (0.70 - 0.35)))
-                    R = float(plan.risk_reward)
-                    ev = p_win * R - (1 - p_win) * 1.0
-                    plan.metadata["ev"] = round(ev, 3)
-                    plan.metadata["p_win"] = round(p_win, 3)
-                except Exception:
-                    plan.metadata["ev"] = None
+                    score_weight = max(0.35, min(0.70, 0.35 + (score / 100.0) * (0.70 - 0.35)))
+                    rank_value = score_weight * float(plan.risk_reward) - (1 - score_weight)
+                    plan.metadata["ranking_heuristic"] = {
+                        "method": "score_rr_v1", "value": round(rank_value, 3),
+                        "score_weight": round(score_weight, 3), "calibrated": False,
+                    }
+                except Exception as exc:
+                    plan.metadata["ranking_heuristic"] = {
+                        "method": "score_rr_v1", "value": None, "calibrated": False,
+                    }
+                    logger.warning("%s: RANKING_HEURISTIC_UNAVAILABLE: %s", context.symbol, exc)
 
             # --- Post-plan real-time price revalidation ---
             # Fetch a fresh price (direct adapter ticker if available) to ensure the
             # generated entry zone is still logically positioned relative to live market.
             try:
-                live_price = None
-                # Prefer direct adapter ccxt call for freshest tick
-                if hasattr(self.exchange_adapter, "exchange") and hasattr(
+                live_price = current_price if self.replay_mode else None
+                price_source = "replay_candle_close" if self.replay_mode else "candle_close"
+                # Real-time requests may refresh the quote; replay must stay at as-of.
+                if not self.replay_mode and hasattr(self.exchange_adapter, "exchange") and hasattr(
                     self.exchange_adapter.exchange, "fetch_ticker"
                 ):
                     fetch_symbol = context.symbol
@@ -3548,6 +3585,8 @@ class Orchestrator:
                     try:
                         ticker = self.exchange_adapter.exchange.fetch_ticker(fetch_symbol)
                         live_price = ticker.get("last") or ticker.get("close")
+                        if live_price is not None:
+                            price_source = "exchange_ticker"
                     except Exception:
                         live_price = None
                 if live_price is None:
@@ -3620,6 +3659,8 @@ class Orchestrator:
                     # Store live price & drift metrics for downstream visibility
                     plan.metadata["live_price_revalidation"] = {
                         "live_price": live_price,
+                        "price_source": price_source,
+                        "as_of": context.timestamp.isoformat() if self.replay_mode else None,
                         "drift_pct": round(drift_pct, 6),
                         "drift_atr": round(drift_atr, 6),
                         "max_drift_pct": max_drift_pct,
@@ -4002,6 +4043,16 @@ class Orchestrator:
         self.config = config
         logger.info("Configuration updated")
 
+    def _create_regime_detector(self, profile: str):
+        """Create private analysis state; historical bars never use wall-clock TTLs."""
+        from backend.analysis.regime_detector import RegimeDetector
+
+        detector = RegimeDetector(mode_profile=profile)
+        if self.replay_mode:
+            detector._global_regime_ttl = 0
+            detector._symbol_regime_ttl = 0
+        return detector
+
     def apply_mode(self, mode) -> None:
         """Apply a ScannerMode object to orchestrator config & internal state.
 
@@ -4095,7 +4146,13 @@ class Orchestrator:
                 logger.info("🎯 SMC preset: DEFAULTS (balanced detection)")
 
             if self.smc_service:
-                self.smc_service.update_config(self.smc_config)
+                self.smc_service.update_config(self.smc_config, mode=mode.name)
+
+            # Mode changes invalidate thresholds, cached classifications and hysteresis.
+            detector = getattr(self, "regime_detector", None)
+            if detector is not None and detector.mode_profile != mode.profile:
+                self.regime_detector = self._create_regime_detector(mode.profile)
+                self.current_regime = None
 
             logger.debug(
                 "Applied scanner mode: %s | timeframes=%s | critical=%s | planning_tf=%s",
@@ -4175,6 +4232,10 @@ class Orchestrator:
         Returns:
             MarketRegime or None if detection fails
         """
+        if self.replay_mode:
+            # A candle slice supplies no historical dominance. Never query today
+            # or substitute neutral values for a past global classification.
+            return None
         try:
             # Use pre-fetched data if available, otherwise fetch (fallback)
             if prefetched_btc_data is not None:

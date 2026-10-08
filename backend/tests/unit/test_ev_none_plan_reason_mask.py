@@ -75,9 +75,8 @@ def test_none_plan_does_not_mask_decline_reason():
     )
 
 
-def test_valid_plan_still_gets_ev():
-    """Positive pair: a valid plan still gets its EV computed (the guard must not
-    break the happy path)."""
+def test_valid_plan_gets_uncalibrated_ranking_without_probability_claim():
+    """The existing tie-break value is preserved, with honest evidence labels."""
     o, c = _orch(), _ctx()
     plan = MagicMock()
     plan.risk_reward = 2.0
@@ -88,4 +87,8 @@ def test_valid_plan_still_gets_ev():
     with patch.object(orch_mod, "generate_trade_plan", return_value=plan):
         result = o._generate_trade_plan(c, 100.0)
     assert result is plan
-    assert "ev" in plan.metadata  # EV path ran for the valid plan
+    assert "p_win" not in plan.metadata
+    assert "ev" not in plan.metadata
+    assert plan.metadata["ranking_heuristic"] == {
+        "method": "score_rr_v1", "value": 0.837, "score_weight": 0.612, "calibrated": False,
+    }

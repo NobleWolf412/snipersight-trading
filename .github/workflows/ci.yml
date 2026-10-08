@@ -26,7 +26,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Smoke tests (Python)
-        run: pytest -k smoke -q || echo "Smoke tests finished"
+        run: python -B backend/diagnostics/offline_verify.py smoke
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -41,7 +41,7 @@ jobs:
         run: npm run build:frontend
 
       - name: Lint frontend
-        run: npm run lint || echo "Lint warnings"
+        run: npm run lint
 
-      - name: Vitest (optional)
-        run: npm test || echo "Vitest optional"
+      - name: Vitest
+        run: npm test

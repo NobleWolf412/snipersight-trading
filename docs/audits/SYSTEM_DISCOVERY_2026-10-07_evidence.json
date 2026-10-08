@@ -8789,5 +8789,1701 @@
       "text": "{\n  \"backend/bot/executor/execution_journal.py\": \"3bc2e93ec2fe47a0ea2b3952077404aac0a7031043561f46ab4ed55b30826a6f\",\n  \"backend/data/adapters/phemex.py\": \"84194838996edb7d24be603801255dc329307c4cb1cd64c39f06725e563c8f90\",\n  \"backend/diagnostics/accounting_foundation_diagnostic.py\": \"683ba7d6cd30878c6b071a58a6e9e63a066914b0af709177f78e41e003685154\",\n  \"backend/diagnostics/decisions/2026-10-07__accounting-authority-proposal.md\": \"8854a0c36060709412afcea74115a436eb2fd1cb67eeb621841a59e281938249\",\n  \"docs/audits/SYSTEM_DISCOVERY_2026-10-07.md\": \"e7d1e47a83855ca12c46ef1a2f7d9ac6f514473e1838ad588d0e6ab093968541\",\n  \"docs/audits/SYSTEM_DISCOVERY_2026-10-07_evidence.json\": \"cfad6a9e2fafa9f3650789a263e323a447f1acfb443e1c8c6c27b21b4be94dcd\",\n  \"docs/audits/SYSTEM_DISCOVERY_2026-10-07_coverage.json\": \"4d214b8663dfb014522fbadc2dbef32566d729ba575e1e9ece8f504e37d65503\",\n  \"backend/diagnostics/live_accounting_diagnostic.py\": \"9c3964561235fe14bacf7f55ada7658a56f4c92c0b8f6eb64ee9e46744acfc3e\"\n}"
     },
     "resume_boundary": "FV1 complete. Stop here. FV2 concrete runtime integration plan and approval are separate; R1 receipts/history follows later."
+  },
+  "accounting_runtime_plan": {
+    "date": "2026-10-08",
+    "recorded_at_utc": "2026-10-08T10:50:00.889401+00:00",
+    "base_commit": "140f42e92addec5e66e8547cbb9b800bb24e4f43",
+    "status": "Concrete FV2 plan and offline design probes complete; production implementation awaits scope approval",
+    "authorization": "User Ok to define the integration batch and tests after next-step explanation; original Phase 4 batch-approval boundary retained",
+    "skills": [
+      "engineering:architecture (previously applied; reused for this decision record)"
+    ],
+    "agents": "none; fresh-review override retained",
+    "production_changes": [],
+    "files": {
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": {
+        "sha256": "1a1578e36f3185fa41c08469c2f1669031641213e493ce20b712cf6c86a1ea33",
+        "lines": 658
+      },
+      "backend/diagnostics/decisions/2026-10-07__accounting-authority-proposal.md": {
+        "sha256": "127e70ee5a06527ee68e32ab21b9101f9d822c217db34e9fa83ef3df16cc3a4e",
+        "lines": 400
+      },
+      "backend/diagnostics/accounting_cutover_diagnostic.py": {
+        "sha256": "d2fad7f1bbc22494588b79cbba2dcb14e1e024eec21294b819be8c19928c6f6b",
+        "lines": 110
+      }
+    },
+    "inspected_source_hashes": {
+      "backend/bot/executor/accounting_models.py": "8da52ada6373562d561af64adbfcbbd2c5fd9082cc60970efb6025fb91f3668a",
+      "backend/bot/executor/execution_journal.py": "1941f52c2264664a6dd479e1b7455b633262e78f16f50ddd8c1c8900c6873ab4",
+      "backend/bot/executor/live_executor.py": "5ae8aaa018971fbe514e71f4ebaf3713a650d9809b807948560d343063f8ace5",
+      "backend/bot/executor/paper_executor.py": "8eb428544673a2ba1ad51a32e58e34b53cb041ce9db5b6ce430bd513e9b90a58",
+      "backend/data/adapters/phemex_accounting.py": "e55ba1b67522c8e86704a95c18270342d64e759e517784f14fdc2caf5f9c10be",
+      "backend/data/adapters/phemex_ws.py": "f5947d0c45babd3621d102c656da05989a3a0b817572e482af64605fdbf70d2d",
+      "backend/bot/live_trading_service.py": "9191c0f50cc9515bb6352951a97ceff9bc5a497a5a62d67cb1c656164ecddc3f",
+      "backend/bot/paper_trading_service.py": "4ae07c6c555dafbe1cab915aeb832d948dc12da0adaf70d74aec3cf8b2586c47",
+      "backend/bot/executor/live_preflight.py": "efda22bb6da9ec7f16da964a9bbcdbd64ce3866930a0bd7e5f39cd1693e7d1b2",
+      "src/services/liveTradingService.ts": "8034bff77973ab16540a71ae4fed4efedf64912262118441adfaa9f42e37da43",
+      "src/services/paperTradingService.ts": "cd1e80767df80ef44519ce9462be84fd48f3798bdcae275976dd295db01b8a4a",
+      "src/utils/api.ts": "7797f183a33b616a9f4b59814146e44ec8c819c29832d5ffad80ed2b7e817817",
+      "src/pages/BotStatus.tsx": "53370492afcea3974e38815973835c091c8df8f287036b5f53855abaac586991",
+      "src/pages/training/RangeBot.tsx": "7071d1fa96d2bed0f1583b0069419c2e1979846b48da0607a9d40100c55950e7",
+      "src/pages/BotSetup.tsx": "179e6244e28de76ff262c439c5b07737010b8d165068112bbc2d09019f750593",
+      "backend/api_server.py": "645bb0f4c45960a4af146cb7422c71e77512727d5ab495836efcd21085c020f0",
+      "backend/bot/executor/accounting_reducer.py": "280ad0f98b50850c786d1e9d836d074a286c746c932ed8cf11211561d3d817ce",
+      "backend/data/adapters/phemex.py": "21e37bbe88c79599408c33285c66a2063a5119524d292aa36ebc64ae844b68d1",
+      "src/services/activeSession.ts": "56bb5d7f5911eb53071cf6d6069c53e8330ad6071c8bff3bbd8db0b878d03395",
+      "src/components/hud/DiagnoseWizard.tsx": "c2a4268db6d09d712259bebf430fef5e7ea22ae61c57ad2d62d36e89505fb3a0"
+    },
+    "inspection_scope": "Specific symbols and consumer searches only; hashes identify files, not whole-file verification. Original coverage counts and inventory unchanged.",
+    "findings": [
+      "Legacy request validator cannot represent positive confirmed quantity with unknown average price.",
+      "FV1 financial and legacy lifecycle APIs use separate transactions; runtime must commit both before publication.",
+      "Documented WS execQty alias not yet accepted by normalize_execution.",
+      "Documented successive order states share execSeq; treating it as a unique comparable order revision creates a false conflict.",
+      "Paper-testnet and RangeBot are affected consumers; API status routes forward dictionaries without response models.",
+      "Live price callback still returns positive stale cache after refresh invalidation."
+    ],
+    "proposal": {
+      "id": "FV2",
+      "production_files": [
+        "backend/bot/executor/accounting_models.py",
+        "backend/bot/executor/execution_journal.py",
+        "backend/bot/executor/accounting_runtime.py",
+        "backend/bot/executor/live_executor.py",
+        "backend/bot/executor/paper_executor.py",
+        "backend/data/adapters/phemex_accounting.py",
+        "backend/data/adapters/phemex_ws.py",
+        "backend/bot/live_trading_service.py",
+        "backend/bot/paper_trading_service.py",
+        "backend/bot/executor/live_preflight.py",
+        "src/services/accounting.ts",
+        "src/services/liveTradingService.ts",
+        "src/services/paperTradingService.ts",
+        "src/utils/api.ts",
+        "src/pages/BotStatus.tsx",
+        "src/pages/training/RangeBot.tsx",
+        "src/pages/BotSetup.tsx"
+      ],
+      "decision": "One coordinated runtime account/execution/risk/status cutover with a shared in-process account coordinator and existing single store owner.",
+      "schema": "Explicit offline v3 capability for nullable execution cost and atomic lifecycle/financial publication; stable marker; no auto-migration of actual stores.",
+      "contracts": [
+        "Typed committed live execution updates",
+        "Immutable account observation plus eligibility/revision/commitment view",
+        "V3 lifecycle/financial batch and replay",
+        "Nullable versioned account status and preflight"
+      ],
+      "upstream": [
+        "Raw identified REST responses",
+        "Validated raw WS orders_p rows and frame context",
+        "Combined account observation",
+        "Durable original request identities"
+      ],
+      "downstream": [
+        "Executor admission/reservations/recovery",
+        "Live and paper-testnet sizing/drawdown/protection",
+        "Existing API status/preflight",
+        "BotStatus/RangeBot/BotSetup and shared types"
+      ],
+      "verification_only": [
+        "backend/api_server.py",
+        "backend/bot/executor/accounting_reducer.py",
+        "backend/data/adapters/phemex.py",
+        "src/services/activeSession.ts",
+        "src/components/hud/DiagnoseWizard.tsx"
+      ],
+      "exclusions": [
+        "Actual user-store migration",
+        "Exchange account/order queries including testnet",
+        "Deployment or further commit/push",
+        "R1 receipt/history work",
+        "Scanner strategy/calibration",
+        "Historical journal rewrite",
+        "UI redesign"
+      ],
+      "rollback": "Coordinated source revert before actual migration; after new v3 evidence, retain store/backup and forward-reconcile with a compatible reader."
+    },
+    "verification": {
+      "command": ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/accounting_cutover_diagnostic.py",
+      "exit_code": 0,
+      "report": {
+        "scope": "FV2 design constraints; expected gaps are not safety passes",
+        "cases": 14,
+        "unexpected_results": 0,
+        "sources_unchanged": true,
+        "source_hashes": {
+          "backend/bot/executor/accounting_models.py": "8da52ada6373562d561af64adbfcbbd2c5fd9082cc60970efb6025fb91f3668a",
+          "backend/bot/executor/accounting_reducer.py": "280ad0f98b50850c786d1e9d836d074a286c746c932ed8cf11211561d3d817ce",
+          "backend/bot/executor/execution_journal.py": "1941f52c2264664a6dd479e1b7455b633262e78f16f50ddd8c1c8900c6873ab4",
+          "backend/data/adapters/phemex_accounting.py": "e55ba1b67522c8e86704a95c18270342d64e759e517784f14fdc2caf5f9c10be"
+        },
+        "results": [
+          {
+            "case": "BUY_documented_ws_execQty_needs_alias",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "BUY_supported_execQtyRq_control",
+            "expected": [
+              "10",
+              "1060",
+              "0.2"
+            ],
+            "observed": [
+              "10",
+              "1060",
+              "0.2"
+            ],
+            "probe_matches_expected": true
+          },
+          {
+            "case": "BUY_execSeq_is_not_unique_order_revision",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "BUY_unproven_sequence_left_unordered_control",
+            "expected": [
+              "10",
+              "1060",
+              []
+            ],
+            "observed": [
+              "10",
+              "1060",
+              []
+            ],
+            "probe_matches_expected": true
+          },
+          {
+            "case": "BUY_legacy_known_price_control",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "BUY_confirmed_quantity_unknown_price_None_requires_contract_change",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "BUY_confirmed_quantity_unknown_price_0_requires_contract_change",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "SELL_documented_ws_execQty_needs_alias",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "SELL_supported_execQtyRq_control",
+            "expected": [
+              "10",
+              "1060",
+              "0.2"
+            ],
+            "observed": [
+              "10",
+              "1060",
+              "0.2"
+            ],
+            "probe_matches_expected": true
+          },
+          {
+            "case": "SELL_execSeq_is_not_unique_order_revision",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "SELL_unproven_sequence_left_unordered_control",
+            "expected": [
+              "10",
+              "1060",
+              []
+            ],
+            "observed": [
+              "10",
+              "1060",
+              []
+            ],
+            "probe_matches_expected": true
+          },
+          {
+            "case": "SELL_legacy_known_price_control",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "SELL_confirmed_quantity_unknown_price_None_requires_contract_change",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          },
+          {
+            "case": "SELL_confirmed_quantity_unknown_price_0_requires_contract_change",
+            "expected": true,
+            "observed": true,
+            "probe_matches_expected": true
+          }
+        ],
+        "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-fv2-plan-r4g4jh30"
+      },
+      "result_path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-fv2-plan-r4g4jh30\\result.json",
+      "result_sha256": "9a9994891e801ecfd1ee86446fe2b493b9593f89f7ca9aceef3f86cefafd2e6d",
+      "diagnostic_source": "\"\"\"Offline FV2 integration constraints, not a live-accounting safety verdict.\n\nExit 0 means all design probes match the recorded constraints; 1 means drift.\nNo service, exchange client or actual execution store is constructed.\n\"\"\"\nimport hashlib\nimport json\nfrom pathlib import Path\nimport sys\nimport tempfile\n\nROOT = Path(__file__).resolve().parents[2]\nsys.path.insert(0, str(ROOT))\nfrom backend.diagnostics.live_accounting_diagnostic import guard_offline\n\nSOURCES = (\n    \"backend/bot/executor/accounting_models.py\",\n    \"backend/bot/executor/accounting_reducer.py\",\n    \"backend/bot/executor/execution_journal.py\",\n    \"backend/data/adapters/phemex_accounting.py\",\n)\n\n\ndef exercise():\n    from decimal import Decimal as D\n    from backend.bot.executor.accounting_models import (\n        AccountingError, ObservationContext, OrderExecutionState, OrderExecutionObservation,\n    )\n    from backend.bot.executor.accounting_reducer import merge_order\n    from backend.bot.executor.execution_journal import JournalError, validate_record\n    from backend.data.adapters.phemex_accounting import normalize_execution\n\n    results = []\n    def record(case, expected, observed):\n        results.append(dict(case=case, expected=expected, observed=observed,\n                            probe_matches_expected=expected == observed))\n\n    def context(seq=None, obs=\"fixture\"):\n        return ObservationContext(\"testnet\", \"fixture\", \"ws\", obs,\n            \"2026-10-08T00:00:00+00:00\", 1.0, 2.0,\n            sequence_domain=\"naive-execSeq\" if seq is not None else None, sequence=seq)\n\n    market = dict(id=\"BTCUSDT\", symbol=\"BTC/USDT:USDT\", swap=True, linear=True,\n                  inverse=False, quote=\"USDT\", settle=\"USDT\", contractSize=1)\n    for side in (\"BUY\", \"SELL\"):\n        raw = dict(symbol=\"BTCUSDT\", side=side.title(), clOrdID=\"fixture\", orderID=\"remote\",\n                   tradeType=\"Trade\", execID=\"identified-fill\", execQty=\"10\",\n                   execValueRv=\"1060\", execFeeRv=\"0.2\", currency=\"USDT\")\n        try:\n            normalize_execution(raw, market, context())\n            rejected = False\n        except AccountingError:\n            rejected = True\n        record(f\"{side}_documented_ws_execQty_needs_alias\", True, rejected)\n        raw[\"execQtyRq\"] = raw.pop(\"execQty\")\n        fact = normalize_execution(raw, market, context())\n        record(f\"{side}_supported_execQtyRq_control\", [\"10\", \"1060\", \"0.2\"],\n               [str(fact.quantity), str(fact.cost), str(fact.fees[0].amount)])\n\n        def observed(qty, cost, status, seq):\n            return OrderExecutionObservation(context(seq, status), market[\"symbol\"], side,\n                \"fixture\", \"remote\", D(qty), D(cost), status, \"raw_cumulative_value\")\n        initial = OrderExecutionState(\"fixture\", market[\"symbol\"], side, \"fixture\", \"testnet\", D(10), \"remote\")\n        opened = merge_order(initial, observed(\"0\", \"0\", \"OPEN\", 77)).state\n        filled = merge_order(opened, observed(\"10\", \"1060\", \"FILLED\", 77)).state\n        record(f\"{side}_execSeq_is_not_unique_order_revision\", True,\n               \"SAME_SEQUENCE_CONFLICT\" in filled.reasons)\n        opened = merge_order(initial, observed(\"0\", \"0\", \"OPEN\", None)).state\n        filled = merge_order(opened, observed(\"10\", \"1060\", \"FILLED\", None)).state\n        record(f\"{side}_unproven_sequence_left_unordered_control\", [\"10\", \"1060\", []],\n               [str(filled.filled_quantity), str(filled.cost), list(filled.reasons)])\n\n        intent = dict(order_id=\"fixture\", symbol=market[\"symbol\"], owner=\"offline\", generation=\"fixture\",\n                      side=side, order_type=\"LIMIT\", purpose=\"entry\", reduce_only=False,\n                      quantity=10, price=100, stop_price=None,\n                      wire={\"symbol\": market[\"symbol\"], \"side\": side.lower(), \"amount\": 10,\n                            \"params\": {\"clientOrderId\": \"fixture\"}})\n        state = dict(status=\"FILLED\", filled_quantity=10, average_fill_price=106,\n                     cancel_requested=False, exchange_id=\"remote\", unknown_reason=None,\n                     rejection_reason=None, created_at=context().received_at, updated_at=context().received_at)\n        validate_record(intent, state)\n        record(f\"{side}_legacy_known_price_control\", True, True)\n        for price in (None, 0):\n            try:\n                validate_record(intent, dict(state, average_fill_price=price))\n                rejected = False\n            except JournalError:\n                rejected = True\n            record(f\"{side}_confirmed_quantity_unknown_price_{price}_requires_contract_change\", True, rejected)\n    return results\n\n\ndef main():\n    directory = Path(tempfile.mkdtemp(prefix=\"snipersight-fv2-plan-\")).resolve()\n    hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in SOURCES}\n    guard_offline(directory)\n    results = exercise()\n    unchanged = all(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest\n                    for name, digest in hashes.items())\n    report = dict(scope=\"FV2 design constraints; expected gaps are not safety passes\",\n                  cases=len(results), unexpected_results=sum(not r[\"probe_matches_expected\"] for r in results),\n                  sources_unchanged=unchanged, source_hashes=hashes, results=results,\n                  artifact_directory=str(directory))\n    (directory / \"result.json\").write_text(json.dumps(report, indent=2) + \"\\n\", encoding=\"utf-8\")\n    print(json.dumps(report, indent=2))\n    return int(bool(report[\"unexpected_results\"] or not unchanged))\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n",
+      "interpretation": "14 expected design-constraint observations, including known integration gaps and positive controls; not financial safety passes or an implemented repair.",
+      "isolation": "Existing offline guard; pure normalizer/reducer/record validation only. No service/client/store constructed; fixture report confined to temporary directory.",
+      "prior_tests": "708 selected tests and other FV1 checks are historical results at commit 140f42e, not rerun for unimplemented FV2.",
+      "protected_hashes_unchanged": {
+        "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+        "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+        "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+        ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+      },
+      "production_diff": "No tracked production changes relative to 140f42e; pre-existing .claude/settings.json excluded."
+    },
+    "external_evidence": [
+      {
+        "url": "https://github.com/phemex/phemex-api-docs/blob/master/Public-Hedged-Perpetual-API.md",
+        "retrieved_for_plan": "2026-10-08",
+        "sections": [
+          "Subscribe Account-Order-Position (AOP)",
+          "Query Account Positions with unrealized PNL"
+        ],
+        "limits": "Documentation/sample protocol evidence, not captured traffic or proven cross-channel ordering/remote freshness."
+      }
+    ],
+    "resume_boundary": "Plan complete. Await approval for exact FV2 production scope. R1 outcomes/history and broader scanner/configuration review remain later work."
+  },
+  "accounting_runtime_implementation": {
+    "date": "2026-10-08",
+    "base_commit": "140f42e92addec5e66e8547cbb9b800bb24e4f43",
+    "authorization": "User: You don't need to keep checking in. I give you full authority to complete a session then move on to the next until completion. We can just keep it on extra high. I'm at work so I don't want production to cease. Just continue on until done",
+    "authority_scope": "Continue bounded offline implementation/review batches autonomously. Fresh-review override of stale repository procedures remains. No actual exchange/account requests, credentials, migration of user stores, deployment or production restart.",
+    "production_files": [
+      "backend/bot/executor/accounting_models.py",
+      "backend/bot/executor/execution_journal.py",
+      "backend/bot/executor/accounting_runtime.py",
+      "backend/bot/executor/live_executor.py",
+      "backend/bot/executor/paper_executor.py",
+      "backend/bot/executor/live_preflight.py",
+      "backend/bot/live_trading_service.py",
+      "backend/bot/paper_trading_service.py",
+      "backend/data/adapters/phemex_accounting.py",
+      "backend/data/adapters/phemex_ws.py",
+      "src/services/accounting.ts",
+      "src/services/liveTradingService.ts",
+      "src/services/paperTradingService.ts",
+      "src/utils/api.ts",
+      "src/pages/BotStatus.tsx",
+      "src/pages/training/RangeBot.tsx",
+      "src/pages/BotSetup.tsx"
+    ],
+    "source_sha256": {
+      "backend/bot/executor/accounting_models.py": "cc2baf630bdb11754eea7f0ad0116d9a86ffea75ab201c4ec19cfbd1fd5ba77a",
+      "backend/bot/executor/execution_journal.py": "0b73481528b642e4f7a38fd822b411e33a6b4039e5af760eb8a6497e99aa5fc3",
+      "backend/bot/executor/accounting_runtime.py": "7e5c0fbd2fb8dba53f278e4110c1b292f97f43b2659dc2e49a759e70e802bf78",
+      "backend/bot/executor/live_executor.py": "679437351296498eb6d1118dff092347940a3f01659efc0872d5a70bc0060453",
+      "backend/bot/executor/paper_executor.py": "7ea821dce054f1934b38236c8198ec4d01d0b1ae69591aa06ac7bf43a6fad142",
+      "backend/bot/executor/live_preflight.py": "d38cf8a02bc3ce632725ab4dfa342bdace72ee771c88251f80d881bb4c435cc0",
+      "backend/bot/live_trading_service.py": "833eb076b55b3154cbe026c85c54d03c9e5dae8d1b1b91f5733ba905caa3fa40",
+      "backend/bot/paper_trading_service.py": "0ad3edd57cb8360d99df6e116e000cef460afc31546bdaf17f38476a060a8bea",
+      "backend/data/adapters/phemex_accounting.py": "495966de9eeda12b97fffe7a342b1fd42cd8a62d202b3b34e18bb971c2606c1e",
+      "backend/data/adapters/phemex_ws.py": "e0d7c3d587548c47231d452d1ada8498207d219eb20159cdc30523bc6972190c",
+      "src/services/accounting.ts": "f362c0d71c117310500eeeab68b06c068b3216390d756db902b26fbb81ed4acd",
+      "src/services/liveTradingService.ts": "7183bc690292b4d40e72ed11a9417f1cf5391d0b1dd8da45cec733276e39a5a3",
+      "src/services/paperTradingService.ts": "38d57b187f7450da36d21d3de0bd3c0a2c8705b759c67c53cede4223131b8b43",
+      "src/utils/api.ts": "818f1543695fdbc37e64d61dc25da047c4150c6a90d383c971acca81bb247241",
+      "src/pages/BotStatus.tsx": "17019bb3f49450ba222779472f0a9101f50a32830203d81e98f47532119a949e",
+      "src/pages/training/RangeBot.tsx": "d6f63529c4be5005e4de4f2832c4c8bb7f41feb03d10e4245d785b5b7ff56668",
+      "src/pages/BotSetup.tsx": "cf246a1345394c41293c0dc7bae3fa05d2cc9c0597fe655eb51b480c8788132e"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-fv2-implementation-hqipee3v",
+    "verification": {
+      "backend": "748 passed in 40.95s; guarded run_all.py; final-tests.txt",
+      "frontend": "tsc --noEmit --incremental false --pretty false exit 0; 20 Vitest tests pass with temporary config/envDir",
+      "runtime_crash": "11/11; snipersight-fv1-crash-ex1lbk6w/result.json, actual FV1 reader rejects v3",
+      "foundation_crash": "9/9 without optional old-reader; snipersight-fv1-crash-glch2mkl/result.json",
+      "lifecycle": "16/16; final-lifecycle.json; synthetic fixture updated to schema3/raw evidence",
+      "cutover": "16 constraints match; final-cutover.json; not standalone financial-safety certification",
+      "smoke": "8 clean structural checks, guarded runner",
+      "contracts": "API/telemetry/pipeline clean. Same 8 known DB textual differences; baseline untouched.",
+      "load": "100/1000/10000 FULL synchronous disposable requests: ~8ms publication at 10000, full replay 3.62s, 21.4MB. Profile snipersight-fv2-profile-5acne_9r/result.json; 200-event real-journal burst test preserves one fill and heartbeat <0.5s.",
+      "protected_sha256": {
+        "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+        "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+        "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+        ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+      }
+    },
+    "invariants": [
+      "account snapshots alone own cash and positions",
+      "durable quantity/cost/fee/lifecycle publication is atomic",
+      "unknown execution cost remains null and entry-blocking",
+      "raw REST and bounded WS queue share reducer",
+      "pending workers and account reads prevent ownership release",
+      "testnet sizing uses one account view and actual session baseline",
+      "null/negative account values retained in API/UI",
+      "pure simulation arithmetic retained"
+    ],
+    "limits": [
+      "Offline only; no observed exchange delivery, remote freshness, order-sequence comparability or operational migration proof.",
+      "Same-net manual activity cannot be excluded by a quantity comparison.",
+      "Heartbeat and throughput are local fixture measurements, not production latency guarantees.",
+      "No assertion that WS message sequence increments contiguously; disconnected/malformed/overflow evidence requires order sweep. No fabricated cross-channel sequence ordering.",
+      "R1 completed-trade price/fees/classification/history remains unverified; existing UI marks outcomes legacy estimates.",
+      "Legacy live_accounting_diagnostic/accounting_contract_diagnostic constructors require fixture migration; their old 37/12-case results remain historical, not fresh runtime verification.",
+      "No full browser rendering exercise. TypeScript, formatter/lifecycle tests and source inspection only.",
+      "Broader scanner, strategy, configuration and replay audit remains open; original inventory counts unchanged."
+    ],
+    "next": "R1 bounded outcome attribution and fill-history completeness design/repair, followed by D2 schema sampler and remaining system review. Do not request another batch approval."
+  },
+  "accounting_history_recovery": {
+    "date": "2026-10-08",
+    "authority": "Continuing autonomous offline sessions authorized by user",
+    "production_files": [
+      "backend/data/adapters/phemex.py",
+      "backend/bot/live_trading_service.py"
+    ],
+    "contract": "Raw USDT execution history pages with explicit count/offset, bounded consistent-available-history sweep; account-scoped durable raw log, no financial ownership inferred.",
+    "verification": {
+      "backend": "761 passed in final-tests-r3.txt",
+      "history": "13 focused tests pass",
+      "boundary_diagnostic": "12/12 including 201 same-timestamp fills, two full sweeps, 7 controls; contract-diagnostic.json",
+      "lifecycle": "16/16 lifecycle.json"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1a",
+    "limits": [
+      "No live endpoint exercise. Documented raw count envelope is required; unexpected shape fails visibly.",
+      "Maximum 50 pages/10000 available rows per sweep; larger/changing history is incomplete and retryable.",
+      "Count plus first-page recheck detects common shifting-page races, not a server snapshot guarantee or retention proof.",
+      "R1b completed outcomes, actual settlement and fee attribution remain open. Raw rows are not completed trades.",
+      "No historical file rewrite, credentials, exchange requests, migration, deployment or push."
+    ],
+    "source_sha256": {
+      "backend/data/adapters/phemex.py": "cd046f760a22eefe1405ab3aaee7d86f448ccd7a5a617a84d1d6e27ffd3dbf86",
+      "backend/bot/live_trading_service.py": "ef70a542c104ab52d0623e25c89f7e56a2f3607d6cabfb4639d31ce1ffdb68c0",
+      "backend/tests/unit/test_execution_history.py": "6aa621e2657cc6ef5283c3cbd0fd54b59d032de7f222945776f119880ffa6285",
+      "backend/diagnostics/accounting_contract_diagnostic.py": "8ad7cea2bc66b1adc2dc929c00baaa4eb3a116fd4734613a5ceb17637ef99214"
+    },
+    "next": "Close active paper-testnet shutdown false-close path, then receipt-backed trade outcomes."
+  },
+  "testnet_shutdown_confirmation": {
+    "date": "2026-10-08",
+    "finding": "D18 paper-testnet Stop bypasses actual exit",
+    "authority": "Continuing autonomous offline sessions authorized by user",
+    "production_files": [
+      "backend/bot/paper_trading_service.py"
+    ],
+    "upstream": "Stop / repeated Stop",
+    "downstream": "PositionManager closure, report/history, Start/Reset ownership guard",
+    "behavior": "Runtime testnet cancels entry remainders, adopts confirmed priced entries, requires original reduce-only exit confirmation, retains unconfirmed exposure and permits repeated Stop recovery. Pure simulation unchanged.",
+    "verification": {
+      "before": "4/4 counterexamples fail; shutdown-before.txt",
+      "focused": "6/6 pass",
+      "combined": "767 passed in 40.07s; shutdown-full.txt"
+    },
+    "source_sha256": {
+      "backend/bot/paper_trading_service.py": "48ead737443fa50607d03aab645cd6ab29331ce024df28aa20a8ce1690bc2c3f",
+      "backend/tests/unit/test_testnet_shutdown.py": "f3f7fd32a809c77ba22c8a6b9f92854c24f6fb90ecdaa856de62e78e70c18eec"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1a",
+    "limits": [
+      "Offline scripted confirmation only; no exchange calls or deployment.",
+      "Manager settlement price/fees remain estimated pending next R1 integration.",
+      "Repeated Stop is recovery; no scanner restart occurs.",
+      "No new commit/push or historical-store writes."
+    ],
+    "next": "Finish receipt-backed outcome design and implementation, then D2 and remaining system review."
+  },
+  "execution_outcome_foundation": {
+    "date": "2026-10-08",
+    "scope": "R1c durable attribution and pure receipts/outcomes foundation",
+    "authority": "User authorized successive autonomous offline sessions",
+    "production_files": [
+      "backend/bot/executor/execution_outcomes.py",
+      "backend/bot/executor/paper_executor.py",
+      "backend/bot/executor/execution_journal.py",
+      "backend/bot/executor/live_executor.py"
+    ],
+    "behavior": "Immutable entry parent in exit intents; replay validates parent against original submission evidence. Pure exact-cost/actual-fee outcome excludes funding/transfers; missing/conflicting evidence remains incomplete. Executor receipts and outcomes survive restart.",
+    "verification": {
+      "focused": "25 passed in 2.35s",
+      "combined": "792 passed in 42.41s",
+      "crash": "11 runtime crash/old-reader checks hold",
+      "lifecycle": "16/16 hold",
+      "profile": "10,000 requests: publication 7.48-8.43 ms, replay 4.03s, 22,007,808 bytes"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "source_sha256": {
+      "backend/bot/executor/execution_outcomes.py": "45463066a5a64502241d4abd1a3205519b58a15c7712ee90af155e694aea4b4d",
+      "backend/bot/executor/paper_executor.py": "468c22dd3184dc3d5ebb99ac2f6c3a49c2512e40963e39ebb96e05e1ba2d4bd3",
+      "backend/bot/executor/execution_journal.py": "a6072053a457cd6c12c5b70d1a3fe0b9f8ca5d9527e9fe0afb98a8540ab143d8",
+      "backend/bot/executor/live_executor.py": "baa55b34cab1d363efbca2a11996d268b0c119f38f03fca8bb3325b33af60e71"
+    },
+    "limits": [
+      "Foundation only: manager/report consumers still use legacy estimates.",
+      "No historical allocation, funding allocation or implied zero fees.",
+      "No exchange calls, user-store migration, deployment, commit or push."
+    ],
+    "next": "Propagate explicit entry identity and verified execution prices through exit management; then outcome publication/persistence and remaining review."
+  },
+  "execution_receipt_handoff": {
+    "date": "2026-10-08",
+    "scope": "R1c receipt handoff and closure confirmation",
+    "production_files": [
+      "backend/bot/executor/execution_outcomes.py",
+      "backend/bot/executor/position_manager.py",
+      "backend/bot/live_trading_service.py",
+      "backend/bot/paper_trading_service.py"
+    ],
+    "authority": "Successive autonomous offline sessions authorized by user",
+    "behavior": [
+      "Runtime exits retain immutable entry parent and original request until a full priced receipt is available.",
+      "Stop, partial target, max-age, stagnation and shutdown use receipt price; runtime has no additional modeled stop slippage.",
+      "Direction flip and emergency helpers require confirmation. Async emergency caller receives the actual completion task.",
+      "Last target cannot erase unfilled remaining quantity; requested target slice is bounded by remaining exposure.",
+      "Native flatness alone cannot invent stop reason/price; owned full-cost exits settle gross management P&L. Unexplained partial changes suspend software exits and are visible as exchange_close_pending."
+    ],
+    "verification": {
+      "counterexamples": "14 receipt and 6 direction/emergency cases fail before corresponding repair; fixture-only setup failures recorded separately",
+      "focused": "30 regression cases",
+      "combined": "822 passed in 42.39s",
+      "lifecycle": "16/16 hold",
+      "smoke": "8 clean",
+      "contracts": "API/telemetry/pipeline clean; same 8 known DB text differences"
+    },
+    "source_sha256": {
+      "backend/bot/executor/execution_outcomes.py": "64492e562f4494678db186d76c7608f9e47952b854c3c5f4b036c88b81ae6aaa",
+      "backend/bot/executor/position_manager.py": "44ca7a36519e78e5126f8ddf75233a3d431cc6073687776639c14ed652af34e5",
+      "backend/bot/live_trading_service.py": "4c4113c760c67a81ffb414589c75c7f3adc7e695bdbbde0c98df70175e30dcff",
+      "backend/bot/paper_trading_service.py": "ecbd041c4ccf3920d6ce3a0e4413b60553689c71ff2544f51dcd958e5ffb7e42"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "limits": [
+      "Completed trade fees/history/publication still require R1 work; legacy estimate label remains.",
+      "Native partial exits are contained pending exact per-exit reconciliation, not automatically allocated to targets.",
+      "Old unparented records remain unallocated; no account flatness/symbol-only attribution.",
+      "No exchange calls, actual-store migration, deployment, commit or push."
+    ],
+    "next": "Reliable completed-trade persistence; then full execution-backed outcomes, fee recovery, native partial reconciliation, D2 and broader system review."
+  },
+  "trade_publication_recovery": {
+    "date": "2026-10-08",
+    "scope": "R1d completed-trade publication and atomic JSONL persistence",
+    "production_files": [
+      "backend/bot/live_trading_service.py",
+      "backend/bot/paper_trading_service.py",
+      "backend/bot/trade_journal.py"
+    ],
+    "authority": "User authorized successive autonomous offline sessions",
+    "upstream": "Both services _sync_closed_positions; existing append/upsert callers",
+    "downstream": "Completed markers, manager retention, statistics, telemetry, journal query/aggregation",
+    "behavior": [
+      "History upsert precedes completion markers/removal/statistics publication; failed writes retain positions for retry.",
+      "Derived-stat failures restore counters/peak and retain retry state; an already-durable row is not duplicated.",
+      "Same-directory fsync/replace publishes complete old-or-new JSONL; sidecar OS lock excludes cooperating concurrent writers.",
+      "Conflicting trade IDs, damaged prior rows and nonfinite new numeric JSON fail visibly without changing prior history.",
+      "Identical retries repeat durability confirmation. Original bytes are preserved; no actual history migrated or edited."
+    ],
+    "verification": {
+      "before": "13 failing regression cases before corresponding repair",
+      "focused": "22 passed in 2.35s",
+      "combined": "911 passed, 4 existing datetime.utcnow deprecation warnings in 47.91s",
+      "crash": "3/3 real subprocess cases: before/after replace and concurrent writer exclusion",
+      "lifecycle": "16/16 hold",
+      "profile": {
+        "existing_rows": 10000,
+        "row_basis": "actual CompletedTrade serializer with synthetic inputs",
+        "append_ms": 285.15650000008463,
+        "bytes": 16229055
+      }
+    },
+    "source_sha256": {
+      "backend/bot/live_trading_service.py": "97835ccdd07e3d04c3dbd988b65a620e3feef64fad40009c4922ebc64cf952f2",
+      "backend/bot/paper_trading_service.py": "88fd58867d8cd1f62840913d091dbc6338cbf8bcabbc50efd75203af95bd196f",
+      "backend/bot/trade_journal.py": "b4ef55046e4666cdffc7b41fae619f5ba9587eb1b61e07dbb0d13336ca1de2d1",
+      "backend/diagnostics/trade_publication_diagnostic.py": "7b73d12d882c5c134b8a0a60c2b57dd5c9ec588e0f8671aa2edcae9478b04600",
+      "backend/tests/unit/test_trade_publication.py": "c42671e9a21da2384c3c047e57110d5856fa48ad94d7223ce9f297396e3baebc"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "crash_artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-trade-publication-5kgp80lk",
+    "limits": [
+      "Completed outcomes still require actual fee attribution and restart materialization from durable executions.",
+      "The process-crash tests do not simulate hardware power failure; POSIX directory-fsync branch was not exercised on Windows.",
+      "A 10,000-row actual-serializer fixture is 16.23 MB; synchronous full-file publication took 285 ms, intended for low-frequency completed trades, not fills.",
+      "No exchange calls, user-store migration, deployment, commit or push."
+    ],
+    "next": "R1 fee-history import and actual outcome reporting/recovery; native partial reconciliation; D2 and broad decision-system review."
+  },
+  "execution_fee_history_contract": {
+    "date": "2026-10-08",
+    "scope": "R1e identified execution-history import contract",
+    "production_files": [
+      "backend/data/adapters/phemex.py",
+      "backend/data/adapters/phemex_accounting.py",
+      "backend/bot/executor/live_executor.py"
+    ],
+    "authority": "User authorized successive autonomous offline sessions",
+    "source": "https://github.com/phemex/phemex-api-docs/blob/master/Public-Hedged-Perpetual-API.md#futureDataTradesHist",
+    "behavior": "Strict raw symbol/start/end/offset page reader; documented blank client ID means absent. Known-order execution facts enrich the same durable financial reducer by identity, with no account-cash delta or restart strategy replay.",
+    "verification": {
+      "focused": "29 passed in 2.45s",
+      "combined": "940 passed, 4 existing planner datetime warnings in 47.89s",
+      "lifecycle": "16/16 hold"
+    },
+    "source_sha256": {
+      "backend/data/adapters/phemex.py": "322766a76fc61d93b0548d6c51c0c5cfcd5a59d8a3a7411ce0d5da550158c5d1",
+      "backend/data/adapters/phemex_accounting.py": "23b8a35e57773cf294dadd1509747cafaeb9657b85bdb0b9a81d4318d7fcb6e9",
+      "backend/bot/executor/live_executor.py": "cba0c7e387f36aba4658eccab1bc7f09ce3c8c17cb94f3a86bfea5b5cd5d64a0",
+      "backend/tests/unit/test_execution_fee_history.py": "b0ed36548eee02e135a21a4ae83ceb7a99b7f7099c50d80cc6d76e1c73cbef0f"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "limits": [
+      "New methods are callable but not yet scheduled by services; final completed reports remain legacy estimates.",
+      "No funding allocation, symbol-only order ownership, implicit zero fees or complete-history guarantee.",
+      "Only scripted raw transport was tested; no exchange request, store migration, deployment, commit or push."
+    ],
+    "next": "R1 service fee-recovery scheduling and complete outcome materialization/restart reporting; native partial reconciliation; D2 and remaining whole-system review."
+  },
+  "execution_fee_recovery": {
+    "date": "2026-10-08",
+    "scope": "R1f bounded background fee recovery",
+    "production_files": [
+      "backend/bot/executor/execution_fee_recovery.py",
+      "backend/bot/executor/live_executor.py",
+      "backend/bot/live_trading_service.py",
+      "backend/bot/paper_trading_service.py"
+    ],
+    "authority": "User authorized successive autonomous offline sessions",
+    "behavior": "Fair one-order bounded history sweeps enrich identified financial facts in a worker thread; both services own its lifetime. Exit requests precede shutdown drain, including repeated paper-testnet Stop; journal close refuses in-flight history work.",
+    "verification": {
+      "focused": "10 cases; repeated Stop failed before repair",
+      "combined": "950 passed, 4 existing planner datetime warnings in 49.74s",
+      "lifecycle": "16/16 hold",
+      "smoke": "8 clean",
+      "contracts": "API/telemetry/pipeline clean; same eight known DB differences"
+    },
+    "source_sha256": {
+      "backend/bot/executor/execution_fee_recovery.py": "5ffea379d694be692a8b91132daebb5bff9d97765a88fc376f4d0b7f56682fb5",
+      "backend/bot/executor/live_executor.py": "cc631cb67ad56a51522171eb9ddf79301d3e90c95a29b0d0d43e9e63abde9370",
+      "backend/bot/live_trading_service.py": "7b2ef9171fca71a81e7d28f03f55c22212bdc8b1a4aa67ffebd93545d223c949",
+      "backend/bot/paper_trading_service.py": "bbbabffdcaccdb92fa1554e187cfc4e59895384a6c435c7ecf7517528a221bf1",
+      "backend/tests/unit/test_execution_fee_recovery.py": "98d4cf2e744614d9affbebeedd04932eaaaa0be960a9971832db313a98c88c86"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "limits": [
+      "Requested-window consistency is not exchange-wide history completeness; unavailable fees remain pending.",
+      "Final completed reports remain legacy estimates pending R1 outcome consumer integration.",
+      "Only scripted transport and disposable stores; no exchange request, migration, deployment, commit or push."
+    ],
+    "next": "R1 durable outcome reporting and restart materialization; native partial reconciliation; D2 and remaining whole-system review."
+  },
+  "execution_report_outbox": {
+    "date": "2026-10-08",
+    "scope": "R1g durable execution report snapshots and service consumers",
+    "production_files": [
+      "backend/bot/executor/execution_reports.py",
+      "backend/bot/executor/execution_journal.py",
+      "backend/bot/executor/live_executor.py",
+      "backend/bot/executor/execution_fee_recovery.py",
+      "backend/bot/live_trading_service.py",
+      "backend/bot/paper_trading_service.py",
+      "src/services/accounting.ts",
+      "src/services/liveTradingService.ts",
+      "src/services/paperTradingService.ts",
+      "src/pages/BotStatus.tsx",
+      "src/pages/training/RangeBot.tsx"
+    ],
+    "authority": "User authorized successive autonomous offline sessions",
+    "behavior": "Immutable context/prepared/delivered events implement an outbox in the existing execution journal. Both services replace estimated financial fields only with complete actual execution outcomes. Stable account/entry identity survives restart; optional intent report_version prevents guessing legacy report ownership. Reports retain exact evidence and preparation time; later conflicting evidence is visible. Background recovery and restart shutdown replay reports without restoring strategy positions.",
+    "contracts": {
+      "events": [
+        "trade_report_context",
+        "trade_report_prepared",
+        "trade_report_published"
+      ],
+      "intent": "optional report_version=1, entry-only and checked against original submission evidence",
+      "api": "optional execution_reporting/execution_history, actual outcome_basis; completed rows carry execution_accounting, gross_pnl, execution_fees, preparation time and metadata provenance",
+      "schema": "No new table or schema version; additive validated events"
+    },
+    "verification": {
+      "focused": "34 new backend cases",
+      "combined": "984 passed, 4 existing planner datetime warnings in 52.02s",
+      "frontend": "25 passed; TypeScript noEmit passed",
+      "lifecycle": "16/16 hold after updating selected-definition diagnostic dependencies",
+      "storage": "11 runtime process interruption/ownership/old-reader checks hold",
+      "smoke": "8 clean",
+      "contracts": "API/telemetry/pipeline textual checks clean; same eight known DB differences. These shallow checks do not prove new dynamic response shapes.",
+      "profile": "10,000-request disposable runtime journal: publication 7.05–7.83ms; full replay 3.93s. Profile does not include 10,000 prepared reports."
+    },
+    "source_sha256": {
+      "backend/bot/executor/execution_reports.py": "0fcab36b17de44e3c1d2f8038b2bdacafb9382794841a6aac7572ac63b1ef81b",
+      "backend/bot/executor/execution_journal.py": "b69a0dd25a65659c0d7af40850238f4bba7646cae6df56de463bc893da81efe0",
+      "backend/bot/executor/live_executor.py": "818dff3a8fc557d8f552af13b066813292a377f4b6cce0341f10c0bb9d6ba258",
+      "backend/bot/executor/execution_fee_recovery.py": "15d59de65e4ebf9e9eee64f204f7864cced60663216f2791d7b3127653b8ca77",
+      "backend/bot/live_trading_service.py": "69067af96620417db2453576ca18317bb4f40ea7a429b1b25be48a52830d72b6",
+      "backend/bot/paper_trading_service.py": "0496682a5aed65e6c4f0613e745c39ec03dd8c435784c92e4fd42653b9cee8ff",
+      "src/services/accounting.ts": "e92983a0959508ae6aafdeaaac83d21b45398bba7eff17aa509e1953b367341f",
+      "src/services/liveTradingService.ts": "9534bed09e62f112ca4702416fcae9aed9a8290d1f6ffece31c880ce6a5b7255",
+      "src/services/paperTradingService.ts": "ae204ed80152fdc94133a8e855589383bd83f357487b309808cfd916545d54ba",
+      "src/pages/BotStatus.tsx": "ab7532a30edcd33d8a0a092eea6489ba456122a4c648d0ff6a0645e77c8aadae",
+      "src/pages/training/RangeBot.tsx": "aea57936e78ad579c72020bf42b052a7d20e1632f9c9990301c30c5d2fa37e26",
+      "backend/tests/unit/test_execution_reports.py": "cae1c763253bed20266aa43abc4698981f2de79a532add4717d95144de0b8b56",
+      "backend/diagnostics/live_lifecycle_diagnostic.py": "9ac6bdf0d3d72f4ae977560bfecd01f03219598660fd1d908caa7a8f71c708cb",
+      "src/services/accounting.test.ts": "041f44ab3914e4af780c91856501f4121b709e237d763bda9e6b7e831f8e6d9c",
+      "src/services/liveLifecycle.test.ts": "258614dd3d906500dc4680e3fa66be5c753daae224f7063da2ab1556131e0a53"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "limits": [
+      "Funding/transfers excluded; missing fees/cost remain pending. Report snapshots are historical as of preparation, not guaranteed immune to later contrary evidence.",
+      "Legacy requests without report protocol/context are not automatically duplicated or reattributed.",
+      "Paper-testnet Stop can retain durable pending reports for a later owned recovery session. Live restart shutdown remains recovering when captured reports are pending.",
+      "Native partial quantity/target reconciliation remains contained pending the following batch.",
+      "No browser acceptance, actual exchange request, historical-store migration, deployment, commit or push."
+    ],
+    "next": "R1 native partial exit reconciliation; then D2 checker and remaining whole-system decision review."
+  },
+  "native_target_reconciliation": {
+    "date": "2026-10-08",
+    "scope": "R1h native TP ownership and cumulative partial settlement",
+    "production_files": [
+      "backend/bot/executor/execution_outcomes.py",
+      "backend/bot/executor/live_executor.py",
+      "backend/bot/executor/position_manager.py",
+      "backend/bot/live_trading_service.py"
+    ],
+    "authority": "User authorized successive autonomous offline sessions",
+    "finding": "Eight LONG/SHORT cases reproduced software target execution while the native TP already owned that slice.",
+    "behavior": "Runtime native TP identity defers software profit targets while preserving stop paths. Pure cumulative exit progress verifies owned quantity/cost independently of fee completeness. Native progress is applied once after identified order refresh and a matching current combined account observation; target remainder/ownership updates explicitly. Live reconciliation precedes software monitoring and does not overwrite pending flags with unconditional success.",
+    "verification": {
+      "before": "8 failing native target ownership cases; 4 controls passing",
+      "combined": "1015 passed, 4 existing planner datetime warnings in 53.38s; 31 new native/progress cases",
+      "lifecycle": "16/16 hold",
+      "smoke": "8 clean",
+      "source": "git diff --check clean"
+    },
+    "source_sha256": {
+      "backend/bot/executor/execution_outcomes.py": "196c454114fc3699fed0cf5629201af09379c4a2ccf40e9afe80e187d81bb2f0",
+      "backend/bot/executor/live_executor.py": "66814303716ec2cc206b2be989bc1651517a6a60d845c965212d86f06907edd8",
+      "backend/bot/executor/position_manager.py": "eea19a589426c198627ebb7467b5fdc1adbfe1cbf7b22bf42bf14d2333e6b58f",
+      "backend/bot/live_trading_service.py": "6e0311439e901592f938b6f050784807a4ad11eca6292e9b836155362377f308",
+      "backend/tests/unit/test_native_target_ownership.py": "f305fe784cba654aac6d5da6928a648f95cc20fb5083d082bb53c44c648f1c40",
+      "backend/tests/unit/test_execution_progress.py": "33d6c313cb59db8611116ab9282f6b2501de76291cd396698ee7264aa887d55b"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "limits": [
+      "Only explicitly associated live native TP progress is integrated; terminal partial software exits and paper-testnet native-stop reconciliation remain next.",
+      "Unknown costs, mismatched/stale account observations or ambiguous target ownership stay pending. Missing fees still prevent final trade reporting.",
+      "Fixed-stop quantity/liveness refresh requires the following workflow review; no operational transport, historical store mutation, deployment, commit or push."
+    ],
+    "next": "R1 terminal partial software exit continuation, paper-testnet native stops and protection-size checks; then D2 and remaining decision-system review."
+  },
+  "terminal_partial_reduction": {
+    "date": "2026-10-08",
+    "scope": "R1i terminal partial market reduction recovery",
+    "production_files": [
+      "backend/bot/executor/paper_executor.py",
+      "backend/bot/executor/execution_journal.py",
+      "backend/bot/executor/execution_outcomes.py",
+      "backend/bot/executor/live_executor.py",
+      "backend/bot/executor/position_manager.py",
+      "backend/bot/live_trading_service.py",
+      "backend/bot/paper_trading_service.py"
+    ],
+    "authority": "User authorized successive autonomous offline sessions",
+    "finding": "Eight service/direction/goal cases reproduced a terminal partial market exit stuck on the original whole-quantity confirmation.",
+    "behavior": "Immutable reduction_root_order_id links remainder requests. Aggregate actual quantity/cost confirms the original goal. Only terminal priced partials, with matching current owned/account evidence, authorize an exact remainder; working, uncertain, rejected-without-progress and conflicting evidence remain visible. Root advancement and service callbacks exclude concurrent duplicate submission. Pending management exits survive trigger-price recrossing. Restore reconstructs evidence without authorizing fresh remainder requests.",
+    "verification": {
+      "before": "8 reproduced service failures; missing helper tests and two invalid fixture statuses were separate initial failures",
+      "combined": "1048 passed, 4 existing planner datetime warnings in 54.28s; 33 new reduction cases",
+      "lifecycle": "16/16 hold",
+      "smoke": "8 clean",
+      "source": "git diff --check clean",
+      "test_repairs": "Updated one legacy callback fixture for the aggregate receipt API; corrected a new late-terminal-change expectation to require visible conflict rather than certification."
+    },
+    "source_sha256": {
+      "backend/bot/executor/paper_executor.py": "f9027d73092cee74954735b0b97561f47c965d8dcdcdcceb5894f0251552518c",
+      "backend/bot/executor/execution_journal.py": "475493afc72463cec87c5038e0bcbeade3aeabd78873e47ecc92f14ef2476561",
+      "backend/bot/executor/execution_outcomes.py": "47cfe2303ac373280715505f0dfdae2c54f0a094cb5813a1a16b24d8d99065ed",
+      "backend/bot/executor/live_executor.py": "7b05c0d07b95f6ef8aaaec073713e38b30535fb8634d03a0537b4cdbf522b990",
+      "backend/bot/executor/position_manager.py": "4d1b58db9c91f90c1bb7e683361cc8fd28c6f66ce3bdd7e378b305b9d35d7fde",
+      "backend/bot/live_trading_service.py": "7c9d756240c296421b6fa82ca741e57d49ecf64e40c90a0c8566cf4eb5c449b3",
+      "backend/bot/paper_trading_service.py": "caf39d99e1972e9a785023ffd70ac2722c26f12c0b6822d1032b93c1046e6201",
+      "backend/tests/unit/test_reduction_recovery.py": "2671f2ad6e8c0d03e345524f6651f585420adcf9f0e6eb0ff605f5836c7cf7c9",
+      "backend/tests/unit/test_accounting_delivery.py": "cab9c01997b290037f89b798e6405daa53a57f57fd2591c49a71989c169e4b6d"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "limits": [
+      "Native fills racing a software reduction can require whole-entry reconciliation; uncertain or conflicting results remain contained.",
+      "Restart remains evidence recovery only; no strategy resume or new reduction authorized after restart.",
+      "Paper-testnet native stops and fixed-stop quantity/liveness remain next; no actual exchange, historical store mutation, deployment, commit or push."
+    ],
+    "next": "R1j native stop reconciliation and protection quantity/liveness; then D2 and remaining decision-system review."
+  },
+  "native_stop_reconciliation": {
+    "date": "2026-10-08",
+    "scope": "R1j adopted native-stop reconciliation and live protection validity",
+    "production_files": [
+      "backend/bot/executor/live_executor.py",
+      "backend/bot/executor/position_manager.py",
+      "backend/bot/live_trading_service.py",
+      "backend/bot/paper_trading_service.py"
+    ],
+    "authority": "User authorized successive autonomous offline sessions",
+    "finding": "Eight unchanged-level protection cases reproduced false certification of wrong-sized, cancelled, unknown or triggered stops. Paper-testnet had no adopted native-stop reconciliation method.",
+    "behavior": "Refresh only explicitly parented exits and match current account evidence before cumulative native-stop settlement. Working partial stops defer another software exit; terminal partial stops preserve a remainder-exit intent. Testnet monitor/Stop reconcile before local decisions. Live stop health checks identity, status, quantity and level; uncertain/triggered protectors remain pending, stale-sized replacement acknowledgements cannot cancel old protection. Shutdown/emergency drains a pending logical target before closing the remaining position.",
+    "verification": {
+      "before": "8 stop-health counterexamples plus 6 missing-reconciliation API cases failed",
+      "combined": "1076 passed, 4 existing planner datetime warnings in 56.30s; 22 native-stop cases and 6 additional shutdown cases",
+      "lifecycle": "16/16 hold",
+      "smoke": "8 clean",
+      "source": "git diff --check clean",
+      "test_repairs": "Corrected the legacy stop fixture to return the requested symbol; moved misplaced new-test assertions back into their owning test."
+    },
+    "source_sha256": {
+      "backend/bot/executor/live_executor.py": "84e45496473f07ce2bddb482d8898ef5a9b16dd561e95085e177939f817ecac7",
+      "backend/bot/executor/position_manager.py": "d34036e7421396f6a5c4ce7fadba3acfea04084245edc86b50694ab750e5ca01",
+      "backend/bot/live_trading_service.py": "7e58bd1b993d835ea6dec39772925eb3fff0fed17cfae84ca2c94b7c6f792d72",
+      "backend/bot/paper_trading_service.py": "6d318d2cd03ccbb260a6ef1c8898a565fb7db2f7d5359ee68c795570cc3e5869",
+      "backend/tests/unit/test_native_stop_reconciliation.py": "cf93cbb6cc0f55dc4cdd7a60945b06655b5a02c4bd76918e5c972d31096c2d85",
+      "backend/tests/unit/test_reduction_recovery.py": "fb09fd526ad7b99f164f4c2bb83b8fddaa69f1e4c084f17f865b5c29224c1d01",
+      "backend/tests/unit/test_live_fill_protection.py": "877e13d78f57b03c8f2e1ebc98b87a62bc1ccc2857540333f6dbc9334e150c61"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "limits": [
+      "Reconciliation uses scripted transport and disposable stores; no real exchange or UI acceptance proof.",
+      "Native fills before entry adoption and paper-testnet protection replacement still require the next workflow review.",
+      "Unknown costs/account mismatches and conflicting evidence remain pending; restart does not resume strategy.",
+      "No actual history edits, deployment, commit or push."
+    ],
+    "next": "R1k pre-adoption native fills and testnet protection replacement; then diagnostic fixture/D2 and decision-system review."
+  },
+  "pre_adoption_protection": {
+    "date": "2026-10-08",
+    "scope": "R1k pre-adoption native fills and managed testnet protection",
+    "production_files": [
+      "backend/bot/executor/live_executor.py",
+      "backend/bot/executor/position_manager.py",
+      "backend/bot/live_trading_service.py",
+      "backend/bot/paper_trading_service.py"
+    ],
+    "authority": "User authorized successive autonomous offline sessions",
+    "finding": "Eight early-native-fill cases reproduced permanently retained plans with no managed outcome. Adopted testnet protection did not track changed quantity or stop level.",
+    "behavior": "Position construction accepts verified cumulative execution progress before manager publication. Already-flat entries publish closed records; partial native exits publish only actual remaining exposure/gross. Both services preserve adoption identity and plan context. Executor replacement retains pending identity and confirms size/level before cancelling the old protector. Testnet management invokes this with current owned quantity; explicit rejection keeps software risk management active. Flat cleanup retries superseded native protectors.",
+    "verification": {
+      "before": "8 adoption counterexamples failed, 2 missing-cost controls passed",
+      "combined": "1094 passed, 4 existing planner datetime warnings in 58.95s; 18 new adoption/protection cases",
+      "lifecycle": "16/16 hold",
+      "smoke": "8 clean",
+      "source": "git diff --check clean",
+      "regression_found": "New cleanup test exposed that native stop IDs are classified by protection order type rather than the market/limit reduce-only ID set; corrected the cleanup predicate."
+    },
+    "source_sha256": {
+      "backend/bot/executor/live_executor.py": "a9bfa76a88239fb82a3d33e0070e437ac1e43905183dc07fc38e210adb6de362",
+      "backend/bot/executor/position_manager.py": "ef116a309cd8bcc93d96399066e75a142172f2e6366d5ea615acd06b4fa63918",
+      "backend/bot/live_trading_service.py": "e54063c03e5731263beac3579ebc3b006704d545fc134502df323fcac40e4254",
+      "backend/bot/paper_trading_service.py": "f0a52226258d765a41b43b9e17cd3e5ca01cccd8353f14c166026a3ff2092352",
+      "backend/tests/unit/test_protection_adoption.py": "a77c8281d6aaec0cb1ad28184b8405361d2d66dda4cc6e9625dee93ada57eb96"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_directory": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c",
+    "limits": [
+      "Offline scripted transport/disposable stores only; no real exchange, operational acceptance or profitability evidence.",
+      "Runtime accounting diagnostic still uses an obsolete fixture; D2 contract checker remains shallow and historical-row-dependent.",
+      "Conflicting evidence or unavailable quantity/cost remains pending; restart does not resume strategy.",
+      "Broad scanner/regime/macro/decision/replay coverage remains incomplete; no deployment, commit or push."
+    ],
+    "next": "Refresh obsolete accounting diagnostic and D2 contract validation, then continue broader decision-system review."
+  },
+  "runtime_accounting_diagnostic": {
+    "date": "2026-10-08",
+    "scope": "R2a current raw-accounting offline diagnostic",
+    "finding": "Old probe stopped at pre-runtime schema initialization before exercising current execution authority.",
+    "behavior": "Migrated disposable fixture to runtime journal v3, raw combined account observations, identified execution deltas/fees, actual durable report publication and bounded WS drain. Account equity changes remain separate from strategy outcomes. Missing/late costs, price-feed failures and duplicate delivery retain LONG/SHORT controls.",
+    "verification": {
+      "cases": 37,
+      "invariant_failures": 0,
+      "controls_passed": 5,
+      "sources_unchanged": true,
+      "artifact": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-accounting-m65dg16l",
+      "source": "git diff --check clean"
+    },
+    "source_sha256": {
+      "backend/diagnostics/live_accounting_diagnostic.py": "b923cee6293e8c25ad9702bc624bffedc84da922a68c42c9adbe221a41e7d30c",
+      "backend/bot/executor/accounting_runtime.py": "7e5c0fbd2fb8dba53f278e4110c1b292f97f43b2659dc2e49a759e70e802bf78",
+      "backend/bot/executor/execution_outcomes.py": "47cfe2303ac373280715505f0dfdae2c54f0a094cb5813a1a16b24d8d99065ed",
+      "backend/bot/executor/execution_reports.py": "0fcab36b17de44e3c1d2f8038b2bdacafb9382794841a6aac7572ac63b1ef81b",
+      "backend/data/adapters/phemex_accounting.py": "23b8a35e57773cf294dadd1509747cafaeb9657b85bdb0b9a81d4318d7fcb6e9",
+      "backend/bot/executor/live_executor.py": "a9bfa76a88239fb82a3d33e0070e437ac1e43905183dc07fc38e210adb6de362",
+      "backend/bot/executor/execution_journal.py": "475493afc72463cec87c5038e0bcbeade3aeabd78873e47ecc92f14ef2476561",
+      "backend/bot/executor/position_manager.py": "ef116a309cd8bcc93d96399066e75a142172f2e6366d5ea615acd06b4fa63918",
+      "backend/bot/live_trading_service.py": "e54063c03e5731263beac3579ebc3b006704d545fc134502df323fcac40e4254",
+      "backend/bot/paper_trading_service.py": "f0a52226258d765a41b43b9e17cd3e5ca01cccd8353f14c166026a3ff2092352",
+      "backend/bot/executor/paper_executor.py": "f9027d73092cee74954735b0b97561f47c965d8dcdcdcceb5894f0251552518c",
+      "backend/data/adapters/phemex.py": "322766a76fc61d93b0548d6c51c0c5cfcd5a59d8a3a7411ce0d5da550158c5d1",
+      "backend/data/adapters/phemex_ws.py": "e0d7c3d587548c47231d452d1ada8498207d219eb20159cdc30523bc6972190c",
+      "backend/venv/Lib/site-packages/ccxt/phemex.py": "20a3887007351daa3062b3b45bd97e85f6e1f88cc510af157f48f6ddbde48343"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+      "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "limits": [
+      "Scripted transport proves local invariants only. The 37 current cases replace the obsolete fixture; no real exchange or historical replay proof.",
+      "Initial migrated fee fixture lacked execution IDs; corrected it to identified per-fill evidence rather than treating an order status fee as authoritative.",
+      "Production logic unchanged in this diagnostic batch; latest selected backend suite remains 1094 passed."
+    ],
+    "next": "D2 persistence contract checker; then broader scanner/regime/macro/decision/replay review."
+  },
+  "persistence_contract_inventory": {
+    "date": "2026-10-08",
+    "scope": "D2 source-based persistence inventory and honest capture/diff failure handling",
+    "findings": [
+      "Nested SQL constraints truncated the old column parser. Historical first-row keys were mistaken for current JSONL contracts; test DDL was inventoried as production.",
+      "Capture errors could overwrite baselines and matching errors could pass diff. Duplicate route paths/table names could hide changes."
+    ],
+    "implementation": "Inspect production literal CREATE TABLE declarations in disposable in-memory SQLite, retaining full declarations and generated columns. Inventory eleven selected JSONL writer AST fingerprints with explicitly incomplete key hints. Known indirect/dynamic declarations are unresolved. Reject incomplete capture before any baseline write, reject incomplete/malformed baseline comparisons, and use unique composite identities or list fallback.",
+    "verification": {
+      "tests_passed": 23,
+      "reproduced_before_failures": 12,
+      "contract_diff": "API, telemetry, pipeline and reviewed persistence inventory clean",
+      "git_diff_check": "clean",
+      "offline": true
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\storage-contracts-before-integration.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\storage-contracts-failure-controls.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\storage-contracts-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-d2-before-baseline.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-d2-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\db-contracts-original.json"
+    ],
+    "baseline_change": {
+      "old_protected_sha256": {
+        "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+        "backend/diagnostics/capture_contracts.py": "87882ddea27f11fb5bf400f72e23943f57ecbbbe668145c94e7c25d1609d6c86",
+        "backend/diagnostics/contracts/db_contracts.json": "9fce7f82d27ab0e8fbf43c327998abe2e442f61c4f56226bdef957e9db11e8a8",
+        ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+      },
+      "protected_sha256": {
+        "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+        "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+        "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+        ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+      },
+      "table_count": 6,
+      "writer_count": 11,
+      "reason": "Replace historical-row inference and test SQL with production declarations and selected writer implementation fingerprints."
+    },
+    "source_sha256": {
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/storage_contracts.py": "2b0518cd9eb319cf5f54548f20539d9d0225ca804e314150bf7ee9df3ce80114",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      "backend/tests/unit/test_storage_contracts.py": "c739541cdf4d3b36e4a8743c7be74ff3f5997524610e4a3864855c7f905a7946"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "limits": [
+      "Writer fingerprints are implementation-change detectors, not complete schemas or runtime payload validation.",
+      "Literal declaration inventory does not prove conditional initialization ran. Assembled keywords/external SQL require separate inspection.",
+      "API inventory, telemetry parameter names and context fields do not certify behavior. Ordinary API import still attempts adapter initialization; offline wrapper denied external connections and redirected storage.",
+      "Only checker and its reviewed DB baseline intentionally changed; actual trade history and unrelated settings hashes preserved. No production logic changed in this batch."
+    ],
+    "next": "Broader scanner/orchestrator concurrency, data timing, macro/regime, decision/scoring and replay review."
+  },
+  "scanner_request_isolation": {
+    "date": "2026-10-08",
+    "scope": "D11 shared scanner request ownership and cancellation",
+    "reproduction": "An OVERWATCH/2x/first-exchange worker observed STRIKE/7x/second-exchange settings before it returned, both with overlapping requests and after caller cancellation.",
+    "decision": "Existing application lock now covers background workers, synchronous scans, debug scans and SMC mutation. Actual worker retains lock and one background admission slot after caller cancellation; queued jobs do not occupy default executor threads. Blocking routes run in threads. Cancelled jobs discard later progress/results; bot-owned orchestrators unchanged.",
+    "blast_radius": {
+      "upstream": [
+        "UI scanner background runs and cancellation",
+        "legacy GET scanner signals",
+        "debug schema endpoint",
+        "SMC config PUT"
+      ],
+      "downstream": [
+        "shared mode/config/adapter/ingestion",
+        "scan result and rejection publication",
+        "ScanJob log recipient"
+      ],
+      "contracts": "No endpoint or response-shape additions; requests wait instead of running concurrently through shared mutable state."
+    },
+    "verification": {
+      "reproduced_failures": 2,
+      "new_regression_tests": 10,
+      "combined_tests_passed": 47,
+      "existing_warnings": "two Pydantic dict() deprecation warnings",
+      "contract_diff": "clean",
+      "structural_smoke": "8 clean",
+      "offline": true
+    },
+    "source_sha256": {
+      "backend/services/scanner_service.py": "4be9ca711aff8b444111313aa013ce198c7d4d742ad6c3fdb3f9a4a6f9edbaff",
+      "backend/routers/scanner.py": "7d2db7478cec074e3dfae17ea9e97fa7eb5886f535d66c75bdf300262a15f973",
+      "backend/api_server.py": "a46b9d611b7b8e6c7e78e32fa55a20fa427eac7a7fbb03f17b2816ae7084d408",
+      "backend/tests/unit/test_scanner_job_isolation.py": "77822c2feece3a0a3da9c455247cb25bb53675af05048ff2bcc139a295204eee"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\scanner-isolation-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\scanner-isolation-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\scanner-checks-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-scanner-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\smoke-scanner-final.txt"
+    ],
+    "limits": [
+      "Thread cancellation abandons publication, not underlying read-only market computation; next scan waits for worker completion.",
+      "Global engine log handler may still collect other bot engine logs; run-correlated logging is a separate open architecture issue.",
+      "Threshold override semantics, mode-switch residue and synchronous target_symbol handling remain separate review questions; no strategy thresholds changed.",
+      "Tests use actual service/router methods with controlled engine/adapters. Two api_server handler bodies execute in an isolated AST fixture to avoid bootstrap; no real exchange or load-test evidence."
+    ],
+    "next": "Data ingestion freshness/candle-close alignment, replay causality, then macro/regime/scoring cohesion."
+  },
+  "candle_timing_contract": {
+    "date": "2026-10-08",
+    "scope": "D12 candle grid preservation and per-row close timing",
+    "reproduced": "Seven failing cases: Monday weekly data lost to Sunday reindexing; unfinished weeks admitted after epoch-anchored Thursday; multiple future rows not stripped; duplicate timestamps fail before duplicate handling; off-grid observations silently lost; missing weeks filled on the wrong anchor.",
+    "decision": "Weekly increments preserve supplied open anchor; original keep-first dedup policy runs before reindex; off-grid observations reject visibly; every known-duration row must close at open+duration <= clock. Invalid closure clock fails visibly. Existing flat zero-volume gap-fill policy and thresholds retained.",
+    "blast_radius": {
+      "upstream": [
+        "exchange candle adapters"
+      ],
+      "downstream": [
+        "OHLCV cache",
+        "indicators and structure",
+        "global/symbol regimes",
+        "scoring/planning",
+        "scanner and bot",
+        "replay window ingestion"
+      ]
+    },
+    "verification": {
+      "new_tests": 11,
+      "combined_tests_passed": 42,
+      "contract_diff": "clean",
+      "structural_smoke": "8 clean",
+      "offline": true
+    },
+    "source_sha256": {
+      "backend/data/ingestion_pipeline.py": "d4377fc84283abd2d1cd88b1fb24f8b32f7b5ae9fe3318fc40037d8e86d5d67c",
+      "backend/tests/unit/test_candle_timing_contract.py": "454c6f0a7177a29ec89204b9d7aa95aebb33bafb263444f9fbe7715c465cfb07"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\candle-timing-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\candle-checks-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-candle-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\smoke-candle-final.txt"
+    ],
+    "limits": [
+      "No actual historical data was repaired. Input corruption can have changed past signals; incidence/performance not established.",
+      "Synthetic gaps retain existing flat/zero-volume policy. Unknown timeframes retain legacy behavior; monthly case handling remains unverified.",
+      "Shared cache lacks exchange/market identity and requested-depth semantics; direct callers need review next.",
+      "Replay bar-close slice is locally correct, but persistent regime state and current-market ticker use remain separate causal hazards under review."
+    ],
+    "next": "D13 shared cache provenance and depth, then D14 replay isolation and macro/regime/scoring coverage."
+  },
+  "ohlcv_source_identity": {
+    "date": "2026-10-08",
+    "scope": "D13 source identity and requested history depth in shared OHLCV cache",
+    "reproduced": "Six failed cases: different venues/market types/environments shared one frame, larger history requests reused short samples, anonymous consumers read production cache and a Bybit chart returned Phemex candles.",
+    "implementation": "Known public adapter/CCXT venue, sandbox, endpoint and market defaults form a hashed namespace, without credentials. Unknown provenance disables shared reuse. Cache tracks original fetch-request depth. Pipeline, chart and pure-paper fallback readers specify their source; scoped and operator-global invalidation differ explicitly. Chart resolves the adapter before lookup, uses its supported method signature and rejects mismatched market requests instead of silently substituting another market.",
+    "blast_radius": {
+      "upstream": [
+        "exchange adapters",
+        "requested market/history depth"
+      ],
+      "downstream": [
+        "scanner/bot/replay candle ingestion",
+        "market chart",
+        "pure-paper ticker-failure fallback",
+        "cache diagnostics/invalidation"
+      ]
+    },
+    "contracts": {
+      "api_routes": "unchanged",
+      "cache_entry_diagnostics": "additive source_namespace and requested_limit fields",
+      "chart_errors": "400 for a market not configured on the selected adapter; no opposite-market fallback",
+      "runtime_accounting": "fresh ticker still required; no cache fallback"
+    },
+    "verification": {
+      "new_tests": 15,
+      "full_selected_tests_passed": 1188,
+      "seconds": 62.48,
+      "warnings": "four existing planner datetime.utcnow and two existing Pydantic dict deprecations",
+      "contract_diff": "4 inventories clean",
+      "structural_smoke": "8 clean",
+      "git_diff_check": "clean",
+      "offline": true
+    },
+    "source_sha256": {
+      "backend/data/ohlcv_cache.py": "660c075d60723ad438e62fd4628cccb4cf9a6f4868e0e413c6fc7fa04a462676",
+      "backend/data/ingestion_pipeline.py": "958b1d5f520f1f9da733b5c2c9d6ff64fee4de5be9c3b47eaa68f441827150c5",
+      "backend/routers/data.py": "912d71c348a36cc6dd1d9be0655caa61a09f48204cf344e155e611113eca1b84",
+      "backend/bot/paper_trading_service.py": "cbd9fec44724a9b9657e1bb9e6f3c4b119b7070168a0324a45af7f1d82f059ab",
+      "backend/tests/unit/test_ohlcv_source_identity.py": "11d69384dd10c3c3ac3fc9f2d7e466801301ff773acd825820eb963f3f8e3b79"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\cache-source-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\cache-source-expanded.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\full-data-first.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-data-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\smoke-data-final.txt"
+    ],
+    "limits": [
+      "Public configuration identity does not prove a remote provider returned the correct market. Scanner market-default mutation versus actual CCXT market selection remains an adapter-path review question.",
+      "Requested depth records fetch scope, not a guarantee the exchange supplied that many valid closed bars. Unknown adapters cannot share the global cache.",
+      "Raw chart fetches may display a forming candle and are not inserted into the analysis cache. Monthly case handling remains a separate issue.",
+      "Replay currently retains state and calls present-time consumers; it is not yet certified for historical causality. No production deployment, real exchange calls or historical repair."
+    ],
+    "next": "D14 replay causal-state/clock/quote audit, then global/symbol regime and scoring cohesion."
+  },
+  "replay_navigation_state": {
+    "date": "2026-10-08",
+    "scope": "D14a replay navigation and private analysis-state ownership",
+    "reproduced": "Eight failing cases: repeated/end index assertion; back-scrub recomputation inherits later state; failed computation advances cursor; concurrent steps reorder state; missing/failed historical BTC retains another step regime/macro.",
+    "implementation": "Per-session reentrant navigation lock; cached repeated/end result; backwards navigation marks a fresh prefix rebuild before computation; failed computations preserve cursor and require rebuild. Replay constructors own indicator/SMC/confluence instances without reconfiguring global service registries, and own mode-aware regime detectors with wall-clock result TTLs disabled. Current-step input clears missing regime/macro instead of retaining another visited state.",
+    "verification": {
+      "new_tests": 10,
+      "combined_tests_passed": 56,
+      "contract_diff": "4 inventories clean",
+      "structural_smoke": "8 clean",
+      "git_diff_check": "clean",
+      "offline": true
+    },
+    "source_sha256": {
+      "backend/engine/replay_engine.py": "e87d85b6c32854f4751080313bb98f220226f9d06d93c3c60450703406efb2e8",
+      "backend/engine/orchestrator.py": "eaa3505bab062c6d30d3594bbc615fe96a21207dff325e9315f7d71cd0957a74",
+      "backend/tests/unit/test_replay_navigation_state.py": "c6951bec97d7c1e1d498a1323bea88d3edad4983795c9bf368b28bb63261894a"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\replay-state-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\replay-state-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\replay-checks-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-replay-state.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\smoke-replay-state.txt"
+    ],
+    "limits": [
+      "D14a repairs state/navigation only. Current dominance, real-time planner quote paths, OB freshness and kill-zone clock still require correction before replay is causal.",
+      "The full 1188-test data/execution suite was last run before D14a; D14a used 56 targeted replay/decision/worker/scanner tests.",
+      "Historical macro/dominance inputs and original configurations are not supplied by the current replay API; exact historical decision reconstruction remains unavailable.",
+      "Backwards resume can recompute the prefix and costs more than a cached display. No trading thresholds, live detector selection or live order paths changed."
+    ],
+    "next": "D14b explicit analysis-time and historical-price propagation; record missing external historical evidence. Then macro/regime/scoring cohesion."
+  },
+  "replay_analysis_inputs": {
+    "date": "2026-10-08",
+    "scope": "D14b replay time and price inputs",
+    "reproduced": "13 original failures in 19 new cases: historical SMC and kill-zone clocks, replay clock propagation, mixed UTC timestamp comparisons, present-day ticker calls and plan rejection. Live quote and aware-time controls passed.",
+    "implementation": "Optional as_of flows from replay context into SMC filter/aggregate freshness and confluence session scoring. Naive OHLCV time means UTC; live SMC uses one UTC analysis clock. Replay excludes fresh-entry and post-plan real-time quotes, validates against its candle price and records price/time provenance. No decay, gate or weight changes.",
+    "verification": {
+      "new_tests": 19,
+      "targeted_passed": 65,
+      "broad_selected_passed": 1448,
+      "warnings": 31,
+      "contracts": "4 inventories clean",
+      "smoke": "8 categories clean",
+      "offline": true
+    },
+    "source_sha256": {
+      "backend/engine/orchestrator.py": "7420786baa38e43b6b433367a3ab5d99d4209f531a9cfda4f6cb160e78d010e4",
+      "backend/services/smc_service.py": "37f5f9a9d3607acdca0bfbfa67a5b734d6aa3819f56ee0f1e5fc22aa86beed55",
+      "backend/services/confluence_service.py": "5edf3ea6a5a5e3cfc65287f033931c9af609c61f3f578fe609af784acddf2126",
+      "backend/strategy/smc/order_blocks.py": "698ec2487165891a7197e141b3823906b859eff0884d73d32a8486176258dae7",
+      "backend/strategy/confluence/scorer.py": "bf90bfef693ad28d7887abd7847fdb616492c6a3757d57c8fe9d0f0c1363870e",
+      "backend/tests/unit/test_replay_analysis_inputs.py": "221233127257fba320913c6ba565d338c144b9841c0b3099b73c5d31be04b795",
+      "backend/tests/unit/test_confluence_htf_proximity.py": "4408bf329fc4a21bb28ac523eb9ab7eebae0a3ea2a49332df9c902e7ef7e4e9f"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\replay-inputs-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\replay-inputs-targeted.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\replay-expanded-first.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\htf-baseline-failure.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\replay-expanded-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-replay-inputs.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\smoke-replay-inputs.txt"
+    ],
+    "limits": [
+      "Replay still lacks historical dominance/macro and original configuration; it is not an exact historical decision reconstruction.",
+      "The older standalone HTF-proximity test failed identically with committed HEAD scorer. Replaced it with bullish/bearish real-structure cases proving proximity changes one HTF Composite factor, without restoring retired double-counting.",
+      "DataFrame truth-value mitigation/cycle failures, live global detector mode and external-data/defaults remain under cohesion review.",
+      "No real orders, credentials, deployments, actual history edits or pushes."
+    ],
+    "next": "Cohesion review and offline proofs for external context, dormant cycle/mitigation paths, configuration precedence and score semantics; historical evidence assessment."
+  },
+  "decision_input_cohesion": {
+    "date": "2026-10-08",
+    "scope": "D15a mode propagation, private regime state and SMC mitigation selection",
+    "implementation": "SMC explicit mode updates both mode/profile; apply_mode passes it. Every orchestrator owns its detector, resets it only on actual profile change, preserves same-mode hysteresis/cache; replay TTLs remain zero. OB/FVG mitigation selects first nonempty frame without DataFrame truth coercion and warns on failure. Paper advisory consumes its own detector dimensions; replay serializes actual regime dimensions.",
+    "verification": {
+      "new_cases": 19,
+      "broad_selected_passed_before_two_consumer_repairs": 1465,
+      "final_targeted_passed": 65,
+      "contracts": "4 clean",
+      "smoke": "8 clean before display-only consumer repair",
+      "git_diff_check": "clean",
+      "offline": true
+    },
+    "source_sha256": {
+      "backend/engine/orchestrator.py": "38e6cc48a9a4d7de5a577e4fd018bb3c12d814d10661d0c299a1d01bc11a9a9e",
+      "backend/engine/replay_engine.py": "6c5f77d7f45ed5e83f57badf15a1e78eb3467091ec8dd349a60d2ca0c7c30e0b",
+      "backend/services/smc_service.py": "9b880741928afb1d4acd301c68167904528681f18989412aa4d4975170add71f",
+      "backend/bot/paper_trading_service.py": "5c88cfc288c80cbf148b5f4082ad110e0a40767c70a1efcc8776573be3f753d7",
+      "backend/tests/unit/test_decision_input_cohesion.py": "409d40ab08625e30c72374535a3b7f0a7d0655ee15ca21ec6941703ddbaa483a",
+      "backend/diagnostics/decision_inputs_diagnostic.py": "4de2f74ab01254764481e31bcf987d18a2828d62cbb1f43cd915375e3c2ba702"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\decision-inputs-before.json",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\decision-inputs-after-mode.json",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\cohesion-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\cohesion-fvg-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\cohesion-consumers-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\cohesion-consumers-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\cohesion-expanded.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-cohesion-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\smoke-cohesion.txt"
+    ],
+    "open_confirmed": [
+      "Missing dominance becomes zeros -> alt_season 85; stale fallback has no age bound.",
+      "Replay fixed candle inputs can receive present-day dominance scores 85 versus 15; historical external evidence is absent.",
+      "Cycle context fails on DataFrame truthiness or missing detect_cycle_context import; surrounding catch suppresses both.",
+      "Mitigation tracker falls back to all candles after timestamp comparison error; mixed-zone/formation-time behavior needs separate proof.",
+      "Score -> p_win/EV formula is not calibrated; current metadata and tie-break naming misstate its meaning."
+    ],
+    "next": "Input validity and missing-evidence policy; trace remaining macro/regime/scoring contracts and historical provenance. Do not activate dormant cycle logic or recalibrate gates without evidence."
+  },
+  "market_input_validity": {
+    "date": "2026-10-08",
+    "scope": "D15b unavailable market inputs and truthful replay capability",
+    "implementation": "Decision-facing dominance validates existing one-hour TTL, finite bounds/percentage partition; unavailable observations raise instead of zeros. Risk classification propagates missing evidence. Macro-enabled scans reject absent global/macro context before scoring. Explicit macro-off scans retain technical behavior. Replay never invokes current global classification and reports historical_context_unavailable after candle/SMC inspection, before scoring/planning. Signal search stops at the first unavailable step and reports found=false with its explanation. Market-regime API returns 503 instead of invented neutral/dominance values. Replay UI states its limitation; cache accumulation claims removed.",
+    "verification": {
+      "new_cases": 25,
+      "original_failures": 17,
+      "jump_failures": 2,
+      "broad_selected_passed_before_two_jump_cases": 1490,
+      "final_targeted_passed": 71,
+      "contracts": "4 clean",
+      "smoke": "8 clean",
+      "typescript": "tsc --noEmit clean",
+      "git_diff_check": "clean",
+      "offline": true
+    },
+    "source_sha256": {
+      "backend/analysis/dominance_service.py": "59aa6bd1ca5cc22a8f29c67be8184fccd7c2823cb5fcf42d748437667d25eea9",
+      "backend/analysis/regime_detector.py": "a88bfa508a5387105b40229c4a3697568a818159229bdbf72b1da669977a99fb",
+      "backend/engine/orchestrator.py": "0189492c6b6993424864e2106273ef0b8b7e7c6f9b0782b72f63b9717da5313b",
+      "backend/api_server.py": "8525f400270eeffc997781f347f3890985cb0e824122730be2a2fd4967bc5e5a",
+      "backend/engine/replay_engine.py": "303f3fca825fd70c1dc6fd513edccf6694be6fb9ad34c7dbbcfeba0248f07349",
+      "backend/routers/replay.py": "b1ae0d19443be83232b457f68305de83b57bce10afa69813dcc12687ac7e7d2f",
+      "src/pages/training/Replay.tsx": "7d39ced95f8eecd2b4b1958ca2f63917475b4dbd1262a3a73ab1be42d9cb6802",
+      "backend/tests/unit/test_market_input_validity.py": "3d6cec53e456e68912ba4283e1783e36dbbe3fb5cde20b6674eb0841f1470d44",
+      "backend/diagnostics/decision_inputs_diagnostic.py": "9ae135b55a3a1c8a8c4aef3e05ac66a958d4f472ec4da0cf902c779929d2fb27"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-inputs-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-expanded-first.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-jump-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-inputs-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\decision-inputs-after-validity.json",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-market-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\smoke-market-inputs.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\tsc-replay-notice.txt"
+    ],
+    "limits": [
+      "Historical trading reconstruction remains unavailable without frozen external inputs/original configuration; replay is now explicitly limited to candle/SMC inspection.",
+      "The display-oriented dominance service may still return stale snapshots; decision-facing helper rejects them. No existing cache/history was edited.",
+      "Technical scans can intentionally omit macro; no trading thresholds, weights or cycle strategy activation changed.",
+      "Market-regime handler still synchronously reads shared orchestrator; concurrency/event-loop audit remains open.",
+      "Browser rendering not verified; UI change is explanatory text with clean TypeScript compilation."
+    ],
+    "next": "Formation-time integrity, dormant cycle/scoring evidence and configuration semantics; evidence-source/Gauntlet/historical review, then final map and prioritized cleanup disposition."
+  },
+  "market_input_ui_visibility": {
+    "scope": "D15b frontend visibility addendum",
+    "implementation": "Gauntlet classifies unavailable market/historical context explicitly; Scanner DATA aggregates them with missing candles. Older records remain supported.",
+    "verification": {
+      "new_ui_cases": 4,
+      "initial_ui_failures": 3,
+      "selected_frontend_passed": 32,
+      "typescript": "clean"
+    },
+    "test_harness_discovery": "Vitest substring selection included three .claude/worktrees copies; scoped command excludes them. Unchanged HEAD scan-history test modified entry 1 timestamp but expected entry 0. Corrected fixture identity without changing production service.",
+    "limits": [
+      "No browser rendering claim. Aggregate count/counterfactual semantics remain under review."
+    ],
+    "date": "2026-10-08",
+    "source_sha256": {
+      "src/components/hud/GauntletBreakdown.tsx": "d09e4dea201fe01bb2f97e5b04822c51813335e8fdf57ac8092fa3c62e47bc5c",
+      "src/components/hud/RejectionPanel.tsx": "0908be064d3df6583912be32fe7648d5d1d2099f1153d08f817e4314f92de1c6",
+      "src/components/hud/marketInputRejections.test.ts": "1633561032461f57b45e0a33de91c16e1eb4b1c82319eec48418e524b0c152a4",
+      "src/services/scanHistoryService.test.ts": "24bf05281a9fe942edb85873ba56e90f806f72fa83e6f708d10faffd27e3860d"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-ui-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-ui-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-ui-scoped.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\tsc-market-ui.txt"
+    ]
+  },
+  "smc_formation_time": {
+    "scope": "D15c causal mitigation/fill/lifecycle timestamps",
+    "implementation": "One UTC-normalized strictly-after-formation selector for OB/FVG mitigation and OB lifecycle. Naive source times mean UTC. Invalid, missing, numeric, nonchronological candle clocks raise FormationTimeError; SMC service propagates instead of retaining unverified fresh zones.",
+    "verification": {
+      "focused_cases_passed": 34,
+      "original_meaningful_failures": 20,
+      "fixture_errors_corrected": 6,
+      "selected_backend_passed": 1526,
+      "existing_deprecation_warnings": 31,
+      "contracts": "4 clean"
+    },
+    "limits": [
+      "Formation time remains detector-supplied; this does not certify the detector confirmation-bar convention. Empty data keeps prior zone state as before. No thresholds or cycle strategy changed."
+    ],
+    "date": "2026-10-08",
+    "source_sha256": {
+      "backend/strategy/smc/mitigation_tracker.py": "cc6c8734b32a07e3ee6557a339ea0c8fb2a17f17fa1a819e39125053d4301295",
+      "backend/strategy/smc/order_blocks.py": "bb600780e1dc3614755ebc75acb7c9e39f3ebb163de58c69b91c9f2502d1a2f1",
+      "backend/services/smc_service.py": "de4bc345a1211deeade092abbe9938dac1658af93efdea59d12b4ad699af3e7c",
+      "backend/tests/unit/test_smc_formation_time.py": "9ba5d723529345ff9100c50f38032c51355f247623a540bfdb1575f23df28e3b"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\formation-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\formation-after.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\formation-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\formation-expanded.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-formation.txt"
+    ]
+  },
+  "decision_evidence_labels": {
+    "scope": "D16 truthful ranking and rejection evidence",
+    "implementation": "Cycle-context failures produce visible warning and metadata without activating dormant strategy. Existing score/RR ranking arithmetic is retained as uncalibrated ranking_heuristic, removing p_win/ev claims. Gauntlet reports threshold comparisons without alternate-mode performance claims; unknown log rejections remain in denominator. Scanner reports authoritative run total separately from universe/feature observations and includes unmapped reasons.",
+    "verification": {
+      "backend_selected_passed": 1528,
+      "new_cycle_cases": 2,
+      "updated_rank_case": 1,
+      "frontend_selected_passed": 36,
+      "new_frontend_cases": 4,
+      "typescript": "clean"
+    },
+    "limits": [
+      "No calibration or cycle strategy activation. No historical records edited. UI evidence is server-rendered unit testing, not browser interaction. Archived MissionStats expects legacy ev.expected_value and is not an active route."
+    ],
+    "date": "2026-10-08",
+    "source_sha256": {
+      "backend/engine/orchestrator.py": "d83994d5d1867a166dc03bde6a164be600cd835054b9b8d7cfc6542a437689a9",
+      "backend/tests/unit/test_decision_evidence_labels.py": "56988944da7f477ba0fd980e7b1ef6bf82589511c749d22076e3b4a99c6c01c5",
+      "backend/tests/unit/test_ev_none_plan_reason_mask.py": "4c6627621a1842b2fb6cabe180553c7925ad3bc4530155a4f540284b376af5a0",
+      "src/components/hud/GauntletBreakdown.tsx": "f09bdde16a8646f6e83a83afa71d044025ab0db216dc384408488b6116615529",
+      "src/components/hud/RejectionPanel.tsx": "35309ff6aed6f5d3cd8ad5f4bbd4ca1ac171a185d8e8d97e3ce9cb102dd2b933",
+      "src/components/hud/rejectionEvidence.test.ts": "181e246c1b8845f4ebabef54073a8a0a43c5d3d522274fa738ea83ffdf2c2d5c"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\evidence-labels-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\evidence-labels-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\evidence-expanded.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\rejection-evidence-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\rejection-evidence-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\tsc-rejection-evidence.txt"
+    ]
+  },
+  "historical_evidence_sample": {
+    "scope": "D17 saved evidence, read-only",
+    "result": "384 valid unique journal IDs across 43 sessions; 188 reported positive,195 negative,1 zero. Six selected session directories; three latest inserted completed telemetry cycles have matching counts and no missing symbol/gate/reason. No complete frozen inputs/revision/actual-fee execution bundle in sampled records.",
+    "verification": {
+      "diagnostic_tests_passed": 8,
+      "actual_history": "read only; journal hash unchanged"
+    },
+    "limits": [
+      "Directory-mtime sampling is not representative performance evidence.",
+      "Historical wins/losses are recorded results, not verified causal attribution or strategy edge.",
+      "Old diagnostic session_debrief skips damaged input/misclassifies missing PnL and trend labels; factor_contribution uses nearest-time matching and selected trade cohorts. Do not use those as calibration proof."
+    ],
+    "date": "2026-10-08",
+    "source_sha256": {
+      "backend/diagnostics/historical_evidence_audit.py": "78f505cdf299edb7af523fd3c70f53b86a8b07cc99b9312b0488314ce8c537ba",
+      "backend/tests/unit/test_historical_evidence_audit.py": "73d26c9ff156b4cd7ccff1e7fa2e197a29a9d804dcc6e00c1e17a46c396be604",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07_historical.json": "0c3782c2edd52873f26e36aaf03bdc700214b0d2a148d204a60b2fa601a68309"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\historical-evidence.json",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\history-audit-tests.txt"
+    ]
+  },
+  "phemex_market_data_contract": {
+    "scope": "D18 public market identity, fallback removal and precision units",
+    "implementation": "Metadata resolves exact requested spot/swap source for candles,tickers,precision; scanner updates adapter/transport defaults together. Failed CCXT fetch no longer enters incorrectly parsed direct REST fallback. Tick/amount increments use explicit precisionMode; unavailable metadata propagates to scanner worker rejection instead of zero constraints.",
+    "verification": {
+      "initial_failures": 9,
+      "precision_failures": 4,
+      "consumer_failure": 1,
+      "new_focused_cases_passed": 17,
+      "selected_backend_passed": 1583,
+      "contracts": "4 clean",
+      "smoke": "8 clean",
+      "diff_check": "clean; existing CRLF notices only"
+    },
+    "limits": [
+      "No exchange transport or production runtime verification.",
+      "Removing the bad fallback can reduce data availability during CCXT failures.",
+      "No order protocol changes; existing live sizing uses CCXT precision independently.",
+      "Retired private scale helper remains test-only legacy, no active fetch caller."
+    ],
+    "date": "2026-10-08",
+    "source_sha256": {
+      "backend/data/adapters/phemex.py": "ed8ea8913037e9dee254add0c1c7d8be35e60c257eeff1d59da290d2ebb4879b",
+      "backend/services/scanner_service.py": "78c3b5a9c7abfb7168aea7ed68ed3c06f93e57629c9b7868680d1b4d81716c28",
+      "backend/engine/orchestrator.py": "dd77943649c92d22f175f7cedbf1e11234954c37c31db0d5aa52047cd92481c0",
+      "backend/tests/unit/test_phemex_market_candles.py": "74888d9f6c8cb5453764afbdc24a8aa7c41e57fe99f80ceefcf1bdaee917183c"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-candles-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-candles-after.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-precision-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\precision-consumer-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\market-candles-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\candles-expanded-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\contracts-candles.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\smoke-candles.txt"
+    ]
+  },
+  "volatility_input_contract": {
+    "scope": "D19 finite percentage-volatility inputs",
+    "implementation": "Reject invalid/missing ATR or reference price, remove raw-unit and normal-score fallback, planner passes explicit price. Existing bands unchanged.",
+    "verification": {
+      "focused_passed": 18,
+      "original_failures": 15,
+      "selected_backend_passed": 1691,
+      "contracts": "four clean",
+      "smoke": "eight clean"
+    },
+    "limits": [
+      "Daily-band transfer to other TFs remains uncalibrated. Band midpoint remains a legacy reference-price fallback when no frame/explicit price is supplied."
+    ],
+    "date": "2026-10-08",
+    "source_sha256": {
+      "backend/analysis/regime_detector.py": "4a4b440f08bdb1d41782994d8a1a92d5272c5fd8e9cc7907665a437a95dbfb43",
+      "backend/strategy/planner/regime_engine.py": "dbce73428c8e6cb791c19227946285ce7e2bbd67b6672bfdc41bbdd9a2c5d384",
+      "backend/tests/unit/test_volatility_input_validity.py": "944b452d7c3ab9b7853ac9f383e50b11d3f929460eda4bf1dc073da38ebe35a0"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\volatility-inputs-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\volatility-inputs-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-backend-verified.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-contracts-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-smoke-final.txt"
+    ]
+  },
+  "paper_final_entry_budget": {
+    "scope": "D20 final paper/testnet risk ceiling",
+    "reproduction": "Regime 1.2 produced $12 planned stop risk against $10 user allowance. Snap preserved excess and could break lot increments.",
+    "implementation": "Validate finite inputs and directional geometry, cap configured/adapted risk reductions, re-evaluate final entry/native/planned stop and current margin; downward precision before order.",
+    "verification": {
+      "focused_passed": 60,
+      "original_behavior_failures": 40,
+      "initial_fixture_scope_errors": 6,
+      "initial_new_helper_absence": 4,
+      "selected_backend_passed": 1691
+    },
+    "limits": [
+      "Planned stop-price risk excludes fees, gaps and execution slippage. Regime policy semantics not retuned. Tests execute actual entry block through submission but not the entire service lifecycle in those 6 cases."
+    ],
+    "date": "2026-10-08",
+    "source_sha256": {
+      "backend/bot/paper_trading_service.py": "bf603ac64846878d86022ca59dadd2f890734f38d1b04750e3d171e0b57999fb",
+      "backend/tests/unit/test_paper_entry_budget.py": "03c5bd4a7fe467739cb25d1de8f08721e02c670ee5d5a0c7e1f853d2194ef183",
+      "backend/tests/unit/test_accounting_delivery.py": "d8cb1bc17588c57e2e14b6031d9ff493f32129f364a9b1cf335a271c4dfefaf6"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\paper-budget-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\paper-budget-after.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\closure-expanded.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-backend-verified.txt"
+    ]
+  },
+  "decision_semantic_disposition": {
+    "scope": "D21 error-reason preservation and remaining decision semantics",
+    "implementation": "Initialize fusion finalizer state before try; original early error survives. Added controlled universe and ML chronology probes.",
+    "observed": [
+      "HTF dimension bonus receives +2 instead of intended +5 in aligned fixture",
+      "Strong-down sizing lookup matches down first; configured zero policy is clamped upward",
+      "Cached policy and dynamically reread flag diverge when environment changes",
+      "Majors-only fixture selects and excludes ADA/DOGE simultaneously",
+      "Journal-style newest-first ML data retains reverse chronology in positional folds"
+    ],
+    "disposition": "No speculative score activation, policy tuning, universe-selection change or model retraining. Concrete contracts and verification/rollback in current audit plan.",
+    "date": "2026-10-08",
+    "source_sha256": {
+      "backend/engine/orchestrator.py": "bdfb61c90b6d9e93e705ac2d9c220cae010f960b91a40994b31531f8d7fc8dc2",
+      "backend/diagnostics/decision_inputs_diagnostic.py": "df2acdbdd0cdc1d7742ab9c2de38f47ed034e485f5f62798f82154edb0b83dbe",
+      "backend/tests/unit/test_decision_evidence_labels.py": "ee8646cee62fdbeef5a3e237449079ba9a7ad69ebfe1828d014ffd38daae29fd",
+      "backend/analysis/pair_selection.py": "60be76f2c619f56e860bcaa72e5b9397e122ceab38e98b43af4d1c0f758c3c0b",
+      "backend/ml/model_store.py": "dd89e469dadfc9882827aa598ffe3710e297d1135721a73ea8833ba9de79d0a1",
+      "backend/ml/edge_model.py": "2b8cd9bf630993c88ef45400206e019f5e986b206db09b6018b63412939c254b",
+      "backend/ml/feature_extractor.py": "076ae3afaddab063dcb3f0d3ba823007d7b75e7434c71884c9112d03b515f622",
+      "backend/ml/signal_dataset_builder.py": "e2adce584bc34cca5eaa1e3cdee2a923e419e8841422a39171cc07ec70b42589"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\confluence-failure-before.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-inputs-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-backend-verified.txt"
+    ]
+  },
+  "verification_isolation_correction": {
+    "scope": "Material correction to previous broad pytest isolation claims",
+    "incident": "Temporary runner omitted SQLite audit event. Default absolute telemetry DB received test-time rows.",
+    "manifest": "docs/audits/SYSTEM_DISCOVERY_2026-10-07_test_telemetry.json",
+    "candidate_rows": 130,
+    "candidate_id_range": [
+      2992099,
+      2992228
+    ],
+    "known_types": {
+      "info_message": 128,
+      "alt_stop_suggested_TEST_USDT": 2
+    },
+    "correction": "Default telemetry redirected before imports; external SQLite paths/URIs denied; seven denial events self-checked. Exact rows preserved, no historical repair.",
+    "limitations": "No pre-run whole-DB hash; cannot prove every prior historical byte unchanged. Previous blanket no-real-store-write statements are superseded. Trade journal protected hash unchanged.",
+    "verification": {
+      "portable_backend_passed": 1691,
+      "warnings": 47,
+      "contracts": "four clean",
+      "smoke": "eight clean",
+      "frontend_last_passed": 36,
+      "typescript_last": "clean"
+    },
+    "date": "2026-10-08",
+    "source_sha256": {
+      "backend/diagnostics/offline_verify.py": "224dc7f5acd83bc54762d0aedae89e83f7abd9bb0a92a3f50203ccc2e3aed9d0",
+      "backend/diagnostics/offline_checks.json": "51df4693376b9357f4f7d0cd4cac0f69d170885f860a6913c64672d61c1d61f6",
+      ".github/workflows/ci.yml": "eba59c9c84344b70ecf96654e4a3c521e9cbcdc6dcbb7af39549734e99f28df3",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07_test_telemetry.json": "af98675a45efda681ae3c54cb8bac90a09bff065aa2707800589d5054f1a108c"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-backend-verified.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-contracts-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-smoke-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\telemetry-isolation-investigation.json",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\telemetry-after-incident.json"
+    ]
+  },
+  "offline_review_delivery": {
+    "scope": "Completed offline audit deliverables and bounded local repair pass; not full-source or live-readiness certification",
+    "baseline_commit": "140f42e92addec5e66e8547cbb9b800bb24e4f43",
+    "branch": "claude/decision-core-heart",
+    "index": "docs/ARCHITECTURE_INDEX.md",
+    "follow_up": "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md#current-disposition-and-follow-up-plan",
+    "coverage_by_area": {
+      "UI_API_startup": "Selected entry/config/diagnostic paths inspected; browser and full UI unverified",
+      "universe": "Implementation and conflicting tests inspected; controlled overlap reproduced",
+      "data": "Phemex/cache/candle contract selected regressions; other adapters and monthly TF partial",
+      "context_scoring_planning": "Selected source contracts, both-direction regressions and controlled probes; all warm-up/confirmation clocks and strategy calibration unverified",
+      "execution_accounting": "Selected lifecycle, recovery, actual-fee/outcome and protection fixtures; real exchange/cutover unverified",
+      "history": "384 journal IDs and selected sessions/three telemetry runs inspected; exact frozen reconstruction unavailable",
+      "ML_research": "Conditional ML gate and dataset/folds inspected/probed; saved artifacts and backtest variants unverified",
+      "cleanup": "Classified scoped candidates; no bulk deletion justified"
+    },
+    "remaining_scope": "Prioritized P1 contract/evidence fixes, then measured strategy interaction work and P3 decomposition; each item has verification/rollback in audit",
+    "mutations": "Local source/docs/fixtures only, except disclosed test telemetry incident. No further commit/push/deploy/bot start or actual store migration.",
+    "date": "2026-10-08",
+    "source_sha256": {
+      "docs/ARCHITECTURE_INDEX.md": "215ea3cad40b77c1c8b00f07c50b466070a0996f4fe420d53c808735f450cdc3",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": "164d6e3b18e405f1b6e00467c280824195b01891b159cc2c0495eb3d9ba082c7",
+      "README.md": "3e16d1ccf5ed77e30bf0089099247b421ce6ac599e1eeaa68c93c3b1418f4cc9",
+      "backend/diagnostics/decisions/2026-10-08__offline-audit-closure.md": "9102b2abcbbdfc033f3468def778fd6d967d81fadf1c65cd4243823180a7ddd4"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifacts": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-backend-verified.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-contracts-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-smoke-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\offline-inputs-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\rejection-evidence-final.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\tsc-rejection-evidence.txt",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\final-verification.json",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-r1c\\final-diff-check.txt"
+    ],
+    "final_file_verification": {
+      "changed_python_syntax": "valid",
+      "ci_failure_propagation": "verified source; PyYAML unavailable, no YAML-parser claim",
+      "architecture_mermaid_blocks": 4,
+      "local_architecture_links": "valid",
+      "ledger_source_hashes": "current",
+      "protected_hashes": "unchanged",
+      "telemetry_sha256_after_corrected_runs": "e4bb384bd13ef92dce31bcd7e7c21e44b8293c415a951f21b5764966fc7fd910",
+      "telemetry_unchanged_after_correction": true,
+      "note": "Mermaid source checked, no rendered diagram claim"
+    }
   }
 }

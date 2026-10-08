@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -126,11 +127,12 @@ class DominanceService:
             logger.warning("Failed to save dominance cache: %s", e)
 
     def _is_cache_valid(self, cache: Dict) -> bool:
-        """Check if cache is still within TTL."""
-        if not cache or "timestamp" not in cache:
+        """Reject expired, future or invalid observation times."""
+        try:
+            age = time.time() - float(cache["timestamp"])
+            return math.isfinite(age) and 0 <= age < CACHE_TTL_SECONDS
+        except (KeyError, TypeError, ValueError, OverflowError):
             return False
-        age = time.time() - cache["timestamp"]
-        return age < CACHE_TTL_SECONDS
 
     def _fetch_market_caps(self, limit: int = 100) -> Optional[List[Dict]]:
         """
@@ -477,13 +479,20 @@ def get_current_dominance() -> Optional[DominanceSnapshot]:
 
 
 def get_dominance_for_macro() -> Tuple[float, float, float]:
-    """
-    Get dominance values formatted for MacroContext.
-
-    Returns:
-        (btc_dom, alt_dom, stable_dom) tuple, defaults to (0, 0, 0) on failure
-    """
+    """Return fresh observed percentages; unavailable evidence is never zero."""
     snapshot = get_current_dominance()
-    if snapshot:
-        return (snapshot.btc_dom, snapshot.alt_dom, snapshot.stable_dom)
-    return (0.0, 0.0, 0.0)
+    try:
+        if snapshot is None:
+            raise ValueError("missing snapshot")
+        age = time.time() - float(snapshot.timestamp)
+        values = tuple(float(value) for value in (snapshot.btc_dom, snapshot.alt_dom, snapshot.stable_dom))
+        if not math.isfinite(age) or not 0 <= age < CACHE_TTL_SECONDS:
+            raise ValueError("stale, future or invalid observation time")
+        if not all(math.isfinite(value) and 0 <= value <= 100 for value in values):
+            raise ValueError("invalid percentage")
+        # Three values rounded to two decimal places can differ by 0.015 in sum.
+        if values[0] <= 0 or not math.isclose(sum(values), 100.0, rel_tol=0, abs_tol=0.02):
+            raise ValueError("incomplete market-cap partition")
+        return values
+    except (AttributeError, TypeError, ValueError, OverflowError) as error:
+        raise ValueError(f"DOMINANCE_UNAVAILABLE: {error}") from error

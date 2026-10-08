@@ -13,6 +13,7 @@ import math
 import time
 import uuid
 from threading import RLock
+from decimal import Decimal
 import ccxt
 
 from backend.bot.executor.paper_executor import (
@@ -22,6 +23,11 @@ from backend.data.adapters.phemex import PhemexAdapter
 from backend.bot.executor.execution_journal import (
     ExecutionJournal, JournalError, credential_binding, default_store,
 )
+from backend.bot.executor.accounting_runtime import AccountRuntime, Commitment
+from backend.bot.executor.accounting_models import (
+    AccountingError, ObservationContext, amount, execution_update,
+)
+from backend.data.adapters.phemex_accounting import normalize_order, normalize_execution
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +53,7 @@ class LiveExecutor:
         journal: Optional[ExecutionJournal] = None,
         owner: str = "live",
         generation: Optional[str] = None,
+        account_refresh_interval: float = 60.0,
     ):
         if not adapter.supports_trading() and not dry_run:
             raise ValueError(
@@ -67,11 +74,19 @@ class LiveExecutor:
         self._restored_ids = set()
         self._recovery_only = False
         self._inflight_mutations = 0
+        self._inflight_history = 0
+        self._reductions_active = set()
         self._execution_owner = owner
         self._execution_generation = generation or uuid.uuid4().hex
 
         # Serialize admission and fill accounting so reservations move atomically.
         self._state_lock = RLock()
+        self._accounting = None
+        self._financial_states = {}
+        self._live_updates = []
+        self._entry_protection = {}
+        self._pending_entry_protection = {}
+        self._protections_active = set()
         self._entry_admission_enabled = True
         self._execution_revision = 0
         self._reduce_only_order_ids: set = set()
@@ -115,8 +130,14 @@ class LiveExecutor:
         # Position mode is initialized only after complete flat reconciliation.
         if not dry_run:
             self._journal = journal or ExecutionJournal(
-                default_store(adapter.testnet), credential_binding(adapter.testnet, adapter.exchange.apiKey))
+                default_store(adapter.testnet), credential_binding(adapter.testnet, adapter.exchange.apiKey),
+                runtime=True, environment="testnet" if adapter.testnet else "production")
             try:
+                if self._journal.schema_version != 3:
+                    raise JournalError("Explicit offline runtime accounting upgrade required")
+                self._accounting = AccountRuntime(self._journal.binding,
+                    "testnet" if adapter.testnet else "production", self._execution_generation,
+                    lock=self._state_lock, interval=account_refresh_interval)
                 self._restore_execution()
             except BaseException:
                 self._journal.close()
@@ -124,7 +145,7 @@ class LiveExecutor:
             self._entry_admission_enabled = False
 
         # Fetch initial balance
-        self._cached_balance = self._fetch_balance_from_exchange()
+        self._cached_balance = self._fetch_balance_from_exchange() if dry_run else 0.0
         self._initial_balance = self._cached_balance
         logger.info(
             f"LiveExecutor initialized — balance=${self._cached_balance:.2f} "
@@ -136,6 +157,216 @@ class LiveExecutor:
             self._order_counter += 1
             return f"LIVE_{self._order_id_prefix}_{self._order_counter:08d}"
 
+    def accounting_status(self):
+        return self._accounting.view() if getattr(self, '_accounting', None) else None
+
+    def balance_status(self, view=None):
+        return self._accounting.balance_status(view) if getattr(self, '_accounting', None) else None
+
+    def invalidate_account(self, reason='EXCHANGE_EVENT_PENDING'):
+        if getattr(self, '_accounting', None):
+            with self._state_lock:
+                if reason in ('UNOWNED_EXCHANGE_EVENT', 'WS_RECONNECT_RECONCILIATION_REQUIRED',
+                    'WS_DISCONNECTED', 'WS_STREAM_ENDED', 'WS_QUEUE_OVERFLOW', 'WS_CALLBACK_FAILED',
+                    'WS_FRAME_INVALID', 'WS_ORDER_COLLECTION_INVALID', 'WS_EXECUTION_EVIDENCE_INVALID'):
+                    self._accounting.order_sweep_required = True
+                self._accounting.invalidate(reason)
+
+    def ws_event_pending(self):
+        with self._state_lock:
+            self._accounting.pending_events += 1
+            self._accounting.invalidate('EXCHANGE_EVENTS_PENDING')
+
+    def ws_event_complete(self):
+        with self._state_lock:
+            self._accounting.pending_events -= 1
+            self._accounting.invalidate('ACCOUNT_RECONCILIATION_REQUIRED')
+
+    def reconcile_account(self, *, force=False):
+        """The sole live cash/position publisher. Transport runs outside the state lock."""
+        token = self._accounting.begin_refresh(force=force)
+        if token is None:
+            return self._accounting.view()
+        with self._state_lock:
+            transport_inflight = bool(self._inflight_mutations)
+            sweep_required = self._accounting.order_sweep_required
+        observation = error = None
+        try:
+            if sweep_required:
+                snapshot = self._adapter.fetch_account_snapshot()
+                if (not isinstance(snapshot, dict) or snapshot.get('complete') is not True
+                        or snapshot.get('scope') != 'phemex:swap:USDT' or not isinstance(snapshot.get('orders'), list)):
+                    raise AccountingError('ACCOUNT_ORDER_SWEEP_INCOMPLETE')
+                with self._state_lock:
+                    for raw in snapshot['orders']:
+                        if not isinstance(raw, dict) or not raw.get('id') or raw['id'] not in self._reverse_order_map:
+                            raise AccountingError('UNOWNED_ACCOUNT_ORDER')
+            observation = self._adapter.fetch_account_observation()
+        except Exception as exc:
+            error = exc
+            logger.error('ACCOUNT_REFRESH_FAILED: %s', exc)
+            self.metrics['balance_fetch_failures'] += 1
+        with self._state_lock:
+            if transport_inflight or self._inflight_mutations:
+                self._accounting.invalidate('ACCOUNT_READ_OVERLAPPED_SUBMISSION')
+            if sweep_required and error is None and token[:2] == (self._accounting.generation, self._accounting.revision):
+                self._accounting.order_sweep_required = False
+            self._accounting.finish_refresh(token, observation, error)
+            view = self._accounting.view()
+            self.balance_known = view['observation_valid']
+            self.last_balance_error = None if self.balance_known else ', '.join(view['reasons'])
+            if self.balance_known:
+                self._cached_balance = view['free']
+                self.last_balance_observed_at = observation.context.ended_monotonic
+                self._positions = {p.symbol: float(p.base_quantity) * (1 if p.side == 'BUY' else -1)
+                                   for p in observation.positions if p.contracts}
+                self._position_avg_price = {p.symbol: float(p.entry_price)
+                                           for p in observation.positions if p.contracts}
+                if view['initial_equity'] is not None:
+                    self._initial_balance = view['initial_equity']
+            return view
+
+    def _check_account_admission_lease(self, order):
+        """An admitted request may consume its own reservation, never a later revision."""
+        runtime = self._accounting
+        observation = runtime.observation
+        if (not self._entry_admission_enabled or runtime.closed or observation is None
+                or not observation.complete or not runtime.flat_baseline
+                or getattr(order, '_account_admission_revision', None) != runtime.revision
+                or not 0 <= runtime.clock() - observation.context.ended_monotonic <= 2 * runtime.interval
+                or self._inflight_mutations or runtime.pending_events or runtime.order_sweep_required):
+            raise AccountingError('ACCOUNT_ADMISSION_CHANGED')
+
+    def _process_accounting_order(self, order, response, source='rest'):
+        """Publish only after lifecycle and raw financial evidence commit together."""
+        raw = response if source == 'ws' else response.get('info')
+        if not isinstance(raw, dict):
+            raise AccountingError('RAW_ORDER_EVIDENCE_REQUIRED')
+        market = self._adapter.exchange.markets.get(order.symbol)
+        context = self._execution_context(raw, source)
+        evidence = [normalize_execution(raw, market, context) if source == 'history'
+                    else normalize_order(raw, market, context)]
+        if source != 'ws' and response.get('id') is not None and response['id'] != evidence[0].exchange_order_id:
+            raise AccountingError('RAW_AND_UNIFIED_ORDER_ID_CONFLICT')
+        # AOP status rows often contain a zero execution ID. They are not trades.
+        eid = raw.get('execID', raw.get('execId'))
+        if (source != 'history' and raw.get('tradeType') in ('Trade', 'Funding', 'LiqTrade', 'AdlTrade')
+                and isinstance(eid, str) and eid.replace('-', '').strip('0')):
+            evidence.append(normalize_execution(raw, market, context))
+        with self._state_lock:
+            self._require_storage()
+            previous = self._financial_states[order.order_id]
+            try:
+                publication = self._journal.record_execution(order.order_id, evidence,
+                    exchange_id=evidence[0].exchange_order_id)
+            except Exception as exc:
+                self._storage_failure(exc)
+                raise
+            financial, legacy = publication['state'], publication['lifecycle']
+            self._financial_states[order.order_id] = financial
+            order.status = OrderStatus(legacy['status'])
+            order.filled_quantity = legacy['filled_quantity']
+            order.average_fill_price = legacy['average_fill_price']
+            order.updated_at = datetime.fromisoformat(legacy['updated_at'])
+            if legacy['exchange_id']:
+                self._exchange_order_map[order.order_id] = legacy['exchange_id']
+                self._reverse_order_map[legacy['exchange_id']] = order.order_id
+            if legacy['unknown_reason'] is None:
+                self._unacknowledged_orders.pop(order.order_id, None)
+            if not legacy['cancel_requested']:
+                self._cancel_requested_orders.discard(order.order_id)
+            self._accounting.update_order(order.order_id, filled=financial.filled_quantity,
+                terminal=order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED),
+                cost_known=not financial.filled_quantity or order.average_fill_price is not None)
+            bad = [r for r in publication['results'] if r['disposition'] in ('quarantined', 'conflict')]
+            if bad:
+                self.invalidate_account('WS_EXECUTION_EVIDENCE_INVALID')
+                logger.error('EXECUTION_EVIDENCE_UNRESOLVED %s: %s', order.order_id, bad)
+            if previous == financial:
+                return None
+            self._execution_revision += 1
+            self._accounting.invalidate('ACCOUNT_RECONCILIATION_REQUIRED')
+            update = execution_update(previous, financial, context.received_at)
+            if order.order_id in self._restored_ids:
+                return None  # Historical financial enrichment cannot create strategy ownership.
+            self._live_updates.append(update)
+            if update.quantity:
+                self.metrics['fills_recorded_via_' + ('ws' if source == 'ws' else 'rest')] += 1
+            return update
+
+    def _execution_context(self, raw, source):
+        now = time.monotonic()
+        stamp = raw.get('transactTimeNs')
+        if stamp is not None:
+            if type(stamp) not in (int, str) or not str(stamp).isdigit():
+                raise AccountingError('EXCHANGE_CLOCK_INVALID')
+            stamp = int(stamp)
+        return ObservationContext(self._accounting.environment, self._journal.binding,
+            'phemex:' + source + ':order', uuid.uuid4().hex,
+            datetime.now(timezone.utc).isoformat(), now, now, exchange_timestamp_ns=stamp)
+
+    def import_execution_history(self, order_id, rows):
+        """Enrich one explicit request from identified facts, never symbol allocation."""
+        from backend.bot.executor.accounting_reducer import check_link
+        if not getattr(self, '_accounting', None) or not isinstance(rows, list):
+            raise AccountingError('EXECUTION_HISTORY_RUNTIME_REQUIRED')
+        with self._state_lock:
+            self._require_storage()
+            order = self._orders.get(order_id)
+            if order is None:
+                raise AccountingError('EXECUTION_HISTORY_ORDER_UNKNOWN')
+            market = self._adapter.exchange.markets.get(order.symbol)
+            state = self._financial_states[order_id]
+            try:
+                # Validate the entire candidate page before publishing any of it.
+                for raw in rows:
+                    fact = normalize_execution(raw, market, self._execution_context(raw, 'history'))
+                    if fact.kind == 'FUNDING' or fact.execution_id is None:
+                        raise AccountingError('EXECUTION_HISTORY_TRADE_REQUIRED')
+                    check_link(state, fact)
+            except AccountingError:
+                self.invalidate_account('EXECUTION_HISTORY_EVIDENCE_INVALID')
+                logger.exception('EXECUTION_HISTORY_EVIDENCE_INVALID %s', order_id)
+                raise
+        results = []
+        for raw in rows:
+            results.append(self._process_accounting_order(order, {'info': raw}, source='history'))
+        return results
+
+    def apply_ws_order(self, raw):
+        """Raw AOP evidence enters through the same durable reducer as REST."""
+        with self._state_lock:
+            oid = self._reverse_order_map.get(raw.get('orderID', raw.get('orderId')))
+            client = raw.get('clOrdID', raw.get('clOrdId'))
+            if oid is None and client in self._journaled_ids:
+                oid = client
+            order = self._orders.get(oid)
+        if order is None:
+            self.invalidate_account('UNOWNED_EXCHANGE_EVENT')
+            logger.error('UNOWNED_EXCHANGE_EVENT: order=%s', raw.get('orderID'))
+            markets = [m for m in self._adapter.exchange.markets.values() if m.get('id') == raw.get('symbol')]
+            if len(markets) != 1:
+                raise AccountingError('UNOWNED_EXECUTION_MARKET_AMBIGUOUS')
+            context = self._execution_context(raw, 'ws')
+            evidence = []
+            if raw.get('ordStatus') is not None:
+                evidence.append(normalize_order(raw, markets[0], context))
+            if raw.get('tradeType') in ('Trade', 'Funding', 'LiqTrade', 'AdlTrade'):
+                evidence.append(normalize_execution(raw, markets[0], context))
+            if evidence:
+                try:
+                    self._journal.record_execution(None, evidence)
+                except Exception as exc:
+                    self._storage_failure(exc)
+                    raise
+            return None
+        try:
+            return self._process_accounting_order(order, raw, 'ws')
+        except Exception as exc:
+            self.invalidate_account('WS_EXECUTION_EVIDENCE_INVALID')
+            logger.error('WS_EXECUTION_EVIDENCE_INVALID: %s', exc)
+            raise
+
     def _restore_execution(self):
         self._recovery_only = not self._journal.was_clean
         for intent, state in self._journal.records():
@@ -146,11 +377,15 @@ class LiveExecutor:
                           status=OrderStatus(state["status"]), filled_quantity=state["filled_quantity"],
                           average_fill_price=state["average_fill_price"],
                           rejection_reason=state["rejection_reason"],
+                          parent_entry_order_id=intent.get('parent_entry_order_id'),
+                          reduction_root_order_id=intent.get('reduction_root_order_id'),
                           created_at=datetime.fromisoformat(state["created_at"]),
                           updated_at=datetime.fromisoformat(state["updated_at"]))
             self._orders[oid] = order
             self._journaled_ids.add(oid)
             self._restored_ids.add(oid)
+            if self._accounting:
+                self._financial_states[oid] = self._journal.financial_state(oid)
             if intent["purpose"] == "exit":
                 self._reduce_only_order_ids.add(oid)
             if state["exchange_id"]:
@@ -203,6 +438,8 @@ class LiveExecutor:
         with self._state_lock:
             try:
                 self._require_storage(new_request=True)
+                if getattr(self, "_accounting", None) and order.order_id not in self._reduce_only_order_ids and order.order_type in (OrderType.LIMIT, OrderType.MARKET):
+                    self._check_account_admission_lease(order)
                 purpose = ("exit" if order.order_id in self._reduce_only_order_ids else
                            "entry" if order.order_type in (OrderType.LIMIT, OrderType.MARKET) else "protection")
                 intent = {"order_id": order.order_id, "symbol": order.symbol, "side": order.side.value,
@@ -210,8 +447,20 @@ class LiveExecutor:
                           "price": order.price, "stop_price": order.stop_price, "purpose": purpose,
                           "reduce_only": purpose != "entry", "owner": self._execution_owner,
                           "generation": self._execution_generation, "wire": wire}
+                if getattr(self, '_accounting', None) and purpose == 'entry':
+                    intent['report_version'] = 1
+                if order.parent_entry_order_id is not None:
+                    intent['parent_entry_order_id'] = order.parent_entry_order_id
+                if order.reduction_root_order_id is not None:
+                    intent['reduction_root_order_id'] = order.reduction_root_order_id
                 self._journal.submit_intent(intent, self._durable_state(order))
                 self._journaled_ids.add(order.order_id)
+                if getattr(self, '_accounting', None):
+                    if order.order_id not in self._accounting.commitments:
+                        self._accounting.reserve(order.order_id, Commitment(order.symbol, order.side.value,
+                            amount(str(order.quantity)), None, purpose != 'entry'))
+                    self._financial_states[order.order_id] = self._journal.financial_state(order.order_id)
+                    self._accounting.invalidate('ORDER_SUBMISSION_IN_FLIGHT')
                 self._inflight_mutations = getattr(self, "_inflight_mutations", 0) + 1
             except Exception as exc:
                 self._storage_failure(exc)
@@ -227,6 +476,109 @@ class LiveExecutor:
         if not self.dry_run:
             self._require_storage(new_request=True)
             self._hedge_mode = not self._adapter.set_position_mode_one_way()
+            if getattr(self, '_accounting', None) and self._hedge_mode:
+                self.invalidate_account('POSITION_MODE_UNSUPPORTED')
+                raise AccountingError('One-way position mode could not be confirmed')
+
+    def protect_confirmed_entry(self, order_id, stop_price, *, quantity=None):
+        """Preserve identified protection while replacing changed size/level."""
+        with self._state_lock:
+            self._require_storage()
+            if order_id in self._protections_active:
+                raise AccountingError('PROTECTION_RECOVERY_INFLIGHT')
+            self._protections_active.add(order_id)
+        try:
+            entry = self._orders[order_id]
+            requested = entry.filled_quantity if quantity is None else quantity
+            if entry.filled_quantity <= 0:
+                return None
+            if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in (requested, stop_price)):
+                raise AccountingError('PROTECTION_REQUEST_INVALID')
+            if quantity is not None:
+                progress = self.reconciled_execution_progress(order_id)
+                if progress.remaining_quantity != amount(str(quantity)):
+                    raise AccountingError('PROTECTION_OWNED_QUANTITY_MISMATCH')
+            previous_id = self._entry_protection.get(order_id)
+            previous = self._orders.get(previous_id)
+            pending_id = self._pending_entry_protection.get(order_id)
+            candidate = self._orders.get(pending_id) if pending_id else None
+            if pending_id and candidate is None:
+                raise AccountingError('PROTECTION_IDENTITY_MISSING')
+            if previous_id and previous is None:
+                raise AccountingError('PROTECTION_IDENTITY_MISSING')
+            if previous is not None:
+                self.refresh_order(previous_id)
+                if previous.filled_quantity > 0 or previous.status == OrderStatus.PENDING:
+                    return previous
+                if (candidate is None and previous.status == OrderStatus.OPEN
+                        and previous.quantity == requested and previous.stop_price == stop_price):
+                    return previous
+            if candidate is not None:
+                self.refresh_order(candidate.order_id)
+                if candidate.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED) and candidate.filled_quantity == 0:
+                    self._pending_entry_protection.pop(order_id, None)
+                    candidate = None
+            if candidate is None:
+                candidate = self.place_stop_order(entry.symbol,
+                    'SELL' if entry.side == OrderSide.BUY else 'BUY',
+                    requested, stop_price, parent_entry_order_id=order_id)
+                self._pending_entry_protection[order_id] = candidate.order_id
+                if previous_id is None:
+                    self._entry_protection[order_id] = candidate.order_id
+            if candidate.filled_quantity > 0:
+                self._entry_protection[order_id] = candidate.order_id
+                self._pending_entry_protection.pop(order_id, None)
+                return candidate
+            if candidate.status == OrderStatus.PENDING:
+                return candidate
+            if candidate.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                self._pending_entry_protection.pop(order_id, None)
+                return candidate
+            if (candidate.status != OrderStatus.OPEN or candidate.symbol != entry.symbol
+                    or candidate.side == entry.side or candidate.parent_entry_order_id != order_id
+                    or candidate.quantity != requested or candidate.stop_price != stop_price):
+                if self.cancel_order(candidate.order_id):
+                    self._pending_entry_protection.pop(order_id, None)
+                raise AccountingError('PROTECTION_REQUEST_CHANGED')
+            self._entry_protection[order_id] = candidate.order_id
+            self._pending_entry_protection.pop(order_id, None)
+            if previous_id and previous_id != candidate.order_id and previous.status not in (
+                    OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                if not self.cancel_order(previous_id):
+                    logger.warning('OLD_PROTECTION_CANCEL_UNCONFIRMED %s; identity retained', previous_id)
+            return candidate
+        finally:
+            with self._state_lock:
+                self._protections_active.discard(order_id)
+
+    def cleanup_flat_protection(self):
+        """Retry cancellation of owned stops once executions prove their symbol flat.
+
+        An unresolved reduce-only order keeps runtime entry admission blocked, even
+        if a later account observation is flat. Never infer flatness from a price.
+        """
+        if not getattr(self, '_accounting', None):
+            return
+        with self._state_lock:
+            expected = self._accounting.expected_positions()
+            candidates = [stop_id for entry_id, stop_id in self._entry_protection.items()
+                if self._orders.get(entry_id) is not None
+                and self._orders[entry_id].filled_quantity > 0
+                and self._orders[entry_id].symbol not in expected]
+            # Include replaced protectors whose earlier cancellation was uncertain.
+            for oid, order in self._orders.items():
+                parent = self._orders.get(getattr(order, 'parent_entry_order_id', None))
+                if (parent is not None and parent.filled_quantity > 0 and parent.symbol not in expected
+                        and (order.order_type in (OrderType.STOP_LOSS, OrderType.TAKE_PROFIT)
+                             or (order.order_type == OrderType.LIMIT and oid in self._reduce_only_order_ids))):
+                    candidates.append(oid)
+        for stop_id in set(candidates):
+            try:
+                stop = self.get_order(stop_id)
+                if stop is not None and stop.status not in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                    self.cancel_order(stop_id)
+            except Exception:
+                logger.exception('FLAT_PROTECTION_CANCEL_UNCONFIRMED %s; retained for retry', stop_id)
 
     def verify_flat_account(self):
         """Read a complete account snapshot for the shared paper-testnet owner."""
@@ -249,6 +601,8 @@ class LiveExecutor:
             if revision != self.recovery_snapshot()["revision"]:
                 raise JournalError("Execution changed during account observation")
             self._flat_snapshot_revision = revision
+            if getattr(self, "_accounting", None):
+                self._accounting.establish_flat_baseline()
         return datetime.now(timezone.utc).isoformat()
 
     def checkpoint_flat(self, observed_at, expected_revision=None):
@@ -259,7 +613,7 @@ class LiveExecutor:
                     expected_revision = getattr(self, "_flat_snapshot_revision", None)
                 snap = self.recovery_snapshot()
                 if (expected_revision != snap["revision"] or snap["requests"]
-                        or snap["inflight_mutations"]):
+                        or snap["inflight_mutations"] or snap['inflight_account_reads'] or snap['inflight_evidence_events']):
                     raise JournalError("Execution changed or remains unresolved after flat account observation")
                 try:
                     self._journal.mark_flat(observed_at)
@@ -270,9 +624,12 @@ class LiveExecutor:
     def close(self):
         with self._state_lock:
             self.set_entry_admission(False)
-            if getattr(self, "_inflight_mutations", 0):
-                raise JournalError("Cannot release execution ownership during a transport call")
-            if getattr(self, "_journal", None):
+            if (getattr(self, '_inflight_mutations', 0) or getattr(self, '_inflight_history', 0)
+                    or getattr(self, '_inflight_reports', 0) or getattr(self, '_reductions_active', ()) or getattr(self, '_protections_active', ())):
+                raise JournalError('Cannot release execution ownership during a transport call or report delivery')
+            if getattr(self, '_accounting', None):
+                self._accounting.close()
+            if getattr(self, '_journal', None):
                 self._journal.close()
 
     def set_entry_admission(self, enabled: bool) -> None:
@@ -291,6 +648,8 @@ class LiveExecutor:
                 "recovery_only": getattr(self, "_recovery_only", False),
                 "storage_error": getattr(self, "_journal_error", None),
                 "inflight_mutations": getattr(self, "_inflight_mutations", 0),
+                "inflight_account_reads": bool(getattr(self, '_accounting', None) and self._accounting.inflight is not None),
+                "inflight_evidence_events": self._accounting.pending_events if getattr(self, '_accounting', None) else 0,
                 "entry_admission_enabled": getattr(self, "_entry_admission_enabled", True),
                 "requests": [{
                     "order_id": oid, "exchange_id": self._exchange_order_map.get(oid),
@@ -308,6 +667,8 @@ class LiveExecutor:
         """Retain exposure until an identified exchange observation resolves it."""
         with self._state_lock:
             self._execution_revision = getattr(self, "_execution_revision", 0) + 1
+            if getattr(self, "_accounting", None):
+                self._accounting.invalidate('ORDER_OUTCOME_UNKNOWN')
             if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
                 return
             self._unacknowledged_orders[order.order_id] = reason
@@ -331,6 +692,8 @@ class LiveExecutor:
             existing_owner = self._reverse_order_map.get(exchange_id)
             if existing_owner and existing_owner != order.order_id:
                 raise ValueError("Exchange identity already belongs to another request")
+            if getattr(self, "_accounting", None):
+                return self._process_exchange_order(order, response)
             self._exchange_order_map[order.order_id] = exchange_id
             self._reverse_order_map[exchange_id] = order.order_id
             # A create response with an ID establishes acceptance, not a fill.
@@ -343,8 +706,8 @@ class LiveExecutor:
     def refresh_order(self, order_id: str) -> Optional[Fill]:
         """Recover by client ID when the submission response did not provide an ID."""
         order = self._orders.get(order_id)
-        if order is None or self.dry_run or order.status in (
-                OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+        if order is None or self.dry_run or (not getattr(self, "_accounting", None) and order.status in (
+                OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED)):
             return None
         try:
             exchange_id = self._exchange_order_map.get(order_id)
@@ -360,15 +723,153 @@ class LiveExecutor:
             self._submission_unknown(order, str(exc))
             return None
 
-    def _recover_uncertain_protection(self, symbol: str, side: str, order_type: OrderType) -> Optional[Order]:
+    def _recover_uncertain_protection(self, symbol: str, side: str, order_type: OrderType,
+                                      parent_entry_order_id=None) -> Optional[Order]:
         with self._state_lock:
             pending = next((self._orders[oid] for oid in self._unacknowledged_orders
                             if self._orders[oid].symbol == symbol
                             and self._orders[oid].side.value == side.upper()
                             and self._orders[oid].order_type == order_type), None)
         if pending is not None:
+            if parent_entry_order_id is not None and pending.parent_entry_order_id != parent_entry_order_id:
+                raise AccountingError('UNCERTAIN_PROTECTION_PARENT_CONFLICT')
             self.refresh_order(pending.order_id)
         return pending
+
+    def execution_receipt(self, order_id):
+        from backend.bot.executor.execution_outcomes import receipt
+        with self._state_lock:
+            self._require_storage()
+            return receipt(self._financial_states[order_id])
+
+    def _reduction_orders(self, root_order_id):
+        """Resolve only the explicitly linked MARKET reduction family."""
+        root = self._orders.get(root_order_id)
+        if (root is None or root.order_id not in self._reduce_only_order_ids
+                or root.order_type != OrderType.MARKET or not root.parent_entry_order_id
+                or root.reduction_root_order_id is not None):
+            raise AccountingError('REDUCTION_ROOT_INVALID')
+        children = [o for o in self._orders.values() if o.reduction_root_order_id == root_order_id]
+        if any(o.parent_entry_order_id != root.parent_entry_order_id
+               or o.symbol != root.symbol or o.side != root.side
+               or o.order_type != OrderType.MARKET or o.order_id not in self._reduce_only_order_ids
+               for o in children):
+            raise AccountingError('REDUCTION_CHILD_SCOPE_CONFLICT')
+        return (root, *children)
+
+    def reduction_receipt(self, root_order_id):
+        from backend.bot.executor.execution_outcomes import reduction_receipt
+        with self._state_lock:
+            self._require_storage()
+            orders = self._reduction_orders(root_order_id)
+            if any(o.order_id not in self._financial_states for o in orders):
+                raise AccountingError('REDUCTION_REQUEST_EVIDENCE_MISSING')
+            return reduction_receipt(root_order_id, amount(str(orders[0].quantity)),
+                                     tuple(self.execution_receipt(o.order_id) for o in orders))
+
+    def advance_reduction(self, root_order_id, price):
+        """Finish at most one confirmed remainder; never replace an uncertain request."""
+        from backend.bot.executor.execution_reports import numeric
+        with self._state_lock:
+            self._require_storage()
+            if root_order_id in self._reductions_active:
+                raise AccountingError('REDUCTION_RECOVERY_INFLIGHT')
+            self._reductions_active.add(root_order_id)
+        try:
+            with self._state_lock:
+                orders = self._reduction_orders(root_order_id)
+                root = orders[0]
+            for order in orders:
+                current = self.execution_receipt(order.order_id)
+                if (not current.terminal or (current.quantity and current.cost is None)
+                        or order.order_id in self._unacknowledged_orders):
+                    self.refresh_order(order.order_id)
+            with self._state_lock:
+                result = self.reduction_receipt(root_order_id)
+                if any(o.order_id in self._unacknowledged_orders for o in orders):
+                    raise AccountingError('REDUCTION_OUTCOME_UNKNOWN')
+                if result.confirms(root.quantity):
+                    return result
+                if result.reasons or not result.terminal or result.cost is None:
+                    return result
+                # A zero-fill terminal attempt is not progress. Preserve it for
+                # inspection instead of flooding the venue with rejected orders.
+                if any(not self.execution_receipt(o.order_id).quantity for o in orders):
+                    raise AccountingError('REDUCTION_TERMINAL_WITHOUT_PROGRESS')
+                goal = amount(str(root.quantity))
+                from backend.bot.executor.accounting_models import exact_sum
+                remainder = exact_sum((goal, result.quantity.copy_negate()))
+                if remainder <= 0:
+                    raise AccountingError('REDUCTION_GOAL_CONFLICT')
+            self.reconcile_account(force=True)
+            with self._state_lock:
+                if self.reduction_receipt(root_order_id) != result:
+                    raise AccountingError('REDUCTION_EVIDENCE_CHANGED_DURING_RECOVERY')
+                progress = self.reconciled_execution_progress(root.parent_entry_order_id)
+                if remainder > progress.remaining_quantity:
+                    raise AccountingError('REDUCTION_REMAINDER_EXCEEDS_OWNED_POSITION')
+                quantity = numeric(remainder, positive=True)
+                if amount(str(quantity)) != remainder:
+                    raise AccountingError('REDUCTION_REMAINDER_NOT_REPRESENTABLE')
+                self._require_storage(new_request=True)
+            self.place_order(root.symbol, root.side.value, 'MARKET', quantity, price=price,
+                             reduce_only=True, parent_entry_order_id=root.parent_entry_order_id,
+                             reduction_root_order_id=root_order_id)
+            return self.reduction_receipt(root_order_id)
+        finally:
+            with self._state_lock:
+                self._reductions_active.discard(root_order_id)
+
+    def execution_outcome(self, entry_order_id):
+        from backend.bot.executor.execution_outcomes import calculate_outcome
+        with self._state_lock:
+            self._require_storage()
+            entry = self._orders[entry_order_id]
+            if (entry.parent_entry_order_id is not None or entry.order_id in self._reduce_only_order_ids
+                    or entry.order_type not in (OrderType.LIMIT, OrderType.MARKET)):
+                raise AccountingError('OUTCOME_ENTRY_REQUIRED')
+            exits = tuple(self._financial_states[oid] for oid, order in self._orders.items()
+                if order.parent_entry_order_id == entry_order_id and oid in self._financial_states)
+            return calculate_outcome(self._financial_states[entry_order_id], exits)
+
+    def execution_progress(self, entry_order_id):
+        from backend.bot.executor.execution_outcomes import calculate_progress
+        with self._state_lock:
+            self._require_storage()
+            entry = self._orders[entry_order_id]
+            if (entry.parent_entry_order_id is not None or entry.order_id in self._reduce_only_order_ids
+                    or entry.order_type not in (OrderType.LIMIT, OrderType.MARKET)):
+                raise AccountingError('OUTCOME_ENTRY_REQUIRED')
+            exits = tuple(self._financial_states[oid] for oid, order in self._orders.items()
+                if order.parent_entry_order_id == entry_order_id and oid in self._financial_states)
+            return calculate_progress(self._financial_states[entry_order_id], exits)
+
+    def refresh_entry_exits(self, entry_order_id):
+        """Refresh only known parent-linked exit IDs, including adopted native stops."""
+        progress = self.execution_progress(entry_order_id)
+        for item in progress.exits:
+            if not item.terminal or (item.quantity and item.cost is None):
+                self.refresh_order(item.order_id)
+        return self.execution_progress(entry_order_id)
+
+    def reconciled_execution_progress(self, entry_order_id):
+        """An owned cumulative reduction matched to a current combined observation."""
+        with self._state_lock, self._accounting.lock:
+            progress = self.execution_progress(entry_order_id)
+            view = self._accounting.view()
+            if (not view['observation_valid'] or view['observation_revision'] != view['revision']
+                    or self._accounting.pending_events or self._accounting.order_sweep_required
+                    or self._inflight_mutations):
+                raise AccountingError('POSITION_ACCOUNT_OBSERVATION_PENDING')
+            symbol = self._orders[entry_order_id].symbol
+            rows = [p for p in self._accounting.observation.positions if p.symbol == symbol and p.contracts]
+            if len(rows) > 1:
+                raise AccountingError('POSITION_ACCOUNT_SCOPE_AMBIGUOUS')
+            observed = (rows[0].base_quantity if rows[0].side == 'BUY' else rows[0].base_quantity.copy_negate()) if rows else amount('0')
+            expected = progress.remaining_quantity if progress.side == 'BUY' else progress.remaining_quantity.copy_negate()
+            if not progress.ready or observed != expected:
+                raise AccountingError('POSITION_OWNED_PROGRESS_MISMATCH')
+            return progress
 
     def recover_uncertain_orders(self) -> None:
         """Poll unresolved entries/exits/protection even without an active entry plan."""
@@ -395,6 +896,8 @@ class LiveExecutor:
             self._cancel_requested_orders.discard(order.order_id)
             order.status = OrderStatus.REJECTED
             order.rejection_reason = reason
+            if getattr(self, "_accounting", None):
+                self._accounting.reject_unsent(order.order_id)
             self._persist_order(order, kind="rejection")
 
 
@@ -431,6 +934,11 @@ class LiveExecutor:
     def _total_exposure_usd(self, exclude_order_id: Optional[str] = None) -> float:
         """Open entry-cost exposure plus unfilled, non-reduce-only entry commitments."""
         with self._state_lock:
+            if getattr(self, "_accounting", None):
+                view = self._accounting.view()
+                if view['observed_exposure'] is None or view['held_commitments'] is None:
+                    raise ValueError("Account exposure unavailable")
+                return view['observed_exposure'] + view['held_commitments']
             total = 0.0
             for symbol, qty in self._positions.items():
                 if isinstance(qty, bool) or not isinstance(qty, (int, float)) or not math.isfinite(qty):
@@ -479,6 +987,8 @@ class LiveExecutor:
         sl_price: Optional[float] = None,
         tp_price: Optional[float] = None,
         reduce_only: bool = False,
+        parent_entry_order_id: Optional[str] = None,
+        reduction_root_order_id: Optional[str] = None,
     ) -> Order:
         """
         Place an order on Phemex (or log it in dry_run mode).
@@ -513,6 +1023,8 @@ class LiveExecutor:
                 order_id=order_id, symbol=symbol, side=order_side,
                 order_type=order_type_enum, quantity=quantity, price=price,
                 stop_price=stop_price, status=OrderStatus.OPEN,
+                parent_entry_order_id=parent_entry_order_id,
+                reduction_root_order_id=reduction_root_order_id,
             )
             self._orders[order_id] = order
             if reduce_only:
@@ -521,6 +1033,13 @@ class LiveExecutor:
                 # Reserve this request before releasing the lock / sending it.
                 # The candidate is excluded from existing exposure to count it once.
                 try:
+                    if getattr(self, "_accounting", None) and not self._accounting.view()['entry_eligible']:
+                        raise ValueError("Account accounting unavailable or unreconciled; new entry blocked")
+                    if getattr(self, '_accounting', None):
+                        from backend.data.adapters.phemex_accounting import _market
+                        canonical, _ = _market(self._adapter.exchange.markets.get(symbol))
+                        if canonical != symbol:
+                            raise ValueError('Entry symbol does not match verified contract metadata')
                     if not getattr(self, "_entry_admission_enabled", True):
                         raise ValueError("Session stopping; new entry blocked")
                     if self._unacknowledged_orders:
@@ -549,6 +1068,11 @@ class LiveExecutor:
                     order.rejection_reason = str(exc)
                     logger.warning("Order REJECTED: %s", exc)
                     return order
+
+            if getattr(self, "_accounting", None):
+                self._accounting.reserve(order_id, Commitment(symbol, order_side.value, amount(str(quantity)),
+                    amount(str(price)) if price is not None else None, reduce_only))
+                order._account_admission_revision = self._accounting.revision
 
         if self.dry_run:
             logger.info(
@@ -582,8 +1106,7 @@ class LiveExecutor:
                     f"(close any existing {symbol} position first): {e}"
                 )
                 logger.error(f"LEVERAGE MISMATCH: {msg}. Order BLOCKED.")
-                order.status = OrderStatus.REJECTED
-                order.rejection_reason = msg
+                self._reject_submission(order, msg)
                 return order
 
         # Send to exchange
@@ -624,7 +1147,15 @@ class LiveExecutor:
             if not reduce_only and not getattr(self, "_entry_admission_enabled", True):
                 self._reject_submission(order, "Session stopping; new entry blocked")
                 return order
+            if getattr(self, "_accounting", None) and not reduce_only:
+                try:
+                    self._check_account_admission_lease(order)
+                except (ValueError, AccountingError) as exc:
+                    self._reject_submission(order, str(exc))
+                    return order
             self._submission_unknown(order, "Awaiting submission acknowledgment", log_level=logging.DEBUG)
+            if getattr(self, "_accounting", None):
+                order._account_admission_revision = self._accounting.revision
         try:
             exchange_order = _send_order(extra_params)
             self._accept_submission(order, exchange_order)
@@ -644,7 +1175,7 @@ class LiveExecutor:
             # Phemex 20004 TE_ERR_INCONSISTENT_POS_MODE: the account is in hedge mode
             # despite our startup switch (startup may have silently failed if positions
             # were open at that time). Retry with positionSide and flag hedge mode.
-            if "20004" in err_str or "INCONSISTENT_POS_MODE" in err_str:
+            if not getattr(self, '_accounting', None) and ("20004" in err_str or "INCONSISTENT_POS_MODE" in err_str):
                 logger.warning(
                     f"TE_ERR_INCONSISTENT_POS_MODE on {symbol} — account is in hedge mode. "
                     f"Retrying with positionSide and switching to hedge-mode operation."
@@ -679,7 +1210,7 @@ class LiveExecutor:
             raise ValueError(f"Order {order_id} not found")
 
         order = self._orders[order_id]
-        if order.status == OrderStatus.FILLED:
+        if order.status == OrderStatus.FILLED and not getattr(self, '_accounting', None):
             return None
         if order.status == OrderStatus.REJECTED:
             return None
@@ -700,7 +1231,7 @@ class LiveExecutor:
             return None
 
         order = self._orders[order_id]
-        if order.status in (OrderStatus.FILLED, OrderStatus.REJECTED, OrderStatus.CANCELLED):
+        if order.status in (OrderStatus.FILLED, OrderStatus.REJECTED, OrderStatus.CANCELLED) and not getattr(self, '_accounting', None):
             return None
 
         if self.dry_run:
@@ -729,6 +1260,8 @@ class LiveExecutor:
 
     def _process_exchange_order(self, order: Order, ex_order: Dict, source: str = "rest") -> Optional[Fill]:
         """Apply explicit cumulative execution facts; incomplete terminal data stays unresolved."""
+        if getattr(self, "_accounting", None):
+            return self._process_accounting_order(order, ex_order, source)
         with self._state_lock:
             self._execution_revision = getattr(self, "_execution_revision", 0) + 1
             if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
@@ -858,6 +1391,7 @@ class LiveExecutor:
                     raise JournalError("Cannot cancel an order without durable request identity")
                 self._execution_revision = getattr(self, "_execution_revision", 0) + 1
                 self._cancel_requested_orders.add(order_id)
+                self.invalidate_account('CANCELLATION_PENDING')
                 self._persist_order(order, kind="cancel_intent")
             exchange_id = self._exchange_order_map.get(order_id)
             if not exchange_id:
@@ -923,6 +1457,8 @@ class LiveExecutor:
                     and order.order_id not in self._reduce_only_order_ids]
 
     def get_balance(self) -> float:
+        if getattr(self, "_accounting", None):
+            return self._accounting.view()['free']
         return self._cached_balance
 
     def get_open_position_symbols(self) -> set:
@@ -936,6 +1472,10 @@ class LiveExecutor:
         Price freshness belongs to the caller; the live service supplies only
         recent successful observations. The existing balance basis is unchanged.
         """
+        if getattr(self, "_accounting", None):
+            view = self._accounting.view()
+            self.last_equity_error = None if view['entry_eligible'] else ', '.join(view['reasons'])
+            return view['equity'] if view['entry_eligible'] else None
         with self._state_lock:
             try:
                 if not self.balance_known or not math.isfinite(self._cached_balance):
@@ -963,13 +1503,36 @@ class LiveExecutor:
             return equity
 
     def get_pnl(self, market_prices: Dict[str, float]) -> Optional[float]:
+        if getattr(self, "_accounting", None):
+            return self._accounting.balance_status()['pnl']
         equity = self.get_equity(market_prices)
         return None if equity is None else equity - self._initial_balance
 
     def get_trade_history(self) -> List[Fill]:
+        if getattr(self, "_accounting", None):
+            return [u for u in self._live_updates if u.quantity > 0]
         return self._fills.copy()
 
     def get_statistics(self) -> Dict:
+        if getattr(self, '_accounting', None):
+            with self._state_lock:
+                states = [s for oid, s in self._financial_states.items()
+                          if oid not in self._restored_ids and s.filled_quantity > 0]
+                complete = all(s.financially_complete for s in states)
+                fees = {}
+                for state in states:
+                    for fee in state.fees:
+                        fees.setdefault(fee.currency, []).append(fee.amount)
+                from backend.bot.executor.accounting_models import exact_sum
+                totals = {k: float(exact_sum(v)) for k, v in fees.items()}
+                return dict(total_orders=len(self._orders),
+                    filled_orders=sum(o.status == OrderStatus.FILLED for o in self._orders.values()),
+                    cancelled_orders=sum(o.status == OrderStatus.CANCELLED for o in self._orders.values()),
+                    rejected_orders=sum(o.status == OrderStatus.REJECTED for o in self._orders.values()),
+                    total_fills=len(self.get_trade_history()), financial_evidence_complete=complete,
+                    fee_totals=totals, total_fees=totals.get('USDT', 0.) if complete and set(totals) <= {'USDT'} else None,
+                    total_volume=float(exact_sum(s.cost for s in states)) if all(s.cost is not None and s.cost_quantity == s.filled_quantity and not s.reasons for s in states) else None,
+                    current_balance=self.get_balance(), basis='identified_execution_evidence')
         total_orders = len(self._orders)
         filled_orders = sum(1 for o in self._orders.values() if o.status == OrderStatus.FILLED)
         cancelled_orders = sum(1 for o in self._orders.values() if o.status == OrderStatus.CANCELLED)
@@ -994,6 +1557,7 @@ class LiveExecutor:
         side: str,
         quantity: float,
         stop_price: float,
+        parent_entry_order_id: Optional[str] = None,
     ) -> Order:
         """
         Place a reduce-only stop-market order on Phemex.
@@ -1002,7 +1566,7 @@ class LiveExecutor:
         down. Complement to PositionManager's software polling, not a replacement.
         Side should be the CLOSING side: SELL for a LONG, BUY for a SHORT.
         """
-        pending = self._recover_uncertain_protection(symbol, side, OrderType.STOP_LOSS)
+        pending = self._recover_uncertain_protection(symbol, side, OrderType.STOP_LOSS, parent_entry_order_id)
         if pending is not None:
             return pending
         if not self.dry_run:
@@ -1021,6 +1585,7 @@ class LiveExecutor:
             quantity=quantity,
             price=stop_price,
             stop_price=stop_price,
+            parent_entry_order_id=parent_entry_order_id,
             status=OrderStatus.OPEN,
         )
         with self._state_lock:
@@ -1088,6 +1653,7 @@ class LiveExecutor:
         side: str,      # closing side: SELL for LONG, BUY for SHORT
         quantity: float,
         tp_price: float,
+        parent_entry_order_id: Optional[str] = None,
     ) -> Order:
         """
         Place a reduce-only limit order as an exchange-native take profit.
@@ -1096,7 +1662,7 @@ class LiveExecutor:
         position card's TP/SL section on Phemex and fills at the exact price
         rather than market-slipping through it.
         """
-        pending = self._recover_uncertain_protection(symbol, side, OrderType.TAKE_PROFIT)
+        pending = self._recover_uncertain_protection(symbol, side, OrderType.TAKE_PROFIT, parent_entry_order_id)
         if pending is not None:
             return pending
         if not self.dry_run:
@@ -1110,6 +1676,7 @@ class LiveExecutor:
             quantity=quantity,
             price=tp_price,
             stop_price=tp_price,
+            parent_entry_order_id=parent_entry_order_id,
             status=OrderStatus.OPEN,
         )
         with self._state_lock:
@@ -1166,6 +1733,7 @@ class LiveExecutor:
         quantity: float,
         activation_price: float,
         callback_rate: float,   # percentage, e.g. 1.5 for 1.5%
+        parent_entry_order_id: Optional[str] = None,
     ) -> Order:
         """
         Place an exchange-native trailing stop on Phemex.
@@ -1178,7 +1746,7 @@ class LiveExecutor:
         Phemex manages the moving stop on their servers — survives server restarts.
         Placed alongside the fixed SL; closeOnTrigger ensures only one fires.
         """
-        pending = self._recover_uncertain_protection(symbol, side, OrderType.TRAILING_STOP)
+        pending = self._recover_uncertain_protection(symbol, side, OrderType.TRAILING_STOP, parent_entry_order_id)
         if pending is not None:
             return pending
         if not self.dry_run:
@@ -1192,6 +1760,7 @@ class LiveExecutor:
             quantity=quantity,
             price=activation_price,
             stop_price=activation_price,
+            parent_entry_order_id=parent_entry_order_id,
             status=OrderStatus.OPEN,
         )
         with self._state_lock:
@@ -1263,6 +1832,9 @@ class LiveExecutor:
         self, exchange_id: str, client_order_id: str, status: str, filled_qty: float, avg_price: float
     ) -> None:
         """Recover order identity and apply only explicit WebSocket execution facts."""
+        if getattr(self, '_accounting', None):
+            self.invalidate_account('WS_EXECUTION_EVIDENCE_INVALID')
+            raise AccountingError('Raw WebSocket order evidence required; use apply_ws_order')
         with self._state_lock:
             order_id = self._reverse_order_map.get(exchange_id)
             if not order_id and client_order_id in self._orders:
@@ -1286,6 +1858,9 @@ class LiveExecutor:
 
     def reconcile_balance(self) -> float:
         """Fetch balance from exchange and update local cache."""
+        if getattr(self, "_accounting", None):
+            self.reconcile_account()
+            return self.get_balance()
         new_balance = self._fetch_balance_from_exchange()
         if abs(new_balance - self._cached_balance) > 1.0:
             logger.warning(
@@ -1302,6 +1877,9 @@ class LiveExecutor:
         parsing and unsupported multi-position failures must not clear local state
         or be interpreted by callers as evidence that a position closed.
         """
+        if getattr(self, "_accounting", None):
+            view = self._accounting.view()
+            return set(self.get_open_position_symbols()) if view['observation_valid'] else None
         if self.dry_run:
             return {sym for sym, qty in self._positions.items() if abs(qty) > 1e-9}
         try:
@@ -1359,6 +1937,9 @@ class LiveExecutor:
 
     def preflight_check(self) -> Dict:
         """Run connectivity + balance + position check before session start."""
+        if getattr(self, '_accounting', None):
+            from backend.bot.executor.live_preflight import read_only_preflight
+            return read_only_preflight(self._adapter, self.min_balance_usd)
         import time as _time
         issues = []
         result: Dict = {"ok": False, "balance": 0.0, "open_positions": [], "issues": issues}

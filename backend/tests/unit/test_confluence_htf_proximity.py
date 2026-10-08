@@ -1,4 +1,6 @@
-import math
+from datetime import datetime, timezone
+from types import SimpleNamespace
+import pytest
 from backend.strategy.confluence.scorer import calculate_confluence_score
 from backend.shared.models.smc import SMCSnapshot
 from backend.shared.models.indicators import IndicatorSet, IndicatorSnapshot
@@ -20,32 +22,30 @@ def make_indicators(atr: float = 2.0) -> IndicatorSet:
     return IndicatorSet(by_timeframe={"4H": snap})
 
 
-def test_htf_proximity_factor_added_and_carries_context():
-    smc = SMCSnapshot(order_blocks=[], fvgs=[], structural_breaks=[], liquidity_sweeps=[])
-    indicators = make_indicators(atr=2.0)
+@pytest.mark.parametrize("direction,aligned_type,opposing_type", [
+    ("LONG", "support", "resistance"),
+    ("SHORT", "resistance", "support"),
+])
+def test_htf_proximity_contributes_once_to_composite(direction, aligned_type, opposing_type):
+    """The old standalone factor was replaced by HTF Composite before this audit."""
     cfg = ScanConfig()
-    cfg.htf_proximity_enabled = True
-    cfg.htf_proximity_weight = 0.12
-    cfg.primary_planning_timeframe = "4H"
-    htf_ctx = {"within_atr": 0.5, "within_pct": 1.0, "timeframe": "1d", "type": "support"}
+    cfg.primary_planning_timeframe = "4h"
+    cfg.structure_timeframes = ("4h",)
 
-    breakdown = calculate_confluence_score(
-        smc_snapshot=smc,
-        indicators=indicators,
-        config=cfg,
-        direction="LONG",
-        htf_context=htf_ctx,
-    )
+    def score(level_type):
+        smc = SMCSnapshot(order_blocks=[], fvgs=[], structural_breaks=[], liquidity_sweeps=[])
+        smc.htf_levels = [SimpleNamespace(price=100., timeframe="4h", level_type=level_type)]
+        result = calculate_confluence_score(
+            smc, make_indicators(), cfg, direction, current_price=100.,
+            as_of=datetime(2001, 2, 5, 8, tzinfo=timezone.utc),
+        )
+        composites = [factor for factor in result.factors if factor.name == "HTF Composite"]
+        assert len(composites) == 1
+        assert not any(factor.name == "HTF Level Proximity" for factor in result.factors)
+        return composites[0]
 
-    # Ensure factor exists
-    names = [f.name for f in breakdown.factors]
-    assert "HTF Level Proximity" in names
-
-    # Carried fields
-    assert math.isclose(breakdown.htf_proximity_atr or 0, 0.5, rel_tol=1e-6)
-    assert math.isclose(breakdown.htf_proximity_pct or 0, 1.0, rel_tol=1e-6)
-    assert breakdown.nearest_htf_level_timeframe == "1d"
-    assert breakdown.nearest_htf_level_type == "support"
-
-    # Score should be > 0
-    assert breakdown.total_score >= 0.0
+    aligned = score(aligned_type)
+    opposing = score(opposing_type)
+    assert aligned.score > opposing.score
+    assert aligned_type.title() in aligned.rationale
+    assert "(opposing)" in opposing.rationale

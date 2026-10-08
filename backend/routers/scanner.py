@@ -274,21 +274,28 @@ async def get_smc_config():
 @router.put("/api/config/smc")
 async def update_smc_config(update: SMCConfigUpdate):
     """Update SMC detector configuration at runtime."""
-    orchestrator = get_orchestrator()
-    if not orchestrator:
-        raise HTTPException(status_code=500, detail="Orchestrator not initialized")
+    def run_operation():
+        lock = get_orchestrator_lock()
+        if lock is None:
+            raise HTTPException(status_code=500, detail="Scanner lock not initialized")
+        with lock:
+            orchestrator = get_orchestrator()
+            if not orchestrator:
+                raise HTTPException(status_code=500, detail="Orchestrator not initialized")
 
-    current = orchestrator.smc_config.to_dict()
-    overrides = {k: v for k, v in update.dict().items() if v is not None}
-    if not overrides:
-        return {"status": "no_changes", "smc_config": current}
-    merged = {**current, **overrides}
-    try:
-        new_cfg = SMCConfig.from_dict(merged)
-        orchestrator.update_smc_config(new_cfg)
-        return {"status": "updated", "smc_config": new_cfg.to_dict()}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+            current = orchestrator.smc_config.to_dict()
+            overrides = {k: v for k, v in update.dict().items() if v is not None}
+            if not overrides:
+                return {"status": "no_changes", "smc_config": current}
+            merged = {**current, **overrides}
+            try:
+                new_cfg = SMCConfig.from_dict(merged)
+                orchestrator.update_smc_config(new_cfg)
+                return {"status": "updated", "smc_config": new_cfg.to_dict()}
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return await asyncio.to_thread(run_operation)
 
 
 # =============================================================================
@@ -595,111 +602,114 @@ async def get_signals(
     target_symbol: Optional[str] = Query(default=None),
 ):
     """Generate trading signals synchronously."""
-    orchestrator = get_orchestrator()
-    orchestrator_lock = get_orchestrator_lock()
-    exchange_adapters = get_exchange_adapters()
-    cleanup_old_scan_jobs = _shared_state.get("cleanup_old_scan_jobs")
-    IngestionPipeline = _shared_state.get("IngestionPipeline")
+    def run_operation():
+        orchestrator = get_orchestrator()
+        orchestrator_lock = get_orchestrator_lock()
+        exchange_adapters = get_exchange_adapters()
+        cleanup_old_scan_jobs = _shared_state.get("cleanup_old_scan_jobs")
+        IngestionPipeline = _shared_state.get("IngestionPipeline")
 
-    if not all([orchestrator, orchestrator_lock, exchange_adapters]):
-        raise HTTPException(status_code=500, detail="Scanner components not initialized")
+        if not all([orchestrator, orchestrator_lock, exchange_adapters]):
+            raise HTTPException(status_code=500, detail="Scanner components not initialized")
 
-    try:
-        # Resolve requested exchange adapter
-        exchange_key = exchange.lower()
-        if exchange_key not in exchange_adapters:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported exchange: {exchange}. Supported: {', '.join(exchange_adapters.keys())}",
+        try:
+            # Resolve requested exchange adapter
+            exchange_key = exchange.lower()
+            if exchange_key not in exchange_adapters:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported exchange: {exchange}. Supported: {', '.join(exchange_adapters.keys())}",
+                )
+
+            # Create fresh adapter instance for this scan
+            current_adapter = exchange_adapters[exchange_key]()
+
+            # Configure adapter default type
+            if hasattr(current_adapter, "default_type"):
+                current_adapter.default_type = market_type
+
+            # Resolve requested mode
+            try:
+                mode = get_mode(sniper_mode)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+
+            # Determine effective threshold
+            effective_min = min_score if min_score > 0 else mode.min_confluence_score
+
+            logger.info(
+                "Scan request: mode=%s, exchange=%s, leverage=%dx, market=%s",
+                mode.name,
+                exchange,
+                leverage,
+                market_type,
             )
 
-        # Create fresh adapter instance for this scan
-        current_adapter = exchange_adapters[exchange_key]()
+            # Resolve symbols
+            symbols = select_symbols(
+                adapter=current_adapter,
+                limit=limit,
+                majors=majors,
+                altcoins=altcoins,
+                meme_mode=meme_mode,
+                leverage=leverage,
+                market_type=market_type,
+            )
 
-        # Configure adapter default type
-        if hasattr(current_adapter, "default_type"):
-            current_adapter.default_type = market_type
+            with orchestrator_lock:
+                # Apply mode safely
+                orchestrator.apply_mode(mode)
+                orchestrator.config.min_confluence_score = effective_min
+                # Inject leverage
+                try:
+                    setattr(orchestrator.config, "leverage", leverage)
+                except Exception:
+                    pass
+                orchestrator.config.macro_overlay_enabled = macro_overlay
 
-        # Resolve requested mode
-        try:
-            mode = get_mode(sniper_mode)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+                # Update exchange adapter
+                orchestrator.exchange_adapter = current_adapter
+                if IngestionPipeline:
+                    orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
 
-        # Determine effective threshold
-        effective_min = min_score if min_score > 0 else mode.min_confluence_score
+                # Run scan pipeline (with heartbeat — emits a cycle record on
+                # success and failure; powers /api/cycles/* observability).
+                trade_plans, rejection_summary = orchestrator.scan_with_heartbeat(symbols)
 
-        logger.info(
-            "Scan request: mode=%s, exchange=%s, leverage=%dx, market=%s",
-            mode.name,
-            exchange,
-            leverage,
-            market_type,
-        )
+            if cleanup_old_scan_jobs:
+                cleanup_old_scan_jobs()
 
-        # Resolve symbols
-        symbols = select_symbols(
-            adapter=current_adapter,
-            limit=limit,
-            majors=majors,
-            altcoins=altcoins,
-            meme_mode=meme_mode,
-            leverage=leverage,
-            market_type=market_type,
-        )
+            # Transform trade plans to API response format using shared utility
+            from backend.shared.utils.signal_transform import transform_trade_plans_to_signals
 
-        with orchestrator_lock:
-            # Apply mode safely
-            orchestrator.apply_mode(mode)
-            orchestrator.config.min_confluence_score = effective_min
-            # Inject leverage
-            try:
-                setattr(orchestrator.config, "leverage", leverage)
-            except Exception:
-                pass
-            orchestrator.config.macro_overlay_enabled = macro_overlay
+            signals, rejected_signals = transform_trade_plans_to_signals(
+                trade_plans, mode, current_adapter
+            )
 
-            # Update exchange adapter
-            orchestrator.exchange_adapter = current_adapter
-            if IngestionPipeline:
-                orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
+            # Merge late rejections (e.g. price validation)
+            stale_filtered_count = len(rejected_signals)
+            rejected_count = (len(symbols) - len(trade_plans)) + stale_filtered_count
 
-            # Run scan pipeline (with heartbeat — emits a cycle record on
-            # success and failure; powers /api/cycles/* observability).
-            trade_plans, rejection_summary = orchestrator.scan_with_heartbeat(symbols)
+            if stale_filtered_count > 0:
+                # Update rejection summary
+                rejection_summary["total_rejected"] += stale_filtered_count
+                rejection_summary["by_reason"]["risk_validation"] += stale_filtered_count
+                if "risk_validation" in rejection_summary["details"]:
+                    rejection_summary["details"]["risk_validation"].extend(rejected_signals)
 
-        if cleanup_old_scan_jobs:
-            cleanup_old_scan_jobs()
+            return {
+                "signals": signals,
+                "total": len(signals),
+                "scanned": len(symbols),
+                "rejected": rejected_count,
+                "stale_filtered": stale_filtered_count,
+                "mode": mode.name,
+                "rejections": rejection_summary,
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Scan failed: %s", e)
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
-        # Transform trade plans to API response format using shared utility
-        from backend.shared.utils.signal_transform import transform_trade_plans_to_signals
-
-        signals, rejected_signals = transform_trade_plans_to_signals(
-            trade_plans, mode, current_adapter
-        )
-
-        # Merge late rejections (e.g. price validation)
-        stale_filtered_count = len(rejected_signals)
-        rejected_count = (len(symbols) - len(trade_plans)) + stale_filtered_count
-
-        if stale_filtered_count > 0:
-            # Update rejection summary
-            rejection_summary["total_rejected"] += stale_filtered_count
-            rejection_summary["by_reason"]["risk_validation"] += stale_filtered_count
-            if "risk_validation" in rejection_summary["details"]:
-                rejection_summary["details"]["risk_validation"].extend(rejected_signals)
-
-        return {
-            "signals": signals,
-            "total": len(signals),
-            "scanned": len(symbols),
-            "rejected": rejected_count,
-            "stale_filtered": stale_filtered_count,
-            "mode": mode.name,
-            "rejections": rejection_summary,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Scan failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return await asyncio.to_thread(run_operation)

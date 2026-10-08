@@ -24,6 +24,7 @@ async def exercise(directory):
     from backend.bot.executor.execution_journal import ExecutionJournal
     from backend.bot.executor.live_executor import LiveExecutor
     from backend.bot.live_trading_service import LiveTradingService
+    from backend.tests.unit.runtime_fixtures import prepare_adapter, initialize_fixture
 
     results = []
     def record(name, expected, actual, control=False):
@@ -84,15 +85,18 @@ async def exercise(directory):
             position_side = ("long" if side == "BUY" else "short") if same_side else ("short" if side == "BUY" else "long")
             adapter = S(supports_trading=lambda: True, fetch_balance=lambda: {"free": {"USDT": 1000}},
                         set_margin_mode=lambda *a, **k: None, set_leverage=lambda *a, **k: None,
-                        create_order=lambda **kw: {"id": "remote", "status": "open", "filled": 0},
-                        fetch_order=lambda *a: {"id": "remote", "status": "open", "filled": 0},
-                        fetch_positions=lambda *a: [{"symbol": symbol, "contracts": 3,
-                                                    "side": position_side, "entryPrice": 100}])
-            journal = ExecutionJournal(directory / f"{side}-{same_side}.sqlite3", "offline-boundary")
+                        create_order=Mock(return_value={"id": "remote", "status": "open", "filled": 0}),
+                        fetch_order=Mock(return_value={"id": "remote", "status": "open", "filled": 0}),
+                        fetch_positions=Mock(return_value=[]))
+            prepare_adapter(adapter, symbol=symbol, binding='offline-boundary')
+            journal = ExecutionJournal(directory / f"{side}-{same_side}.sqlite3", "offline-boundary",
+                                       runtime=True, environment='testnet')
             ex = LiveExecutor(adapter, journal=journal, max_position_size_usd=2000, max_total_exposure_usd=2000)
             try:
-                ex.set_entry_admission(True)
+                initialize_fixture(ex)
                 order = ex.place_order(symbol, side, "LIMIT", 10, price=100)
+                adapter.fetch_positions.return_value = [{"symbol": symbol, "contracts": 3,
+                    "side": position_side, "entryPrice": 100}]
                 ex.refresh_order(order.order_id)
                 if order.status.value != "OPEN" or order.filled_quantity != 0:
                     raise RuntimeError("Original-identity order probe must show an unfilled order")
@@ -105,22 +109,21 @@ async def exercise(directory):
                 ex.close()
 
     # A full page can end on the same millisecond as the omitted next row.
-    rows = [{"id": f"fill-{i}", "order": "fixture", "symbol": symbol, "side": "buy",
-             "price": 100, "amount": 1, "cost": 100, "fee": {"currency": "USDT", "cost": 0.1},
-             "timestamp": 1000} for i in range(201)]
+    rows = [{"execId": f"fill-{i}", "orderId": "fixture", "symbol": "BTCUSDT", "side": 1,
+             "currency": "USDT", "execQtyRq": "1", "execValueRv": "100", "execFeeRv": ".1",
+             "createdAt": 1000} for i in range(201)]
     svc = LiveTradingService()
-    def page(symbol=None, since=None, limit=200):
-        return [r for r in rows if since is None or r["timestamp"] >= since][:limit]
-    svc.adapter = S(fetch_my_trades=Mock(side_effect=page))
+    def page(offset=0, limit=200):
+        return dict(scope='phemex:swap:USDT',offset=offset,total=len(rows),rows=rows[offset:offset+limit])
+    svc.adapter = S(fetch_execution_history_page=Mock(side_effect=page))
     svc._fills_log_path = directory / "fills.jsonl"
     svc._save_last_trade_sync_ts = Mock()  # Cursor persistence is not under examination.
     await svc._run_backfill_once()
     await svc._run_backfill_once()
     saved = [json.loads(line) for line in svc._fills_log_path.read_text(encoding="utf-8").splitlines()]
     record("backfill_equal_timestamp_page_boundary", 201, len(saved))
-    record("backfill_fixture_reached_second_request", {"calls": 2, "second_since": 1001},
-           {"calls": svc.adapter.fetch_my_trades.call_count,
-            "second_since": svc.adapter.fetch_my_trades.call_args.kwargs["since"]}, True)
+    record("backfill_fixture_reached_second_page_and_repeated_sweep", [0,200,0,0,200,0],
+           [c.kwargs['offset'] for c in svc.adapter.fetch_execution_history_page.call_args_list], True)
     return results
 
 

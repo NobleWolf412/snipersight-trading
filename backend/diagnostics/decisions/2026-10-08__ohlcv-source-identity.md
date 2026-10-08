@@ -1,0 +1,11 @@
+# OHLCV cache source and depth
+
+The process-global cache is keyed only by symbol/timeframe. Scanner, paper bot, replay and chart callers use it with different adapters, environments and market types. It also ignores requested history depth, so a small cached sample can satisfy a larger request. The chart's cold-fetch path passes `market_type` to adapters that do not accept it and silently tries the opposite market.
+
+Decision: namespace production cache entries by concrete adapter class and public CCXT venue, environment flag, endpoint identity and market defaults; include no credentials. Reuse only a matching known source and sufficient originally requested depth. Unknown source metadata disables shared reuse. Preserve anonymous cache API compatibility in a separate namespace; anonymous readers cannot see production entries. Pipeline invalidation targets its source, while operator-wide invalidation retains all-source semantics.
+
+Upstream: public exchange adapters and requested history depth. Downstream: scanner/bot/replay ingestion, chart candles, pure-paper ticker-failure fallback, cache statistics/invalidation. Update all direct readers. Chart adapter resolution precedes cache access; only its configured market is supported, and the cold path uses the adapter's actual signature instead of trying an opposite market. Runtime accounting still requires fresh ticker evidence and cannot use this fallback.
+
+Alternatives: private cache per pipeline eliminates mixing but removes safe same-source reuse; keyed by exchange name alone still mixes spot/perpetual and sandbox/production. Use explicit public provenance, conservatively decline reuse when unavailable. Rollback must include every reader with the cache API changes. Tests use scripted sources only. No retained history is changed.
+
+Verification: six original failures, fifteen new tests passing; 1,188 selected backend tests pass in 62.48 s. Four contract inventories and eight smoke categories compare clean. Cache diagnostics add `source_namespace` and `requested_limit`; fingerprints/inventory checks alone do not validate those payload fields. Runtime-accounting fallback exclusion is explicitly tested. Actual history and protected unrelated settings remain unchanged.

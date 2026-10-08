@@ -11,7 +11,7 @@
  *                   stable_base / non_perp / bucket_excluded / limit_exhausted).
  *                   Backed by /api/scanner/universe; latest-snapshot
  *                   semantics (NOT per-run) — see docstring note below.
- *   DATA          — rejectionSummary.by_reason.no_data + details
+ *   DATA          — missing candle/market context counts + details
  *   CRITICAL_TF   — rejectionSummary.by_reason.missing_critical_tf + details
  *   FEATURES      — rejectionSummary.features_breakdown (indicator_failures +
  *                   smc_rejections counts + samples) — backend extension A
@@ -58,7 +58,8 @@ type CategoryKey =
   | 'CRITICAL_TF'
   | 'FEATURES'
   | 'CONFLUENCE'
-  | 'PLANNER';
+  | 'PLANNER'
+  | 'OTHER';
 
 interface CategorySubBucket {
   reason: string;
@@ -124,13 +125,15 @@ function pickSingleReason(
 }
 
 function buildData(entry: ScanHistoryEntry): Category {
-  const sub = pickSingleReason(entry.rejectionSummary, 'no_data');
+  const subBuckets = ['no_data', 'market_context_unavailable', 'historical_context_unavailable']
+    .map((reason) => pickSingleReason(entry.rejectionSummary, reason))
+    .filter((bucket) => bucket.count > 0);
   return {
     key: 'DATA',
     label: 'DATA',
-    description: 'multi-timeframe fetch failures',
-    totalCount: sub.count,
-    subBuckets: sub.count > 0 ? [sub] : [],
+    description: 'required candle and market-context inputs',
+    totalCount: subBuckets.reduce((total, bucket) => total + bucket.count, 0),
+    subBuckets,
   };
 }
 
@@ -170,7 +173,7 @@ function buildFeatures(entry: ScanHistoryEntry): Category {
   return {
     key: 'FEATURES',
     label: 'FEATURES',
-    description: 'indicator + SMC stage rejections',
+    description: 'indicator + SMC diagnostics; may overlap run rejections',
     totalCount: ind.count + smc.count,
     subBuckets,
   };
@@ -205,15 +208,24 @@ function buildPlanner(entry: ScanHistoryEntry): Category {
   };
 }
 
-function buildCategories(entry: ScanHistoryEntry): Category[] {
-  return [
-    buildUniverse(entry),
-    buildData(entry),
-    buildCriticalTf(entry),
-    buildFeatures(entry),
-    buildConfluence(entry),
-    buildPlanner(entry),
+export function buildCategories(entry: ScanHistoryEntry): Category[] {
+  const summary = entry.rejectionSummary ?? {
+    total_rejected: entry.signalsRejected, by_reason: entry.rejectionBreakdown ?? {},
+  };
+  const source = { ...entry, rejectionSummary: summary };
+  const categories = [
+    buildUniverse(source), buildData(source), buildCriticalTf(source),
+    buildFeatures(source), buildConfluence(source), buildPlanner(source),
   ];
+  const mapped = new Set(categories.filter(c => c.key !== 'UNIVERSE' && c.key !== 'FEATURES')
+    .flatMap(c => c.subBuckets.map(bucket => bucket.reason)));
+  const other = Object.entries(summary.by_reason ?? {})
+    .filter(([reason, count]) => count > 0 && !mapped.has(reason))
+    .map(([reason]) => pickSingleReason(summary, reason));
+  categories.push({ key: 'OTHER', label: 'OTHER GATES / ERRORS',
+    description: 'Other recorded run rejection reasons',
+    totalCount: other.reduce((sum, bucket) => sum + bucket.count, 0), subBuckets: other });
+  return categories;
 }
 
 // ─── Chip tone selection ──────────────────────────────────────────────────
@@ -237,6 +249,8 @@ const REASON_PRETTY: Record<string, string> = {
   limit_exhausted: 'SELECTION CAP HIT',
   // Pipeline stages
   no_data: 'DATA FETCH FAILED',
+  market_context_unavailable: 'CURRENT MARKET CONTEXT UNAVAILABLE',
+  historical_context_unavailable: 'HISTORICAL CONTEXT UNAVAILABLE',
   missing_critical_tf: 'CRITICAL TF MISSING',
   indicator_failures: 'INDICATOR COMPUTE FAIL',
   smc_rejections: 'SMC PATTERN MISSED',
@@ -298,18 +312,19 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
         : false));
 
   const categories = buildCategories(entry);
-  const grandTotal = categories.reduce((s, c) => s + c.totalCount, 0);
+  const grandTotal = entry.rejectionSummary?.total_rejected ?? entry.signalsRejected ?? 0;
 
   return (
     <section className="panel" style={{ padding: 0 }}>
-      <SectionHeader right={`${grandTotal} total rejected`}>
+      <SectionHeader right={`${grandTotal} run rejections`}>
         // REJECTION BREAKDOWN
       </SectionHeader>
       <div style={{ padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {/* §12 ordering: summary chips first */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {categories.map((cat) => {
-            const tone = chipTone(cat.totalCount, grandTotal);
+            const separate = cat.key === 'UNIVERSE' || cat.key === 'FEATURES';
+            const tone = separate ? (cat.totalCount > 0 ? 'amber' : undefined) : chipTone(cat.totalCount, grandTotal);
             const isOpen = expandedKey === cat.key;
             const disabled = cat.totalCount === 0 && cat.subBuckets.length === 0;
             return (
@@ -337,6 +352,10 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
           })}
         </div>
 
+        <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+          Universe and feature counts are separate diagnostics and may overlap run rejections.
+        </div>
+
         {/* Zero-candidates negative state */}
         {isZeroCandidates && (
           <div
@@ -352,8 +371,8 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
               textTransform: 'uppercase',
             }}
           >
-            ◌ no candidates qualified at universe selection — check
-            /api/scanner/universe drop reasons (universe chip above)
+            ◌ no symbols scanned, or the latest universe snapshot excludes all candidates.
+            Review the universe details and scan status.
           </div>
         )}
 

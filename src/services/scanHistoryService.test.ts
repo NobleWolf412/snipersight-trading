@@ -61,9 +61,9 @@ describe('scanHistoryService', () => {
   });
 
   it('clears recent scans', () => {
-    addDummy('recon',65,4,6);
-    // simulate older scan by manipulating timestamp
-    const old = addDummy('strike',60,2,3);
+    const old = addDummy('overwatch',65,4,6);
+    // Last saved is first; the original entry remains at index 1.
+    addDummy('strike',60,2,3);
     const all = scanHistoryService.getAllScans();
     // modify second entry timestamp to 2 hours ago
     const twoHoursAgo = new Date(Date.now() - 2*60*60*1000).toISOString();

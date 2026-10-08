@@ -1,3 +1,4 @@
+import type { AccountBalance, AccountingStatus, ExecutionReportState, ExecutionHistoryStatus, ExecutionOutcomeSnapshot } from './accounting';
 /**
  * paperTradingService — Phase 3 follow-up 3z.e
  *
@@ -104,6 +105,10 @@ export interface CompletedPaperTrade {
   max_adverse: number;
   trade_type: string;
   confidence_score: number;
+  execution_accounting?: ExecutionOutcomeSnapshot;
+  execution_report_prepared_at?: string;
+  gross_pnl?: number;
+  execution_fees?: Record<string, string>;
 }
 
 export interface PaperTradingStatus {
@@ -120,13 +125,11 @@ export interface PaperTradingStatus {
   decision_mode?: 'thesis' | 'legacy';
   fresh_entry_price?: boolean;
   positions: PaperPosition[];
-  balance: {
-    initial: number;
-    current: number;
-    equity: number;
-    pnl: number;
-    pnl_pct: number;
-  };
+  balance: AccountBalance;
+  accounting?: AccountingStatus;
+  outcome_basis?: 'legacy_estimate' | 'executions_excluding_funding_and_transfers';
+  execution_reporting?: Record<string, ExecutionReportState>;
+  execution_history?: ExecutionHistoryStatus;
   statistics: {
     total_trades: number;
     winning_trades: number;

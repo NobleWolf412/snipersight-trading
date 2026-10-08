@@ -449,7 +449,8 @@ configure_replay_router(exchange_adapter=orchestrator.exchange_adapter)
 
 # Configure scanner service for background scan job management
 scanner_service = configure_scanner_service(
-    orchestrator=orchestrator, exchange_adapters=EXCHANGE_ADAPTERS, log_handler=scan_job_log_handler
+    orchestrator=orchestrator, exchange_adapters=EXCHANGE_ADAPTERS,
+    log_handler=scan_job_log_handler, orchestrator_lock=orchestrator_lock,
 )
 
 app.include_router(scanner_router)
@@ -728,25 +729,32 @@ async def get_smc_config():
 @app.put("/api/config/smc")
 async def update_smc_config(update: SMCConfigUpdate):
     """Update SMC detector configuration at runtime."""
-    current = orchestrator.smc_config.to_dict()
-    overrides = {k: v for k, v in update.dict().items() if v is not None}
-    if not overrides:
-        return {"status": "no_changes", "smc_config": current}
-    merged = {**current, **overrides}
-    try:
-        new_cfg = SMCConfig.from_dict(merged)
-        orchestrator.update_smc_config(new_cfg)
-        return {"status": "updated", "smc_config": new_cfg.to_dict()}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    def run_operation():
+        lock = orchestrator_lock
+        if lock is None:
+            raise HTTPException(status_code=500, detail="Scanner lock not initialized")
+        with lock:
+            current = orchestrator.smc_config.to_dict()
+            overrides = {k: v for k, v in update.dict().items() if v is not None}
+            if not overrides:
+                return {"status": "no_changes", "smc_config": current}
+            merged = {**current, **overrides}
+            try:
+                new_cfg = SMCConfig.from_dict(merged)
+                orchestrator.update_smc_config(new_cfg)
+                return {"status": "updated", "smc_config": new_cfg.to_dict()}
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
 
-        from backend.bot.telemetry.events import create_error_event
+                from backend.bot.telemetry.events import create_error_event
 
-        telemetry = get_telemetry_logger()
-        telemetry.log_event(
-            create_error_event(error_message=str(e), error_type=type(e).__name__, run_id=None)
-        )
-        raise HTTPException(status_code=500, detail=str(e)) from e
+                telemetry = get_telemetry_logger()
+                telemetry.log_event(
+                    create_error_event(error_message=str(e), error_type=type(e).__name__, run_id=None)
+                )
+                raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return await asyncio.to_thread(run_operation)
 
 
 @app.get("/api/debug/signals_schema")
@@ -761,80 +769,87 @@ async def debug_signals_schema(
     Returns compact summary of signals with smc_geometry and analysis keys present.
     Use to confirm backend enrichment contract without pipeline noise.
     """
-    try:
-        # Get signals using main endpoint logic but return minimal schema summary
-        from backend.analysis.pair_selection import select_symbols
+    def run_operation():
+        lock = orchestrator_lock
+        if lock is None:
+            raise HTTPException(status_code=500, detail="Scanner lock not initialized")
+        with lock:
+            try:
+                # Get signals using main endpoint logic but return minimal schema summary
+                from backend.analysis.pair_selection import select_symbols
 
-        exchange_key = exchange.lower()
-        if exchange_key not in EXCHANGE_ADAPTERS:
-            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange}")
+                exchange_key = exchange.lower()
+                if exchange_key not in EXCHANGE_ADAPTERS:
+                    raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange}")
 
-        current_adapter = EXCHANGE_ADAPTERS[exchange_key]()
-        mode = get_mode(sniper_mode)
-        orchestrator.apply_mode(mode)
-        orchestrator.exchange_adapter = current_adapter
-        orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
+                current_adapter = EXCHANGE_ADAPTERS[exchange_key]()
+                mode = get_mode(sniper_mode)
+                orchestrator.apply_mode(mode)
+                orchestrator.exchange_adapter = current_adapter
+                orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
 
-        symbols = select_symbols(
-            adapter=current_adapter,
-            limit=limit,
-            majors=True,
-            altcoins=True,
-            meme_mode=False,
-            leverage=1,
-        )
-        trade_plans, _ = orchestrator.scan(symbols)
+                symbols = select_symbols(
+                    adapter=current_adapter,
+                    limit=limit,
+                    majors=True,
+                    altcoins=True,
+                    meme_mode=False,
+                    leverage=1,
+                )
+                trade_plans, _ = orchestrator.scan(symbols)
 
-        # Extract schema info
-        schema_summary = []
-        for plan in trade_plans:
-            schema_summary.append(
-                {
-                    "symbol": plan.symbol,
-                    "has_smc_geometry": all(
-                        [
-                            plan.metadata.get("order_blocks_list") is not None,
-                            plan.metadata.get("fvgs_list") is not None,
-                            plan.metadata.get("structural_breaks_list") is not None,
-                            plan.metadata.get("liquidity_sweeps_list") is not None,
-                        ]
-                    ),
-                    "smc_geometry_keys": [
-                        k
-                        for k in [
-                            "order_blocks_list",
-                            "fvgs_list",
-                            "structural_breaks_list",
-                            "liquidity_sweeps_list",
-                        ]
-                        if plan.metadata.get(k) is not None
-                    ],
-                    "smc_geometry_counts": {
-                        "order_blocks": len(plan.metadata.get("order_blocks_list", [])),
-                        "fvgs": len(plan.metadata.get("fvgs_list", [])),
-                        "bos_choch": len(plan.metadata.get("structural_breaks_list", [])),
-                        "liquidity_sweeps": len(plan.metadata.get("liquidity_sweeps_list", [])),
-                    },
-                    "has_analysis": all(
-                        [
-                            "risk_reward" in [plan.risk_reward],
-                            hasattr(plan, "confluence_breakdown")
-                            or plan.confidence_score is not None,
-                        ]
-                    ),
-                    "analysis_keys": ["risk_reward", "confluence_score", "expected_value"],
+                # Extract schema info
+                schema_summary = []
+                for plan in trade_plans:
+                    schema_summary.append(
+                        {
+                            "symbol": plan.symbol,
+                            "has_smc_geometry": all(
+                                [
+                                    plan.metadata.get("order_blocks_list") is not None,
+                                    plan.metadata.get("fvgs_list") is not None,
+                                    plan.metadata.get("structural_breaks_list") is not None,
+                                    plan.metadata.get("liquidity_sweeps_list") is not None,
+                                ]
+                            ),
+                            "smc_geometry_keys": [
+                                k
+                                for k in [
+                                    "order_blocks_list",
+                                    "fvgs_list",
+                                    "structural_breaks_list",
+                                    "liquidity_sweeps_list",
+                                ]
+                                if plan.metadata.get(k) is not None
+                            ],
+                            "smc_geometry_counts": {
+                                "order_blocks": len(plan.metadata.get("order_blocks_list", [])),
+                                "fvgs": len(plan.metadata.get("fvgs_list", [])),
+                                "bos_choch": len(plan.metadata.get("structural_breaks_list", [])),
+                                "liquidity_sweeps": len(plan.metadata.get("liquidity_sweeps_list", [])),
+                            },
+                            "has_analysis": all(
+                                [
+                                    "risk_reward" in [plan.risk_reward],
+                                    hasattr(plan, "confluence_breakdown")
+                                    or plan.confidence_score is not None,
+                                ]
+                            ),
+                            "analysis_keys": ["risk_reward", "confluence_score", "expected_value"],
+                        }
+                    )
+
+                return {
+                    "count": len(schema_summary),
+                    "mode": mode.name,
+                    "exchange": exchange,
+                    "signals": schema_summary,
                 }
-            )
+            except Exception as e:
+                logger.error("Debug schema error: %s", e)
+                raise HTTPException(status_code=500, detail=str(e)) from e
 
-        return {
-            "count": len(schema_summary),
-            "mode": mode.name,
-            "exchange": exchange,
-            "signals": schema_summary,
-        }
-    except Exception as e:
-        logger.error("Debug schema error: %s", e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return await asyncio.to_thread(run_operation)
 
 
 @app.get("/api/scanner/diagnostics")
@@ -1891,31 +1906,14 @@ async def get_market_regime(
         regime = orchestrator._detect_global_regime()
 
         if not regime:
-            # Return neutral regime if detection fails
-            return {
-                "composite": "neutral",
-                "score": 50.0,
-                "dimensions": {
-                    "trend": "sideways",
-                    "volatility": "normal",
-                    "liquidity": "normal",
-                    "risk_appetite": "neutral",
-                    "derivatives": "balanced",
-                },
-                "trend_score": 50.0,
-                "volatility_score": 50.0,
-                "liquidity_score": 50.0,
-                "risk_score": 50.0,
-                "derivatives_score": 50.0,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+            raise HTTPException(status_code=503, detail="Market regime unavailable: required inputs could not be verified")
 
         # Get dominance data
         try:
             btc_dom, alt_dom, stable_dom = get_dominance_for_macro()
         except Exception as dom_err:
             logger.warning("Dominance fetch failed: %s", dom_err)
-            btc_dom, alt_dom, stable_dom = 50.0, 35.0, 15.0  # Fallback values
+            raise HTTPException(status_code=503, detail="Current dominance unavailable") from dom_err
 
         result = {
             "composite": regime.composite,
@@ -1944,6 +1942,8 @@ async def get_market_regime(
         REGIME_CACHE.set(cache_key, result)
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Market regime detection failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Regime detection error: {str(e)}") from e

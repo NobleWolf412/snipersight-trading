@@ -9,11 +9,39 @@ This filters out stale/mitigated zones so only fresh ones are used for entries.
 """
 
 from dataclasses import dataclass, replace
+from numbers import Number
 from typing import List, Tuple
 import pandas as pd
 from loguru import logger
 
 from backend.shared.models.smc import OrderBlock, FVG
+
+
+class FormationTimeError(ValueError):
+    """The candle/formation clock cannot establish causal zone state."""
+
+
+def candles_after_formation(df: pd.DataFrame, formation_time) -> pd.DataFrame:
+    """Compare instants in UTC; naive exchange timestamps denote UTC.
+
+    Never fall back to pre-formation candles when the time contract is invalid.
+    Return the original rows so callers retain OHLCV values and index identity.
+    """
+    try:
+        if not isinstance(df.index, pd.DatetimeIndex):
+            raise ValueError("candles require a DatetimeIndex")
+        if df.index.hasnans or not df.index.is_monotonic_increasing:
+            raise ValueError("candle timestamps must be valid and chronological")
+        if formation_time is None or isinstance(formation_time, Number):
+            raise ValueError("formation requires a timestamp, not a numeric epoch")
+        formed = pd.Timestamp(formation_time)
+        if pd.isna(formed):
+            raise ValueError("formation timestamp is missing")
+        formed = formed.tz_localize("UTC") if formed.tzinfo is None else formed.tz_convert("UTC")
+        clock = df.index.tz_localize("UTC") if df.index.tz is None else df.index.tz_convert("UTC")
+        return df.loc[clock > formed]
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise FormationTimeError(f"SMC_FORMATION_TIME_INVALID: {exc}") from exc
 
 
 @dataclass
@@ -90,18 +118,7 @@ def _calculate_ob_mitigation(ob: OrderBlock, df: pd.DataFrame) -> float:
     if df.empty:
         return ob.mitigation_level
 
-    # Get candles after OB formation
-    if hasattr(ob.timestamp, "to_pydatetime"):
-        ob_time = ob.timestamp
-    else:
-        ob_time = ob.timestamp
-
-    # Filter to candles after OB formed
-    try:
-        after_formation = df[df.index > ob_time]
-    except (TypeError, ValueError):
-        # If timestamp comparison fails, use all data
-        after_formation = df
+    after_formation = candles_after_formation(df, ob.timestamp)
 
     if after_formation.empty:
         return ob.mitigation_level
@@ -192,11 +209,7 @@ def _calculate_fvg_fill(fvg: FVG, df: pd.DataFrame) -> float:
     if df.empty:
         return fvg.overlap_with_price
 
-    # Get candles after FVG formation
-    try:
-        after_formation = df[df.index > fvg.timestamp]
-    except (TypeError, ValueError):
-        after_formation = df
+    after_formation = candles_after_formation(df, fvg.timestamp)
 
     if after_formation.empty:
         return fvg.overlap_with_price

@@ -429,12 +429,13 @@ export function BotSetup() {
       .catch(() => {});
   }, [runPreflight, navigate]);
 
-  const balance = preflight?.balance ?? 0;
-  const riskAmountUsd = balance > 0 ? (balance * config.risk_per_trade) / 100 : null;
+  const balance = preflight?.balance;
+  const equity = preflight?.equity;
+  const riskAmountUsd = equity != null && equity > 0 ? (equity * config.risk_per_trade) / 100 : null;
   const positionUsd = riskAmountUsd ? riskAmountUsd * config.leverage : null;
   const dailyMaxUsd =
-    balance > 0 && config.max_drawdown_pct != null
-      ? (balance * config.max_drawdown_pct) / 100
+    equity != null && equity > 0 && config.max_drawdown_pct != null
+      ? (equity * config.max_drawdown_pct) / 100
       : null;
   const effectiveExposure = config.leverage * config.risk_per_trade;
 
@@ -771,7 +772,7 @@ export function BotSetup() {
                 }}
               >
                 // LIVE RISK PREVIEW · BAL{' '}
-                {balance > 0 ? `$${balance.toFixed(2)}` : '—'}
+                {balance != null ? `$${balance.toFixed(2)}` : 'Unavailable'}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
                 <div className="metric-tile">
@@ -1272,7 +1273,7 @@ export function BotSetup() {
                   className="mono"
                   style={{ fontSize: 11, color: 'var(--fg-2)', marginLeft: 'auto' }}
                 >
-                  {balance > 0 ? `$${balance.toFixed(2)}` : '—'}
+                  {balance != null ? `$${balance.toFixed(2)}` : 'Unavailable'}
                 </span>
               </div>
 

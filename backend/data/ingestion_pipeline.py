@@ -11,7 +11,7 @@ import pandas as pd
 from loguru import logger
 
 from backend.shared.models.data import MultiTimeframeData
-from backend.data.ohlcv_cache import get_ohlcv_cache, OHLCVCache
+from backend.data.ohlcv_cache import get_ohlcv_cache, OHLCVCache, adapter_cache_namespace
 
 
 class IngestionPipeline:
@@ -80,6 +80,16 @@ class IngestionPipeline:
             # Intraday modes: standard limits
             return 500
 
+    def get_cached(self, symbol: str, timeframe: str, *, current_price=None, limit: int = 0):
+        """Read only this adapter's identified public feed."""
+        namespace = adapter_cache_namespace(self.adapter)
+        if not self.use_cache or self._cache is None or namespace is None:
+            return None
+        return self._cache.get(
+            symbol, timeframe, current_price=current_price,
+            namespace=namespace, requested_limit=limit,
+        )
+
     def fetch_multi_timeframe(
         self,
         symbol: str,
@@ -117,13 +127,15 @@ class IngestionPipeline:
 
                 # Try cache first (with optional price drift check)
                 if self.use_cache and self._cache:
-                    df = self._cache.get(symbol, tf, current_price=current_price)
+                    df = self.get_cached(symbol, tf, current_price=current_price, limit=limit)
                     if df is not None:
                         cache_hits += 1
                         logger.debug(f"✓ Cache HIT for {symbol} {tf} ({len(df)} candles)")
                         tf_data[tf] = df
                         continue
 
+                # Bind the fetched frame to the source that supplied it.
+                source_namespace = adapter_cache_namespace(self.adapter)
                 # Cache miss - fetch from exchange
                 cache_misses += 1
                 df = self.adapter.fetch_ohlcv(symbol, tf, limit=limit)
@@ -138,8 +150,11 @@ class IngestionPipeline:
                 tf_data[tf] = validated_df
 
                 # Cache the validated data
-                if self.use_cache and self._cache:
-                    self._cache.set(symbol, tf, validated_df)
+                if self.use_cache and self._cache and source_namespace is not None:
+                    if adapter_cache_namespace(self.adapter) == source_namespace:
+                        self._cache.set(symbol, tf, validated_df, namespace=source_namespace, requested_limit=limit)
+                    else:
+                        logger.warning(f"OHLCV source changed during fetch for {symbol} {tf}; frame not cached")
 
                 logger.debug(f"✓ Fetched {len(validated_df)} candles for {symbol} {tf}")
 
@@ -278,8 +293,9 @@ class IngestionPipeline:
         if timeframe.endswith("d"):
             return f"{timeframe[:-1]}D"
         if timeframe.endswith("w"):
-            # "W-MON" triggers FutureWarning in pandas ≥2.2; bare "W" is stable.
-            return "W"
+            # A weekly pandas offset anchors to Sunday and can discard
+            # Monday-based exchange rows. Preserve the supplied open anchor.
+            return f"{int(timeframe[:-1]) * 7}D"
         if timeframe.endswith("M"):
             return "ME"
         return None
@@ -320,6 +336,10 @@ class IngestionPipeline:
             logger.warning(f"Could not fill time gaps due to pandas date_range error: {e}")
             df["timestamp"] = df.index
             return df.reset_index(drop=True)
+
+        # Reindexing must never silently remove an observed candle.
+        if not df.index.isin(full_idx).all():
+            raise ValueError(f"Observed candles do not align with the {timeframe} grid")
 
         # Reindex
         df_filled = df.reindex(full_idx)
@@ -390,6 +410,22 @@ class IngestionPipeline:
         df["close"] = pd.to_numeric(df["close"], errors="coerce")
         df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
 
+        # Ensure timestamp is a regular column (not also the index) before dedup/sort
+        if isinstance(df.index, pd.DatetimeIndex) and "timestamp" in df.columns:
+            df = df.reset_index(drop=True)
+        elif isinstance(df.index, pd.DatetimeIndex) and "timestamp" not in df.columns:
+            df["timestamp"] = df.index
+            df = df.reset_index(drop=True)
+
+        # Check for duplicate timestamps
+        duplicates = df["timestamp"].duplicated()
+        if duplicates.any():
+            dup_count = duplicates.sum()
+            logger.warning(
+                f"Found {dup_count} duplicate timestamps in {symbol} {timeframe}, keeping first"
+            )
+            df = df.drop_duplicates(subset=["timestamp"], keep="first")
+
         # Fill proper time gaps (critical for Phemex/CCXT data)
         df = self._fill_time_gaps(df, timeframe)
 
@@ -415,65 +451,32 @@ class IngestionPipeline:
             )
             df = df[~invalid_mask]
 
-        # Ensure timestamp is a regular column (not also the index) before dedup/sort
-        if isinstance(df.index, pd.DatetimeIndex) and "timestamp" in df.columns:
-            df = df.reset_index(drop=True)
-        elif isinstance(df.index, pd.DatetimeIndex) and "timestamp" not in df.columns:
-            df["timestamp"] = df.index
-            df = df.reset_index(drop=True)
-
-        # Check for duplicate timestamps
-        duplicates = df["timestamp"].duplicated()
-        if duplicates.any():
-            dup_count = duplicates.sum()
-            logger.warning(
-                f"Found {dup_count} duplicate timestamps in {symbol} {timeframe}, keeping first"
-            )
-            df = df.drop_duplicates(subset=["timestamp"], keep="first")
-
         # Sort by timestamp
         df = df.sort_values("timestamp").reset_index(drop=True)
 
-        # Strip in-progress candle. Exchanges (Phemex, ccxt-backed adapters) return
-        # the still-forming candle as the last row. Caching that row + reading
-        # `pct_change_last(df.tail(2))` downstream computes pct change against a
-        # partial-candle close, producing phantom "strong" moves on intrabar noise.
-        # Drop the in-progress row so the cache only holds fully-closed candles.
-        # See adversarial review of commit a61589c — this closes the Phemex
-        # finalization-race footgun the cache-TTL fix on its own can't eliminate.
-        _TF_SECONDS = {
-            "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
-            "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800,
-            "12h": 43200, "1d": 86400, "3d": 259200, "1w": 604800,
-        }
-        tf_seconds = _TF_SECONDS.get(timeframe, 0)
+        # A candle is complete at its own open + duration, independent of
+        # Unix-epoch/week anchors. Filter every row, including future rows.
+        from backend.data.ohlcv_cache import TIMEFRAME_SECONDS
+        tf_seconds = TIMEFRAME_SECONDS.get(timeframe, 0)
         if tf_seconds and len(df):
             try:
-                import time as _time
-                now_epoch = _time.time()
-                current_open_epoch = (now_epoch // tf_seconds) * tf_seconds
-                last_ts = df["timestamp"].iloc[-1]
-                last_ts_pd = pd.Timestamp(last_ts)
-                if last_ts_pd.tz is None:
-                    last_ts_pd = last_ts_pd.tz_localize("UTC")
-                last_ts_epoch = last_ts_pd.timestamp()
-                if last_ts_epoch >= current_open_epoch:
-                    logger.debug(
-                        "Stripped in-progress %s candle for %s "
-                        "(latest_open=%s, current_open_epoch=%s)",
-                        timeframe, symbol, last_ts, current_open_epoch,
-                    )
-                    df = df.iloc[:-1].reset_index(drop=True)
-            except Exception as _strip_err:
-                # Defensive: if anything in the strip logic raises, prefer
-                # keeping the (possibly partial) candle over wedging the
-                # ingestion pipeline. The cache-TTL fix at ohlcv_cache.py
-                # provides a backup defense.
-                logger.warning(
-                    "in-progress candle strip failed for %s %s (%s) — "
-                    "keeping last row, cache TTL is now the only defense",
-                    symbol, timeframe, _strip_err,
+                opens = pd.to_datetime(df["timestamp"], utc=True, errors="raise")
+                if opens.isna().any():
+                    raise ValueError("Missing candle timestamp")
+                now = pd.Timestamp(time.time(), unit="s", tz="UTC")
+                if pd.isna(now):
+                    raise ValueError("Invalid observation clock")
+                closed = opens + pd.Timedelta(seconds=tf_seconds) <= now
+            except Exception as exc:
+                raise ValueError(
+                    f"Cannot establish candle closure for {symbol} {timeframe}: {exc}"
+                ) from exc
+            removed = int((~closed).sum())
+            if removed:
+                logger.debug(
+                    f"Excluded {removed} unclosed/future {timeframe} candles for {symbol} at {now}"
                 )
+                df = df.loc[closed].reset_index(drop=True)
 
         # Set timestamp as index for SMC detection functions (keep as column too)
         # Use drop=False so downstream code can access df["timestamp"] as a column
@@ -567,4 +570,7 @@ class IngestionPipeline:
         """
         if not self.use_cache or not self._cache:
             return 0
-        return self._cache.invalidate(symbol, timeframe)
+        namespace = adapter_cache_namespace(self.adapter)
+        if namespace is None:
+            return 0
+        return self._cache.invalidate(symbol, timeframe, namespace=namespace)

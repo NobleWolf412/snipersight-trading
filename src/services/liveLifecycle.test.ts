@@ -13,6 +13,9 @@ const recovery = (changes: Partial<LiveLifecycle> = {}): LiveLifecycle => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe('live execution lifecycle consumers', () => {
+  it('distinguishes a flat account from unfinished report recovery', () => {
+    expect(liveShutdownMessage(recovery({ account_state: 'flat_confirmed' }))).toContain('observed flat. Session recovery is still finishing');
+  });
   it.each(['stopped', 'kill_switched', 'error'])('keeps unresolved %s visible to routes and beacon', (status) => {
     expect(liveSessionNeedsAttention({ status, lifecycle: recovery() })).toBe(true);
     expect(liveSessionNeedsAttention({ status, session_id: 'legacy-session' })).toBe(true);

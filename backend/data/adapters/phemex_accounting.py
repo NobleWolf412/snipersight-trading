@@ -139,13 +139,15 @@ def _execution(raw, market):
     symbol, _ = _market(market)
     if raw.get("symbol") != market["id"]:
         raise AccountingError("EXECUTION_MARKET_MISMATCH")
+    client, remote = _alias(raw, "clOrdID", "clOrdId"), _alias(raw, "orderID", "orderId")
+    # The documented history response uses an empty clOrdID when unavailable.
     return (symbol, _side(raw.get("side")),
-            _alias(raw, "clOrdID", "clOrdId"), _alias(raw, "orderID", "orderId"))
+            None if client == "" else client, None if remote == "" else remote)
 
 
 def normalize_order(raw, market, context):
     symbol, side, client, remote = _execution(raw, market)
-    statuses = {"New": "OPEN", "PartiallyFilled": "OPEN", "Filled": "FILLED",
+    statuses = {"New": "OPEN", "PartiallyFilled": "OPEN", "Untriggered": "OPEN", "Triggered": "OPEN", "Filled": "FILLED",
                 "Canceled": "CANCELLED", "Cancelled": "CANCELLED", "Rejected": "REJECTED"}
     status = statuses.get(raw.get("ordStatus"))
     if status is None:
@@ -164,7 +166,7 @@ def normalize_execution(raw, market, context):
     kind = {"Trade": "TRADE", "Funding": "FUNDING", "LiqTrade": "LIQUIDATION", "AdlTrade": "ADL"}.get(raw.get("tradeType"))
     if kind is None:
         raise AccountingError("RAW_EXECUTION_KIND_UNSUPPORTED")
-    qty = _alias(raw, "execQtyRq", numeric=True, required=True)
+    qty = _alias(raw, "execQtyRq", "execQty", numeric=True, required=True)
     cost = _alias(raw, "execValueRv", numeric=True)
     provenance = "raw_execution_value" if cost is not None else None
     price = _alias(raw, "execPriceRp", numeric=True)
@@ -179,5 +181,8 @@ def normalize_execution(raw, market, context):
         fees.append(Fee("USDT", amount(raw["execFeeRv"]), "raw_execFeeRv"))
     if raw.get("ptFeeRv") is not None:
         fees.append(Fee("PT", amount(raw["ptFeeRv"]), "raw_ptFeeRv"))
-    return ExecutionFact(context, symbol, side, _alias(raw, "execID", "execId"), client, remote,
+    execution_id = _alias(raw, "execID", "execId")
+    if execution_id and not execution_id.replace("-", "").strip("0"):
+        execution_id = None
+    return ExecutionFact(context, symbol, side, execution_id, client, remote,
                          qty, cost, tuple(fees) if fees else None, kind, provenance)

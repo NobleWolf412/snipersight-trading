@@ -13,6 +13,7 @@ import pytest
 
 from backend.bot.executor.execution_journal import ExecutionJournal
 from backend.bot.executor.live_executor import LiveExecutor
+from backend.tests.unit.runtime_fixtures import prepare_adapter, initialize_fixture
 from backend.bot.executor.paper_executor import OrderStatus
 from backend.tests.unit.test_live_fill_protection import state, assert_adopted
 
@@ -32,10 +33,11 @@ def execution(request, tmp_path):
         fetch_positions=Mock(return_value=[]),
         cancel_order=Mock(return_value={"id": "remote", "status": "canceled", "filled": 0}),
     )
+    prepare_adapter(adapter, SYMBOL, "offline-f0")
     path = tmp_path / "execution.sqlite3"
-    ex = LiveExecutor(adapter, journal=ExecutionJournal(path, "offline-f0"),
+    ex = LiveExecutor(adapter, journal=ExecutionJournal(path, "offline-f0", runtime=True, environment="testnet"),
                       max_position_size_usd=2000, max_total_exposure_usd=2000)
-    ex.set_entry_admission(True)
+    initialize_fixture(ex)
     yield S(ex=ex, adapter=adapter, side=request.param, path=path)
     ex.close()
 
@@ -48,9 +50,11 @@ def assert_unfilled(ex, order):
     assert order.filled_quantity == 0
     assert not ex.get_trade_history()
     assert ex.get_position(SYMBOL) == 0
-    assert ex.get_balance() == 1000
-    assert ex.get_pnl({SYMBOL: 100}) == 0
-    assert ex._total_exposure_usd() == 1000
+    assert ex._cached_balance == 1000
+    assert ex.get_balance() is None
+    assert not ex.accounting_status()['entry_eligible']
+    if not ex._recovery_only:
+        assert ex.accounting_status()['held_commitments'] == 1000
     assert ex.metrics["fills_recovered_via_position_check"] == 0
 
 
@@ -100,9 +104,9 @@ def test_delayed_identified_fill_is_recorded_once(execution):
     for _ in range(3):
         assert ex.check_fill_via_positions(order.order_id) is None
     assert len(ex.get_trade_history()) == 1
-    assert ex.get_position(SYMBOL) == (10 if execution.side == "BUY" else -10)
-    assert ex.get_balance() == 999
-    assert ad.fetch_order.call_count == 4
+    assert ex.get_position(SYMBOL) == 0  # only a combined snapshot owns account quantities
+    assert ex.get_balance() is None and ex._cached_balance == 1000
+    assert ad.fetch_order.call_count == 7
     ad.create_order.assert_called_once()
     ad.fetch_positions.assert_not_called()
 
@@ -143,7 +147,7 @@ def test_identified_partial_cancel_releases_only_confirmed_remainder(execution, 
     ad.fetch_order.return_value = {"id": "remote", "status": "open", "filled": filled, "average": 100}
     ex.check_fill_via_positions(order.order_id)
     assert order.status == (OrderStatus.PARTIALLY_FILLED if filled else OrderStatus.OPEN)
-    assert ex._total_exposure_usd() == 1000
+    assert ex.accounting_status()['held_commitments'] == 1000
     ad.fetch_order.return_value = {"id": "remote", "status": "canceled", "filled": filled, "average": 100}
     for _ in range(3):
         ex.check_fill_via_positions(order.order_id)
@@ -152,8 +156,8 @@ def test_identified_partial_cancel_releases_only_confirmed_remainder(execution, 
     assert order.status == (OrderStatus.FILLED if filled else OrderStatus.CANCELLED)
     assert order.filled_quantity == filled
     assert sum(fill.quantity for fill in ex.get_trade_history()) == filled
-    assert ex._total_exposure_usd() == filled * 100
-    assert ex.get_balance() == 1000 - filled * 0.1
+    assert ex.accounting_status()['held_commitments'] == filled * 100
+    assert ex._cached_balance == 1000  # no modeled fee debit
     ad.create_order.assert_called_once()
     ad.fetch_positions.assert_not_called()
 
@@ -165,7 +169,8 @@ def test_restart_recovers_same_identity_without_replaying_cash_or_positions(exec
         ad.create_order.side_effect = ccxt.RequestTimeout("lost acknowledgment")
     order = place(execution)
     ex.close()
-    restored = LiveExecutor(ad, journal=ExecutionJournal(execution.path, "offline-f0"))
+    restored = LiveExecutor(ad, journal=ExecutionJournal(execution.path, "offline-f0", runtime=True, environment="testnet"))
+    initialize_fixture(restored)
     try:
         recovered = restored.get_order(order.order_id)
         assert order.order_id in restored._restored_ids and restored._recovery_only
@@ -181,7 +186,7 @@ def test_restart_recovers_same_identity_without_replaying_cash_or_positions(exec
             assert restored.check_fill_via_positions(order.order_id) is None
         assert recovered.status == OrderStatus.FILLED and recovered.filled_quantity == 10
         assert not restored.get_trade_history() and restored.get_position(SYMBOL) == 0
-        assert restored.get_balance() == 1000
+        assert restored.get_balance() is None and restored._cached_balance == 1000
         assert restored._recovery_only and not restored._entry_admission_enabled
         _, durable = restored._journal.records()[0]
         assert durable["status"] == "FILLED" and durable["exchange_id"] == "remote"

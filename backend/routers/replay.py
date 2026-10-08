@@ -265,7 +265,7 @@ async def jump_to_next_signal(
     if step is None:
         return JumpToSignalResponse(found=False, bars_advanced=bars, step=None)
     return JumpToSignalResponse(
-        found=True, bars_advanced=bars, step=_step_to_response(session_id, step)
+        found=step.signal_fired, bars_advanced=bars, step=_step_to_response(session_id, step)
     )
 
 

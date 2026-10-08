@@ -12,7 +12,7 @@ Order Blocks are institutional supply/demand zones identified by:
 
 from typing import List, Optional
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 import numpy as np
 import logging
@@ -620,7 +620,10 @@ def calculate_freshness(ob: OrderBlock, current_time: datetime) -> float:
     Returns:
         float: Freshness score (0-100 scale, 100 = just formed, decays over time)
     """
-    age = current_time - ob.timestamp
+    # Adapter candle timestamps without an offset represent UTC, never local time.
+    now = current_time.replace(tzinfo=timezone.utc) if current_time.tzinfo is None else current_time
+    formed_at = ob.timestamp.replace(tzinfo=timezone.utc) if ob.timestamp.tzinfo is None else ob.timestamp
+    age = now - formed_at
     age_hours = age.total_seconds() / 3600
 
     # UPDATED: Timeframe-aware half-life (faster decay for LTF)
@@ -1191,6 +1194,7 @@ def update_ob_lifecycle(
         List[OrderBlock]: Updated order blocks (invalidated ones filtered out)
     """
     from backend.shared.config.smc_config import get_enhanced_mitigation_config
+    from backend.strategy.smc.mitigation_tracker import candles_after_formation
 
     config = get_enhanced_mitigation_config(preset)
 
@@ -1202,7 +1206,7 @@ def update_ob_lifecycle(
             continue
 
         # Get future candles after OB formation
-        future_candles = df[df.index > ob.timestamp]
+        future_candles = candles_after_formation(df, ob.timestamp)
 
         if len(future_candles) == 0:
             updated_blocks.append(ob)

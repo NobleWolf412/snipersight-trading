@@ -1,3 +1,4 @@
+import { accountingLabel, accountingColor, formatAccountMoney, executionReportNotice } from '../services/accounting';
 /**
  * BotStatus — Phase 3g.i.b (HUD rewrite, default tab)
  *
@@ -118,18 +119,12 @@ function fmtDuration(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
-function fmtCurrency(v: number, decimals = 2): string {
-  if (!Number.isFinite(v)) return '—';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(v);
+function fmtCurrency(v: number | null | undefined, decimals = 2): string {
+  return formatAccountMoney(v, decimals);
 }
 
-function fmtPct(v: number, decimals = 2): string {
-  if (!Number.isFinite(v)) return '—';
+function fmtPct(v: number | null | undefined, decimals = 2): string {
+  if (v == null || !Number.isFinite(v)) return '—';
   return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
 }
 
@@ -739,7 +734,7 @@ export function BotStatus() {
   const canAnalyzeSession = session?.canAnalyzeSession ?? false;
   const stats = status?.statistics;
   const balance = status?.balance;
-  const initialBalance = balance?.initial ?? 0;
+  const initialBalance = balance?.initial;
   const positions = status?.positions ?? [];
   const pendingOrders = status?.pending_orders ?? [];
   // signal_log only exists on LiveTradingStatus; paper service doesn't
@@ -898,9 +893,9 @@ export function BotStatus() {
                     flexWrap: 'wrap',
                   }}
                 >
-                  <span>{fmtCurrency(balance?.pnl ?? 0)}</span>
+                  <span>{fmtCurrency(balance?.pnl)}</span>
                   <span style={{ fontSize: 14, fontWeight: 700, opacity: 0.85 }}>
-                    {fmtPct(balance?.pnl_pct ?? 0)}
+                    {fmtPct(balance?.pnl_pct)}
                   </span>
                 </div>
                 <div
@@ -1257,7 +1252,19 @@ export function BotStatus() {
                   ⚠ {tradesError}
                 </div>
               )}
-              <EquitySparkline trades={trades} initialBalance={initialBalance} />
+              <div className="mono" style={{ color: 'var(--fg-3)', fontSize: 11 }}>
+                {accountingLabel(status?.accounting)}
+                {status?.outcome_basis === 'executions_excluding_funding_and_transfers' && (
+                  <div>Trade results include execution fees; funding and transfers are excluded.</div>
+                )}
+                {executionReportNotice(status?.execution_reporting, status?.execution_history) && (
+                  <div role="status" style={{ color: 'var(--amber)' }}>
+                    {executionReportNotice(status?.execution_reporting, status?.execution_history)}
+                  </div>
+                )}
+                {status?.accounting?.basis === 'exchange_mark' && <div>Account change includes funding and transfers.{status?.outcome_basis !== 'executions_excluding_funding_and_transfers' && ' Trade outcomes are estimates.'}</div>}
+              </div>
+              {status?.accounting?.basis !== 'exchange_mark' && initialBalance != null && <EquitySparkline trades={trades} initialBalance={initialBalance} />}
               <div
                 className="mono"
                 style={{
@@ -1271,14 +1278,14 @@ export function BotStatus() {
                 }}
               >
                 <span>start {fmtCurrency(initialBalance)}</span>
-                <span>now {fmtCurrency(balance?.equity ?? initialBalance)}</span>
+                <span>now {fmtCurrency(balance?.equity)}</span>
                 <span
                   style={{
                     color:
-                      (balance?.pnl ?? 0) >= 0 ? 'var(--green)' : 'var(--red)',
+                      accountingColor(balance?.pnl),
                   }}
                 >
-                  {fmtCurrency(balance?.pnl ?? 0)} ({fmtPct(balance?.pnl_pct ?? 0)})
+                  {fmtCurrency(balance?.pnl)} ({fmtPct(balance?.pnl_pct)})
                 </span>
               </div>
             </section>

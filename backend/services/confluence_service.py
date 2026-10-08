@@ -778,6 +778,7 @@ class ConfluenceService:
             # Pass symbol-specific regime detected by RegimeDetector
             regime=context.metadata.get("symbol_regime"),
             symbol=context.symbol,
+            as_of=context.timestamp if context.metadata.get("replay_session_id") else None,
         )
 
 

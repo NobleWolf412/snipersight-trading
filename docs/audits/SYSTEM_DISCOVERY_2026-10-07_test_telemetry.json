@@ -1,0 +1,1184 @@
+{
+  "scope": "Read-only identification of 130 test-time telemetry rows; no removal or historical repair performed",
+  "date": "2026-10-08",
+  "root_cause": "Earlier broad test runners guarded Python open writes but omitted sqlite3.connect. Default TelemetryStorage uses a source-relative path. Strict portable runner now denies outside SQLite paths/URIs and redirects default telemetry to fixtures.",
+  "candidate_count": 130,
+  "id_range": [
+    2992099,
+    2992228
+  ],
+  "rows": [
+    {
+      "id": 2992099,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:44:35.533045+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:44:35",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992100,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:44:35.544117+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:44:35",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992101,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:45:41.213672+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:45:41",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992102,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:45:41.222894+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:45:41",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992103,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:56:19.637426+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:56:19",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992104,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:56:35.028811+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:56:35",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992105,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:56:35.036486+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:56:35",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992106,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:56:35.043990+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:56:35",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992107,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:57:49.421746+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:57:49",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992108,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:57:49.429716+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:57:49",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992109,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:57:49.438716+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:57:49",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992110,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:58:18.070238+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:58:18",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992111,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:58:18.080239+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:58:18",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992112,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:58:18.088440+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:58:18",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992113,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:59:44.646558+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:59:44",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992114,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:59:44.655559+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:59:44",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992115,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:59:44.662720+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:59:44",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992116,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:59:44.691404+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:59:44",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992117,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T16:59:44.698458+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 16:59:44",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992118,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:02:39.857996+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:02:39",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992119,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:02:39.866002+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:02:39",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992120,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:02:39.878197+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:02:39",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992121,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:02:39.905685+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:02:39",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992122,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:02:39.913686+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:02:39",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992123,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:13:17.456738+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:13:17",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992124,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:13:17.465710+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:13:17",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992125,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:13:17.475151+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:13:17",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992126,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:13:17.505421+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:13:17",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992127,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:13:17.514393+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:13:17",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992128,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:20:54.077486+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:20:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992129,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:20:54.089478+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:20:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992130,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:20:54.106899+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:20:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992131,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:20:54.123085+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:20:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992132,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:20:54.139956+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:20:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992133,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:22:27.331112+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:22:27",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992134,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:22:27.338303+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:22:27",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992135,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:22:27.351567+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:22:27",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992136,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:22:27.364781+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:22:27",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992137,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:22:27.383391+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:22:27",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992138,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.012318+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992139,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.020332+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992140,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.028552+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992141,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.055307+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992142,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.066923+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992143,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.487544+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992144,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.500694+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992145,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.513297+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992146,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.526624+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992147,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.539235+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992148,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:18.549240+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:18",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992149,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:37.834590+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:37",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992150,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:37.842255+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:37",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992151,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:37.856397+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:37",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992152,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:37.870119+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:37",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992153,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:37.883428+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:37",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992154,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:37.891664+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:37",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992155,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:45.156152+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:45",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992156,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:45.164367+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:45",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992157,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:45.177849+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:45",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992158,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:45.190904+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:45",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992159,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:45.203660+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:45",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992160,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:24:45.212661+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:24:45",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992161,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.072511+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992162,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.080657+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992163,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.087657+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992164,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.117507+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992165,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.125512+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992166,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.547792+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992167,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.553763+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992168,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.571371+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992169,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.585121+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992170,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.597594+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992171,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:39:14.601113+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:39:14",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992172,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.111365+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992173,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.119365+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992174,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.126362+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992175,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.154530+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992176,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.162532+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992177,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.586250+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992178,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.586250+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992179,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.612402+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992180,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.625090+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992181,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.637663+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992182,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:47:46.637663+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:47:46",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992183,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:53.917139+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:53",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992184,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:53.924136+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:53",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992185,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:53.932293+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:53",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992186,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:53.959447+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:53",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992187,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:53.967417+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:53",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992188,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:54.396879+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992189,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:54.405879+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992190,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:54.418370+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992191,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:54.431279+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992192,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:54.444750+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992193,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T17:56:54.453787+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 17:56:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992194,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.057251+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992195,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.064414+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992196,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.074468+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992197,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.104281+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992198,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.112279+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992199,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.638329+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992200,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.648286+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992201,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.663189+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992202,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.676791+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992203,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.689866+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992204,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:01:49.698863+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:01:49",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992205,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:54.749669+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:54",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992206,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:54.757820+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:54",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992207,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:54.764819+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:54",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992208,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:54.791775+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:54",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992209,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:54.799748+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:54",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992210,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:55.211650+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:55",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992211,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:55.220648+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:55",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992212,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:55.234164+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:55",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992213,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:55.246900+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:55",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992214,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:55.259521+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:55",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992215,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:08:55.267672+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:08:55",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992216,
+      "event_type": "alt_stop_suggested",
+      "timestamp": "2026-10-08T18:08:55.789392+00:00",
+      "run_id": "run-20261008",
+      "symbol": "TEST/USDT",
+      "created_at": "2026-10-08 18:08:55",
+      "payload_sha256": "9e41ef2b16b99cf748f723d7198015f60dc0e2766f4f56f00c37799dd1f6affb"
+    },
+    {
+      "id": 2992217,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.104636+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992218,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.112802+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "0c48be5084fd5181c9e2086c3cdc507d1b7a327fb664d2a39811870e3dce1d1d"
+    },
+    {
+      "id": 2992219,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.119801+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "19a366ab0c934ec556eef37961136ad9e697f0ba14af4ef92f63b87ab9b60570"
+    },
+    {
+      "id": 2992220,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.148257+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "00ad38f41f7ba1fcc2849f02f6b5c66f3c43329783bd65118f0a00fd9367a3da"
+    },
+    {
+      "id": 2992221,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.157258+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "d3c89bbc0c30d28e47e9b97d8655243ec6b85b0c34a9c6e0b80a454c86684121"
+    },
+    {
+      "id": 2992222,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.604106+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992223,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.614108+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992224,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.627923+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992225,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.641079+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992226,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.653538+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992227,
+      "event_type": "info_message",
+      "timestamp": "2026-10-08T18:21:58.662671+00:00",
+      "run_id": null,
+      "symbol": null,
+      "created_at": "2026-10-08 18:21:58",
+      "payload_sha256": "1d7b1a732c22994eec7b9df9c2ab3a564c885e4e3c9ffde3a1a9d708754ba6fb"
+    },
+    {
+      "id": 2992228,
+      "event_type": "alt_stop_suggested",
+      "timestamp": "2026-10-08T18:21:59.444042+00:00",
+      "run_id": "run-20261008",
+      "symbol": "TEST/USDT",
+      "created_at": "2026-10-08 18:21:59",
+      "payload_sha256": "9e41ef2b16b99cf748f723d7198015f60dc0e2766f4f56f00c37799dd1f6affb"
+    }
+  ],
+  "limits": "Creation timestamps, fixture TEST/USDT and repeated info-message pattern identify these as test-time rows. No complete pre-run DB hash was captured, so unrelated historical mutations cannot be ruled out by this manifest alone. Journal hash unchanged.",
+  "remediation": "Keep rows untouched; exclude this explicit ID set from historical analysis. Any physical removal requires a separate backed-up repair."
+}

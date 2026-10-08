@@ -67,13 +67,14 @@ def seed(path):
     j.close()
 
 
-def worker(path, stage):
+def worker(path, stage, runtime=False):
     from decimal import Decimal
     from backend.bot.executor.execution_journal import ExecutionJournal, JournalError, upgrade_accounting_schema
-    from backend.bot.executor.accounting_models import ObservationContext, ExecutionFact, Fee
+    from backend.bot.executor.accounting_models import ObservationContext, ExecutionFact, Fee, OrderExecutionObservation
+    target_version = 3 if runtime else 2
     if stage == "owner_exclusion":
         try:
-            upgrade_accounting_schema(path, "fixture", environment="testnet")
+            upgrade_accounting_schema(path, "fixture", environment="testnet", target_version=target_version)
         except JournalError:
             return 77
         return 1
@@ -87,6 +88,8 @@ def worker(path, stage):
                         "record_after_event": "INSERT INTO events",
                         "record_after_projection": "INSERT INTO financial_orders",
                         "record_after_fact": "INSERT INTO execution_facts"}
+            if runtime:
+                triggers['record_after_lifecycle'] = 'UPDATE requests SET state'
             if stage in triggers and triggers[stage] in sql:
                 os._exit(77)
             return result
@@ -99,13 +102,18 @@ def worker(path, stage):
             conn = original(*args, **kwargs)
             return CrashConnection(conn) if "mode=rw" in str(args[0]) else conn
         sqlite3.connect = connect
-        upgrade_accounting_schema(path, "fixture", environment="testnet")
+        upgrade_accounting_schema(path, "fixture", environment="testnet", target_version=target_version)
     else:
         j = ExecutionJournal(path, "fixture")
         j._connection = CrashConnection(j._connection)
         ctx = ObservationContext("testnet", "fixture", "fixture", "crash", datetime.now(timezone.utc).isoformat(), 1.0, 2.0)
-        j.record_accounting(ExecutionFact(ctx, "BTC/USDT:USDT", "BUY", "e1", "order", "remote",
-                           Decimal(10), Decimal(1060), (Fee("USDT", Decimal("0.2"), "raw"),), cost_provenance="raw"))
+        fact = ExecutionFact(ctx, "BTC/USDT:USDT", "BUY", "e1", "order", "remote",
+                           Decimal(10), Decimal(1060), (Fee("USDT", Decimal("0.2"), "raw"),), cost_provenance="raw")
+        if runtime:
+            j.record_execution('order', [OrderExecutionObservation(ctx, fact.symbol, fact.side,
+                'order', 'remote', fact.quantity, fact.cost, 'FILLED', 'raw'), fact])
+        else:
+            j.record_accounting(fact)
     return 1  # The requested interruption must have happened.
 
 
@@ -113,35 +121,40 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--worker", nargs=2)
     parser.add_argument("--legacy-journal")
+    parser.add_argument("--runtime", action="store_true")
     args = parser.parse_args()
     if args.worker:
         path, stage = Path(args.worker[0]).resolve(), args.worker[1]
         guard(path.parent, False)
-        return worker(path, stage)
+        return worker(path, stage, args.runtime)
     directory = Path(tempfile.mkdtemp(prefix="snipersight-fv1-crash-")).resolve()
     guard(directory, True)
     from backend.bot.executor.execution_journal import ExecutionJournal, upgrade_accounting_schema
     results = []
+    target_version = 3 if args.runtime else 2
+    worker_flags = ['--runtime'] if args.runtime else []
     stages = ["migration_after_ddl", "migration_before_commit", "migration_after_commit",
               "record_after_event", "record_after_projection", "record_after_fact", "record_before_commit", "record_after_commit"]
+    if args.runtime:
+        stages.append('record_after_lifecycle')
     try:
         for stage in stages:
             path = directory / (stage + ".sqlite3")
             seed(path)
             marker = path.with_suffix(".initialized").read_bytes()
             if stage.startswith("record"):
-                upgrade_accounting_schema(path, "fixture", environment="testnet")
-            child = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), "--worker", str(path), stage],
+                upgrade_accounting_schema(path, "fixture", environment="testnet", target_version=target_version)
+            child = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), "--worker", str(path), stage] + worker_flags,
                                    executable=sys.executable, capture_output=True, text=True, timeout=30)
             if child.returncode != 77:
                 raise RuntimeError(f"Crash worker {stage}: {child.returncode} {child.stderr}")
             j = ExecutionJournal(path, "fixture")
             try:
-                expected_version = 2 if stage.startswith("record") or stage.endswith("after_commit") else 1
+                expected_version = target_version if stage.startswith("record") or stage.endswith("after_commit") else 1
                 assert j.schema_version == expected_version
                 assert path.with_suffix(".initialized").read_bytes() == marker
-                assert j.records()[0][1]["filled_quantity"] == 0
-                filled = j.financial_state("order").filled_quantity if expected_version == 2 else 0
+                assert j.records()[0][1]["filled_quantity"] == (10 if args.runtime and stage == 'record_after_commit' else 0)
+                filled = j.financial_state("order").filled_quantity if expected_version >= 2 else 0
                 assert filled == (10 if stage == "record_after_commit" else 0)
                 if stage == "record_after_commit":
                     assert j.financial_state("order").financially_complete
@@ -152,7 +165,7 @@ def main():
         seed(path)
         j = ExecutionJournal(path, "fixture")
         try:
-            child = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), "--worker", str(path), "owner_exclusion"],
+            child = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), "--worker", str(path), "owner_exclusion"] + worker_flags,
                                    executable=sys.executable, capture_output=True, text=True, timeout=30)
             assert child.returncode == 77, child.stderr
             results.append({"case": "cross_process_owner_exclusion", "holds": True})
@@ -164,9 +177,9 @@ def main():
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             assert "error" not in module.ExecutionJournal.inspect(path)
-            upgrade_accounting_schema(path, "fixture", environment="testnet")
+            upgrade_accounting_schema(path, "fixture", environment="testnet", target_version=target_version)
             assert "error" in module.ExecutionJournal.inspect(path)
-            results.append({"case": "actual_pre_FV1_reader_rejects_v2", "holds": True,
+            results.append({"case": f"actual_older_reader_rejects_v{target_version}", "holds": True,
                             "source_sha256": hashlib.sha256(legacy.read_bytes()).hexdigest()})
         report = {"cases": len(results), "all_hold": True, "results": results, "artifact_directory": str(directory)}
         status = 0

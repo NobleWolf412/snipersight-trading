@@ -87,7 +87,7 @@ def state(request, monkeypatch, tmp_path):
         response = responses.pop(0) if responses else OrderStatus.OPEN
         if isinstance(response, Exception):
             raise response
-        stop = Order(f"stop-{len(calls)}", SYMBOL, OrderSide(kwargs["side"]),
+        stop = Order(f"stop-{len(calls)}", kwargs["symbol"], OrderSide(kwargs["side"]),
                      OrderType.STOP_LOSS, kwargs["quantity"], status=response,
                      price=kwargs["stop_price"], stop_price=kwargs["stop_price"])
         ex._orders[stop.order_id] = stop
@@ -110,7 +110,7 @@ def ws(state, status="filled", quantity=10.0):
 def monitor_tick(state, monkeypatch):
     async def stop(seconds):
         state.svc._running = False
-    monkeypatch.setattr(service_module, "asyncio", S(sleep=stop))
+    monkeypatch.setattr(service_module, "asyncio", S(sleep=stop, to_thread=asyncio.to_thread))
     state.svc._running = True
     asyncio.run(state.svc._monitor_loop())
 

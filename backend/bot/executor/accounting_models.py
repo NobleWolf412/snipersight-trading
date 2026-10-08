@@ -298,8 +298,49 @@ class OrderExecutionState:
                 and self.cost_quantity == self.filled_quantity and self.fees_complete and not self.reasons)
 
 
+@dataclass(frozen=True)
+class LiveExecutionUpdate:
+    """Committed live evidence, distinct from a simulated Fill.
+
+    quantity/price describe a verified incremental cost only when coverage permits;
+    cumulative average remains available independently. Missing fees stay None.
+    """
+    order_id: str
+    quantity: float
+    price: float | None
+    fee: float | None
+    state: OrderExecutionState
+    timestamp: str
+
+    def __post_init__(self):
+        _validate(self)
+        if self.order_id != self.state.order_id or self.quantity < 0:
+            raise AccountingError("LIVE_UPDATE_IDENTITY_OR_QUANTITY")
+        if self.price is not None and self.price <= 0:
+            raise AccountingError("LIVE_UPDATE_PRICE")
+
+
+def execution_update(previous, current, timestamp):
+    """Project an incremental view without inventing costs of earlier fills."""
+    quantity = exact_sum((current.filled_quantity, previous.filled_quantity.copy_negate()))
+    price = None
+    if (quantity > 0 and current.cost is not None and current.cost_quantity == current.filled_quantity
+            and not current.reasons and (previous.filled_quantity == 0 or (
+                previous.cost is not None and previous.cost_quantity == previous.filled_quantity and not previous.reasons))):
+        cost = exact_sum((current.cost, (previous.cost or Decimal(0)).copy_negate()))
+        if cost > 0:
+            with localcontext() as ctx:
+                ctx.prec = 80
+                price = float(cost / quantity)
+    fee = None
+    if current.fees_complete and (previous.filled_quantity == 0 or previous.fees_complete):
+        if all(f.currency == "USDT" for f in current.fees + previous.fees):
+            fee = float(exact_sum([f.amount for f in current.fees] + [f.amount.copy_negate() for f in previous.fees]))
+    return LiveExecutionUpdate(current.order_id, float(max(Decimal(0), quantity)), price, fee, current, timestamp)
+
+
 _TYPES = {c.__name__: c for c in (ObservationContext, Fee, AccountPositionObservation,
-    AccountObservation, OrderExecutionObservation, ExecutionFact, OrderExecutionState)}
+    AccountObservation, OrderExecutionObservation, ExecutionFact, OrderExecutionState, LiveExecutionUpdate)}
 
 
 def to_payload(value):

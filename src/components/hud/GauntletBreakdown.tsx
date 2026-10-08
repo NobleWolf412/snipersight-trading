@@ -31,7 +31,7 @@
  *   - When the bottleneck is CONFLUENCE and the caller supplies
  *     `scannerModes` + `currentModeName`, a small strip under the pill
  *     reports for each *other* mode: "switching to STRIKE (≥62) would
- *     have unblocked 14 of 18". Computed client-side by comparing each
+ *     have meetingThreshold 14 of 18". Computed client-side by comparing each
  *     CONFLUENCE-rejected signal's `confluence` score against each
  *     other mode's `min_confluence_score`. Direction-agnostic by design
  *     — confluence scoring is symmetric across long/short (see
@@ -56,6 +56,7 @@ import { Chip, SectionHead } from '@/components/hud';
 export type GauntletStage =
   // pre-scoring hard gates
   | 'NO_DATA'
+  | 'MARKET_CONTEXT'
   | 'MISSING_TF'
   | 'STRUCTURAL_ANCHOR'
   | 'REGIME_ALIGNMENT'
@@ -90,6 +91,7 @@ interface StageMeta {
 
 const STAGES: Record<GauntletStage, StageMeta> = {
   // PRE-SCORE
+  MARKET_CONTEXT:   { group: 'PRE-SCORE', label: 'MARKET CONTEXT', hint: 'Required current or historical market inputs are unavailable' },
   NO_DATA:           { group: 'PRE-SCORE',  label: 'NO DATA',           hint: 'OHLCV missing for required TFs' },
   MISSING_TF:        { group: 'PRE-SCORE',  label: 'MISSING TF',        hint: 'Critical timeframe failed to load' },
   STRUCTURAL_ANCHOR: { group: 'PRE-SCORE',  label: 'STRUCTURAL ANCHOR', hint: 'No valid HTF anchor (BOS/CHoCH/OB)' },
@@ -117,7 +119,7 @@ const STAGES: Record<GauntletStage, StageMeta> = {
 };
 
 const PRE_SCORE_STAGES: GauntletStage[] = [
-  'NO_DATA', 'MISSING_TF', 'STRUCTURAL_ANCHOR', 'REGIME_ALIGNMENT',
+  'NO_DATA', 'MARKET_CONTEXT', 'MISSING_TF', 'STRUCTURAL_ANCHOR', 'REGIME_ALIGNMENT',
   'BTC_IMPULSE', 'CONFLICT_DENSITY', 'COOLDOWN',
 ];
 const POST_SCORE_STAGES: GauntletStage[] = [
@@ -126,7 +128,7 @@ const POST_SCORE_STAGES: GauntletStage[] = [
 const EXECUTION_STAGES: GauntletStage[] = [
   'REGIME_VETO', 'MAX_POSITIONS', 'HAS_POSITION', 'PENDING_ORDER',
   'POSITION_SIZE', 'PULLBACK_PROB', 'PRICE_FETCH', 'EXEC_ERROR',
-  'PENDING_FILL', 'EXECUTED',
+  'PENDING_FILL', 'EXECUTED', 'UNKNOWN',
 ];
 
 // ─── Reason → stage classifier (lifted verbatim from prior component) ─
@@ -145,6 +147,7 @@ export function classifyStage(signal: SignalLogEntry): GauntletStage {
   }
 
   // reason_type fast-path (preferred — machine-readable).
+  if (rt === 'market_context_unavailable' || rt === 'historical_context_unavailable') return 'MARKET_CONTEXT';
   if (rt === 'structural_anchor')   return 'STRUCTURAL_ANCHOR';
   if (rt === 'regime_alignment')    return 'REGIME_ALIGNMENT';
   if (rt === 'btc_impulse')         return 'BTC_IMPULSE';
@@ -194,57 +197,57 @@ type Action = { msg: string; cta: string; href: string };
 
 const ACTION_MAP: Partial<Record<GauntletStage, Action>> = {
   CONFLUENCE: {
-    msg: 'Confluence threshold may be too high for current conditions.',
+    msg: 'Logged scores did not meet the selected threshold. Inspect factors and rejected cases.',
     cta: 'Open Scanner modes',
     href: '/scanner',
   },
   REGIME_ALIGNMENT: {
-    msg: 'Most signals fight the macro regime — direction bias is wrong.',
+    msg: 'The regime-alignment gate rejected these candidates. Inspect their direction and context.',
     cta: 'Review Intel',
     href: '/intel',
   },
   REGIME_VETO: {
-    msg: 'Late-stage regime check is killing approved plans.',
+    msg: 'These plans were rejected by a later regime check. Inspect the recorded veto.',
     cta: 'Inspect regime',
     href: '/intel',
   },
   BTC_IMPULSE: {
-    msg: 'BTC volatility is breaking signals before entry.',
+    msg: 'The BTC impulse gate rejected these candidates. Inspect the recorded impulse and direction.',
     cta: 'Open Intel',
     href: '/intel',
   },
   RISK_VALIDATION: {
-    msg: 'Plans don\u2019t meet R:R floor — stops or TPs need recalibrating.',
-    cta: 'Tune risk params',
+    msg: 'Risk validation rejected these plans. Review the recorded risk or price constraint.',
+    cta: 'Review risk settings',
     href: '/bot/setup',
   },
   ML_GATE: {
-    msg: 'Edge model is rejecting most signals — model may be stale.',
-    cta: 'Retrain model',
+    msg: 'The model gate rejected these candidates. Review its inputs and validation evidence.',
+    cta: 'Review model evidence',
     href: '/training',
   },
   MAX_POSITIONS: {
-    msg: 'Concurrent-position cap is the bottleneck, not detection.',
-    cta: 'Raise cap',
+    msg: 'Candidates reached the configured position cap. Review open exposure and user limits.',
+    cta: 'Review position limits',
     href: '/bot/setup',
   },
   COOLDOWN: {
-    msg: 'Cooldown filter eating most signals — recent loss streak.',
+    msg: 'These candidates were blocked by cooldown. Inspect the triggering event and expiry.',
     cta: 'Review Journal',
     href: '/journal',
   },
   NO_TRADE_PLAN: {
-    msg: 'Planner can\u2019t build valid plans — anchors may be too sparse.',
-    cta: 'Tune planner',
+    msg: 'The planner declined these candidates. Inspect the geometry and recorded failure reason.',
+    cta: 'Review planner',
     href: '/bot/setup',
   },
   STRUCTURAL_ANCHOR: {
-    msg: 'No HTF anchors are forming — market is choppy.',
-    cta: 'Wait for trend',
+    msg: 'These candidates lacked the required structural anchor. Inspect data and detected zones.',
+    cta: 'Inspect structure',
     href: '/intel',
   },
   EXEC_ERROR: {
-    msg: 'Exchange is rejecting orders — check API keys / size precision.',
+    msg: 'An execution error was logged. Inspect the actual error and order state.',
     cta: 'Open Settings',
     href: '/settings',
   },
@@ -252,7 +255,7 @@ const ACTION_MAP: Partial<Record<GauntletStage, Action>> = {
 
 function deriveBottleneck(counts: Record<GauntletStage, number>) {
   // Skip terminal / informational stages.
-  const skip = new Set<GauntletStage>(['EXECUTED', 'PENDING_FILL', 'UNKNOWN']);
+  const skip = new Set<GauntletStage>(['EXECUTED', 'PENDING_FILL']);
   let total = 0;
   let topId: GauntletStage | null = null;
   let topCount = 0;
@@ -315,7 +318,7 @@ interface Props {
    * Scanner-mode catalog from `useScanner().scannerModes`. When supplied
    * AND the bottleneck stage is CONFLUENCE, the strip below the
    * bottleneck pill renders a per-mode delta showing how many of the
-   * CONFLUENCE-rejected signals would have passed each *other* mode's
+   * CONFLUENCE-rejected signals meet each *other* mode's
    * `min_confluence_score`. Omit to suppress the strip entirely.
    */
   scannerModes?: ScannerMode[];
@@ -326,7 +329,7 @@ interface Props {
 interface ModeDelta {
   name: string;
   threshold: number;
-  unblocked: number;
+  meetingThreshold: number;
   total: number;
 }
 
@@ -336,7 +339,7 @@ function computeModeDeltas(
   currentModeName: string | null | undefined,
 ): ModeDelta[] {
   // §16 #3 mass conservation: every signal counted is part of `total`;
-  // `unblocked <= total` per mode by construction. Negative tests
+  // `meetingThreshold <= total` per mode by construction. Negative tests
   // (signals.length === 0 or no scanner modes) return [] so the strip
   // does not render.
   if (bottleneckSignals.length === 0 || scannerModes.length === 0) return [];
@@ -345,17 +348,17 @@ function computeModeDeltas(
   const out: ModeDelta[] = [];
   for (const m of scannerModes) {
     if (m.name.toLowerCase() === cur) continue;
-    let unblocked = 0;
+    let meetingThreshold = 0;
     for (const s of bottleneckSignals) {
       if (typeof s.confluence === 'number' && s.confluence >= m.min_confluence_score) {
-        unblocked += 1;
+        meetingThreshold += 1;
       }
     }
-    out.push({ name: m.name, threshold: m.min_confluence_score, unblocked, total });
+    out.push({ name: m.name, threshold: m.min_confluence_score, meetingThreshold, total });
   }
-  // Sort descending by unblocked so the most-helpful alternative leads.
+  // Sort descending by meetingThreshold so the largest comparison count leads.
   // Tie-break by lower threshold (less restrictive ranks higher).
-  out.sort((a, b) => b.unblocked - a.unblocked || a.threshold - b.threshold);
+  out.sort((a, b) => b.meetingThreshold - a.meetingThreshold || a.threshold - b.threshold);
   return out;
 }
 
@@ -384,10 +387,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
   const filtered = filterStage ? staged.filter((s) => s.stage === filterStage) : staged;
   const visibleRows = detail || filterStage ? filtered : [];
 
-  // Mode-delta strip: only meaningful when CONFLUENCE is the bottleneck.
-  // Pass the actual rejected-at-CONFLUENCE signals (not all staged) so the
-  // "would have unblocked N of M" math reflects the population the operator
-  // would actually recover by switching mode.
+  // Compare recorded scores with catalog thresholds; other-mode outcomes are unknown.
   const modeDeltas = useMemo(() => {
     if (!bottleneck || bottleneck.id !== 'CONFLUENCE') return [];
     if (!scannerModes || scannerModes.length === 0) return [];
@@ -422,7 +422,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
       <div className="sec-head">
         <div className="sec-title"><span className="dot" /> Gauntlet Breakdown</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Chip>{`${total} CAND · ${executed} EXEC · ${conversion.toFixed(1)}%`}</Chip>
+          <Chip>{`${total} LOG ENTRIES · ${executed} EXECUTED · ${conversion.toFixed(1)}%`}</Chip>
           <button
             type="button"
             className="btn"
@@ -464,7 +464,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
               {bottleneck.label}
             </span>
             <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)' }}>
-              · {bottleneck.count} signals · {bottleneck.pct}% of rejects
+              · {bottleneck.count} signals · {bottleneck.pct}% of logged rejects
             </span>
           </div>
           <div style={{ flex: 1, minWidth: 200, fontSize: 11, color: 'var(--fg-2)', lineHeight: 1.4 }}>
@@ -508,11 +508,14 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
               marginBottom: 6,
             }}
           >
-            // MODE DELTA · would-pass count if you switched modes
+            // THRESHOLD COMPARISON · stored scores meeting each threshold
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 6 }}>
+            Modes also change scoring, gates and timeframes; this is not a replay of another mode.
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             {modeDeltas.map((d) => {
-              const helpful = d.unblocked > 0;
+              const helpful = d.meetingThreshold > 0;
               return (
                 <div
                   key={d.name}
@@ -541,7 +544,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
                       fontWeight: 700,
                     }}
                   >
-                    {d.unblocked} / {d.total}
+                    {d.meetingThreshold} / {d.total}
                   </span>
                 </div>
               );

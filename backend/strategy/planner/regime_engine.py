@@ -58,9 +58,7 @@ def get_atr_regime(
             indicators = _TempIndicatorSet(indicators)
             logger.debug("get_atr_regime: Wrapped single IndicatorSnapshot in temp IndicatorSet")
         else:
-            # Completely unknown type - log error and return fallback
-            logger.error(f"get_atr_regime: Unknown indicator type {type(indicators).__name__}")
-            return "normal"
+            raise ValueError(f"VOLATILITY_INPUT_UNAVAILABLE: unknown indicator type {type(indicators).__name__}")
 
     # Planner/entry isolation: pin to the trade's planning TF when requested, so
     # the TP-ladder regime reflects the trade's own timescale and is NOT moved by
@@ -80,7 +78,7 @@ def get_atr_regime(
 
     # Use the internal detector logic
     # RegimeDetector._detect_volatility returns (label, score)
-    label, score = get_regime_detector()._detect_volatility(indicators)
+    label, score = get_regime_detector()._detect_volatility(indicators, current_price=current_price)
 
     # Mapping for backward compatibility with PlannerConfig keys.
     # (Band cut points live in regime_detector._detect_volatility; the label→key

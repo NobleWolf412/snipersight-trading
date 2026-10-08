@@ -12,6 +12,8 @@ data accuracy for signal generation.
 
 import time
 import logging
+import hashlib
+import json
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from threading import Lock
@@ -40,6 +42,39 @@ TIMEFRAME_SECONDS = {
 }
 
 
+def adapter_cache_namespace(adapter) -> Optional[str]:
+    """Identify a public feed without inspecting credentials or account state.
+
+    Unknown adapters do not participate in shared reuse. Endpoint identity also
+    separates custom hosts even when their venue and sandbox flags match.
+    """
+    exchange = getattr(adapter, "exchange", None)
+    venue = getattr(exchange, "id", None)
+    options = getattr(exchange, "options", None)
+    sandbox = getattr(exchange, "isSandboxModeEnabled", None)
+    urls = getattr(exchange, "urls", None)
+    if (not isinstance(venue, str) or not venue
+            or not isinstance(options, dict) or not isinstance(sandbox, bool)
+            or not isinstance(urls, dict) or not urls.get("api")):
+        return None
+    market = options.get("defaultType")
+    if not isinstance(market, str) or not market:
+        return None
+    scope = {
+        "adapter": type(adapter).__module__ + "." + type(adapter).__qualname__,
+        "venue": venue, "sandbox": sandbox, "endpoints": urls["api"],
+        "market": market, "subtype": options.get("defaultSubType"),
+        "settle": options.get("defaultSettle"),
+        "adapter_market": getattr(adapter, "default_type", None),
+        "adapter_testnet": getattr(adapter, "testnet", None),
+    }
+    try:
+        encoded = json.dumps(scope, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(encoded.encode("utf8")).hexdigest()
+
+
 @dataclass
 class CacheEntry:
     """Single cache entry for symbol+timeframe data."""
@@ -48,6 +83,8 @@ class CacheEntry:
     fetched_at: float  # Unix timestamp when data was fetched
     timeframe: str
     symbol: str
+    namespace: str = ""
+    requested_limit: int = 0
 
     def is_expired(self, buffer_seconds: float = 5.0) -> bool:
         """
@@ -242,9 +279,11 @@ class OHLCVCache:
 
         logger.info(f"OHLCVCache initialized (max_entries={max_entries})")
 
-    def _make_key(self, symbol: str, timeframe: str) -> str:
-        """Create cache key from symbol and timeframe."""
-        return f"{symbol}:{timeframe}"
+    def _make_key(self, symbol: str, timeframe: str, namespace: str = "") -> str:
+        """Anonymous compatibility entries never alias a scoped production feed."""
+        if not namespace:
+            return f"{symbol}:{timeframe}"
+        return json.dumps([namespace, symbol, timeframe], separators=(",", ":"))
 
     def get(
         self,
@@ -252,6 +291,9 @@ class OHLCVCache:
         timeframe: str,
         current_price: Optional[float] = None,
         max_price_drift_pct: float = 3.0,
+        *,
+        namespace: str = "",
+        requested_limit: int = 0,
     ) -> Optional[pd.DataFrame]:
         """
         Get cached OHLCV data if available and not expired.
@@ -265,7 +307,7 @@ class OHLCVCache:
         Returns:
             Cached DataFrame or None if cache miss/expired
         """
-        key = self._make_key(symbol, timeframe)
+        key = self._make_key(symbol, timeframe, namespace)
 
         with self._lock:
             entry = self._cache.get(key)
@@ -279,6 +321,11 @@ class OHLCVCache:
                 del self._cache[key]
                 self._misses += 1
                 logger.debug(f"Cache EXPIRED (time): {key} (age={entry.get_age_seconds():.1f}s)")
+                return None
+
+            if (entry.requested_limit or len(entry.df)) < requested_limit:
+                self._misses += 1
+                logger.debug("Cache depth insufficient: %s (requested=%s)", key, requested_limit)
                 return None
 
             # NEW: Check price drift if current_price provided
@@ -304,7 +351,7 @@ class OHLCVCache:
             )
             return entry.df.copy()  # Return copy to prevent mutation
 
-    def set(self, symbol: str, timeframe: str, df: pd.DataFrame) -> None:
+    def set(self, symbol: str, timeframe: str, df: pd.DataFrame, *, namespace: str = "", requested_limit: int = 0) -> None:
         """
         Cache OHLCV data.
 
@@ -316,9 +363,10 @@ class OHLCVCache:
         if df is None or df.empty:
             return
 
-        key = self._make_key(symbol, timeframe)
+        key = self._make_key(symbol, timeframe, namespace)
         entry = CacheEntry(
-            df=df.copy(), fetched_at=time.time(), timeframe=timeframe, symbol=symbol  # Store copy
+            df=df.copy(), fetched_at=time.time(), timeframe=timeframe, symbol=symbol,
+            namespace=namespace, requested_limit=requested_limit or len(df),
         )
 
         with self._lock:
@@ -343,30 +391,18 @@ class OHLCVCache:
 
         logger.debug(f"Evicted {evict_count} oldest cache entries")
 
-    def invalidate(self, symbol: str, timeframe: Optional[str] = None) -> int:
-        """
-        Invalidate cache entries for a symbol.
-
-        Args:
-            symbol: Trading pair to invalidate
-            timeframe: Specific timeframe (None = all timeframes)
-
-        Returns:
-            Number of entries invalidated
-        """
+    def invalidate(self, symbol: str, timeframe: Optional[str] = None, *, namespace: Optional[str] = None) -> int:
+        """Invalidate a source, or all sources when an operator omits namespace."""
         with self._lock:
-            if timeframe:
-                key = self._make_key(symbol, timeframe)
-                if key in self._cache:
-                    del self._cache[key]
-                    return 1
-                return 0
-            else:
-                # Invalidate all timeframes for symbol
-                keys_to_remove = [k for k in self._cache if k.startswith(f"{symbol}:")]
-                for key in keys_to_remove:
-                    del self._cache[key]
-                return len(keys_to_remove)
+            keys = [
+                key for key, entry in self._cache.items()
+                if entry.symbol == symbol
+                and (timeframe is None or entry.timeframe == timeframe)
+                and (namespace is None or entry.namespace == namespace)
+            ]
+            for key in keys:
+                del self._cache[key]
+            return len(keys)
 
     def clear(self) -> None:
         """Clear all cached data."""
@@ -411,6 +447,8 @@ class OHLCVCache:
                         "remaining_seconds": round(entry.get_remaining_seconds(), 1),
                         "expired": entry.is_expired(),
                         "candles": len(entry.df),
+                        "source_namespace": entry.namespace or None,
+                        "requested_limit": entry.requested_limit or len(entry.df),
                     }
                 )
             return sorted(info, key=lambda x: x["remaining_seconds"])

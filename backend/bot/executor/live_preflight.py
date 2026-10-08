@@ -4,31 +4,25 @@ import time
 
 
 def read_only_preflight(adapter, min_balance_usd=50.0):
-    result = {"ok": False, "balance": 0.0, "open_positions": [], "issues": []}
+    result = {"ok": False, "balance": None, "equity": None, "basis": "exchange_mark",
+              "open_positions": [], "issues": []}
     if not adapter.supports_trading():
         result["issues"].append("No API keys configured")
         return result
     try:
-        free = adapter.fetch_balance()["free"]["USDT"]
-        if isinstance(free, bool) or not math.isfinite(float(free)) or float(free) < 0:
-            raise ValueError("Invalid USDT free balance")
+        observed = adapter.fetch_account_observation()
+        if not observed.complete:
+            raise ValueError(', '.join(observed.reasons))
+        free = observed.free
         result["balance"] = float(free)
+        result["equity"] = float(observed.equity)
         if float(free) < min_balance_usd:
             result["issues"].append(f"Balance below minimum ${min_balance_usd:.2f}")
     except Exception as exc:
         result["issues"].append(f"Balance unavailable: {exc}")
-    try:
-        rows = adapter.fetch_positions()
-        if not isinstance(rows, list):
-            raise ValueError("Position collection unavailable")
-        for row in rows:
-            qty = row["contracts"]
-            if isinstance(qty, bool) or not math.isfinite(float(qty)) or float(qty) < 0 or not row.get("symbol"):
-                raise ValueError("Invalid position")
-            if float(qty) > 0:
-                result["open_positions"].append({"symbol": row["symbol"], "size": float(qty)})
-    except Exception as exc:
-        result["issues"].append(f"Position check failed: {exc}")
+    else:
+        result['open_positions'] = [{'symbol': p.symbol, 'size': float(p.base_quantity)}
+                                    for p in observed.positions if p.contracts]
     try:
         skew = abs(float(adapter.exchange.fetch_time()) - time.time() * 1000) / 1000
         if not math.isfinite(skew):

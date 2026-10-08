@@ -6,6 +6,7 @@ these tests do not validate exchange protocol behavior or real concurrency.
 """
 
 import ast
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -55,7 +56,7 @@ def source():
         timezone=timezone, Enum=Enum, Optional=Optional, Dict=Dict, List=List,
         Any=Any, Target=object, TradePlan=object, math=math, time=time, Decimal=Decimal,
         PaperTradingStats=S, logger=logging.getLogger("test.live_reconciliation"),
-        asyncio=S(get_running_loop=lambda: InlineLoop(), sleep=noop, to_thread=inline_thread),
+        asyncio=S(get_running_loop=lambda: InlineLoop(), sleep=noop, to_thread=inline_thread, Lock=asyncio.Lock),
     )
     trees = {}
 

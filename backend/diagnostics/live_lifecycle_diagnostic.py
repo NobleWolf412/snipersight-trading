@@ -7,6 +7,7 @@ Writes only temporary execution journals, never reads credentials or contacts an
 """
 
 import ast
+from copy import deepcopy
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -25,11 +26,17 @@ from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, Mock
 import uuid
 import tempfile
+from decimal import Decimal
 
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from backend.bot.executor.execution_journal import ExecutionJournal, JournalError
+from backend.bot.executor.accounting_runtime import AccountRuntime, Commitment
+from backend.bot.executor.execution_fee_recovery import ExecutionFeeRecovery
+from backend.bot.trade_journal import TradeJournalService
+from backend.bot.executor.accounting_models import AccountingError, ObservationContext, amount, execution_update
+from backend.data.adapters.phemex_accounting import normalize_order, normalize_execution
 
 DIAGNOSTIC_ROOT = None
 EXECUTORS = []
@@ -68,6 +75,7 @@ def load_definitions():
     logger.handlers = [logging.NullHandler()]
     logger.propagate = False
     namespace = dict(globals(), logger=logger, PhemexAdapter=S,
+                     get_trade_journal=lambda: TradeJournalService(DIAGNOSTIC_ROOT / 'reports.jsonl'),
                      LiveTradingConfig=S, PaperTradingStats=lambda: S(to_dict=lambda: {}),
                      ccxt=S(InsufficientFunds=FixtureRejection, InvalidOrder=FixtureRejection))
     hashes, selected = {}, {}
@@ -97,11 +105,14 @@ def load_definitions():
         "set_entry_admission", "recovery_snapshot", "recover_uncertain_orders",
         "_restore_execution", "_durable_state", "_storage_failure", "_require_storage",
         "_persist_order", "_send_journaled_order", "checkpoint_flat", "close",
+        "accounting_status", "balance_status", "reconcile_account", "invalidate_account",
+        "execution_receipt", "execution_outcome",
+        "_check_account_admission_lease", "_process_accounting_order", "_execution_context",
     ))
     extract("service", "LiveTradingService", (
         "__init__", "stop", "kill_switch", "reset", "get_status", "_get_uptime_seconds",
         "_close_all_positions", "_set_exchange_state_known", "_entry_reconciliation_ready", "_startup_reconcile",
-        "_request_shutdown", "_shutdown_loop", "_shutdown_step", "_local_shutdown_settled",
+        "_request_shutdown", "_shutdown_loop", "_shutdown_step", "_local_shutdown_settled", "_recover_execution_reports",
         "_observe_account", "_verify_resettable", "_lifecycle_status", "_write_session_report", "_reset_session",
     ))
     return namespace, hashes, selected
@@ -114,7 +125,8 @@ async def run_probes(ns):
         records.append(dict(check=name, direction=direction, safety_condition_met=bool(safe), observed=observed))
 
     def adapter():
-        return S(
+        from backend.tests.unit.runtime_fixtures import prepare_adapter
+        return prepare_adapter(S(
             supports_trading=lambda: True, set_position_mode_one_way=Mock(return_value=True),
             fetch_balance=Mock(return_value={"free": {"USDT": 1000}}),
             fetch_positions=Mock(return_value=[]), exchange=S(fetch_open_orders=Mock(return_value=[])),
@@ -123,12 +135,14 @@ async def run_probes(ns):
             set_margin_mode=Mock(), set_leverage=Mock(), cancel_order=Mock(return_value={"status": "canceled", "filled": 0}),
             create_order=Mock(side_effect=TimeoutError("fixture: acknowledgment lost")),
             fetch_order_by_client_id=Mock(side_effect=LookupError("fixture: order not visible")),
-        )
+        ), symbol='FIXTURE/USDT', binding='offline-fixture')
 
     def executor(ad, path=None):
-        journal = ExecutionJournal(path or DIAGNOSTIC_ROOT / f"{uuid.uuid4().hex}.sqlite3", "offline-fixture")
+        from backend.tests.unit.runtime_fixtures import initialize_fixture
+        journal = ExecutionJournal(path or DIAGNOSTIC_ROOT / f"{uuid.uuid4().hex}.sqlite3", "offline-fixture",
+                                   runtime=True, environment='testnet')
         ex = ns["LiveExecutor"](ad, max_position_size_usd=2000, max_total_exposure_usd=2000, journal=journal)
-        ex.set_entry_admission(True)
+        initialize_fixture(ex)
         EXECUTORS.append(ex)
         return ex
 
@@ -157,7 +171,7 @@ async def run_probes(ns):
         record("uncertain_entry_visible_in_status", direction,
                any(row["order_id"] == order.order_id for row in before["pending_orders"]),
                order_status=order.status.value, pending_display_count=len(before["pending_orders"]),
-               reserved_usd=ex._total_exposure_usd())
+               reserved_usd=ex.accounting_status()['held_commitments'])
 
         async def background():
             await asyncio.Event().wait()

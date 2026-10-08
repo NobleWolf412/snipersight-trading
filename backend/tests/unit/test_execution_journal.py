@@ -11,6 +11,7 @@ import pytest
 
 from backend.bot.executor.execution_journal import ExecutionJournal, JournalError, credential_binding
 from backend.bot.executor.live_executor import LiveExecutor
+from backend.tests.unit.runtime_fixtures import prepare_adapter, initialize_fixture, fixture_ws
 from backend.bot.executor.live_preflight import read_only_preflight
 from backend.bot.executor.paper_executor import OrderStatus
 from backend.bot.live_trading_service import LiveTradingService
@@ -18,21 +19,20 @@ from backend.tests.unit.test_live_lifecycle import snapshot, service, cleanup
 
 
 def adapter():
-    return S(supports_trading=lambda: True, testnet=True, exchange=S(apiKey="fixture"),
+    return prepare_adapter(S(supports_trading=lambda: True, testnet=True, exchange=S(apiKey="fixture"),
              fetch_balance=Mock(return_value={"free": {"USDT": 1000}}),
              set_position_mode_one_way=Mock(return_value=True),
              set_margin_mode=Mock(), set_leverage=Mock(),
              create_order=Mock(side_effect=ccxt.RequestTimeout("lost acknowledgment")),
              fetch_order=Mock(), fetch_order_by_client_id=Mock(side_effect=ccxt.OrderNotFound("not yet visible")),
              fetch_positions=Mock(return_value=[]), fetch_account_snapshot=Mock(return_value=snapshot()),
-             cancel_order=Mock(return_value={"id": "remote", "status": "canceled", "filled": 0}))
+             cancel_order=Mock(return_value={"id": "remote", "status": "canceled", "filled": 0})))
 
 
 def create(path, ad=None):
-    ex = LiveExecutor(ad or adapter(), journal=ExecutionJournal(path, "fixture"),
+    ex = LiveExecutor(ad or adapter(), journal=ExecutionJournal(path, "fixture", runtime=True, environment="testnet"),
                       max_position_size_usd=2000, max_total_exposure_usd=2000)
-    ex.set_entry_admission(True)
-    return ex
+    return initialize_fixture(ex)
 
 
 @pytest.fixture
@@ -125,18 +125,19 @@ def test_restored_fills_do_not_double_account_snapshot_or_cash(tmp_path, side, q
     path = tmp_path / "execution.sqlite3"
     first = create(path)
     order = place(first, side)
-    first.apply_ws_fill("remote", order.order_id, "filled" if terminal else "partiallyfilled", 10 if terminal else 4, 100)
+    fixture_ws(first, "remote", order.order_id, "filled" if terminal else "partiallyfilled", 10 if terminal else 4, 100)
     first.close()
     restored = create(path)
     try:
         restored._adapter.fetch_positions.return_value = [{"symbol": "A", "contracts": 10,
                                                           "side": "long" if qty > 0 else "short", "entryPrice": 100}]
-        restored.reconcile_positions()
+        restored.reconcile_account(force=True)
         before = restored.get_balance()
         for status, fill in (("filled", 10), ("partiallyfilled", 4), ("filled", 10)):
-            restored.apply_ws_fill("remote", order.order_id, status, fill, 100)
+            fixture_ws(restored, "remote", order.order_id, status, fill, 100)
         assert restored.get_position("A") == qty
-        assert restored.get_balance() == before and restored.get_trade_history() == []
+        assert restored._cached_balance == before and restored.get_trade_history() == []
+        assert not restored.accounting_status()['entry_eligible']
         assert restored.get_order(order.order_id).filled_quantity == 10
         assert restored._journal.records()[0][1]["filled_quantity"] == 10
     finally:
@@ -155,8 +156,9 @@ def test_pre_submit_storage_failure_makes_zero_exchange_calls(ex, error):
 def test_post_submit_save_failure_keeps_original_durable_unknown_intent(ex):
     ex._adapter.create_order.side_effect = None
     ex._adapter.create_order.return_value = {"id": "remote", "status": "filled", "filled": 10, "average": 100}
-    ex._journal.observe = Mock(side_effect=OSError("disk full after send"))
-    place(ex)
+    ex._journal.record_execution = Mock(side_effect=OSError("disk full after send"))
+    with pytest.raises(JournalError, match='disk full after send'):
+        place(ex)
     rows = ex._journal.records()
     assert rows[0][1]["status"] == "PENDING" and rows[0][1]["filled_quantity"] == 0
     assert ex.recovery_snapshot()["storage_error"]
@@ -167,7 +169,7 @@ def test_post_submit_save_failure_keeps_original_durable_unknown_intent(ex):
 
 def test_cancel_intent_is_committed_before_transport_and_failure_blocks_send(ex):
     order = place(ex)
-    ex.apply_ws_fill("remote", order.order_id, "open", 0, 0)
+    fixture_ws(ex, "remote", order.order_id, "open", 0, 0)
     def cancel(*args):
         assert ex._journal.records()[0][1]["cancel_requested"]
         raise ccxt.RequestTimeout("lost cancel")
@@ -209,7 +211,7 @@ def test_terminal_recovery_requires_flat_checkpoint_before_clean_restart(tmp_pat
     path = tmp_path / "execution.sqlite3"
     first = create(path)
     order = place(first)
-    first.apply_ws_fill("remote", order.order_id, "canceled", 0, 0)
+    fixture_ws(first, "remote", order.order_id, "canceled", 0, 0)
     first.checkpoint_flat(first.verify_flat_account())
     first.close()
     second = create(path)
@@ -296,7 +298,7 @@ def test_actual_live_start_restores_before_strategy_or_mode_initialization(tmp_p
     monkeypatch.setattr(module, "load_phemex_credentials", lambda: ("fixture-key", "fixture-secret"))
     monkeypatch.setattr(module, "PhemexAdapter", lambda **kwargs: ad)
     monkeypatch.setattr(module, "LiveExecutor", lambda **kwargs: LiveExecutor(
-        **kwargs, journal=ExecutionJournal(path, "fixture")))
+        **kwargs, journal=ExecutionJournal(path, "fixture", runtime=True, environment="testnet")))
     orchestrator = Mock(side_effect=AssertionError("Strategy must not start during recovery"))
     monkeypatch.setattr(module, "Orchestrator", orchestrator)
     svc = LiveTradingService()
@@ -346,7 +348,7 @@ def test_cancelled_protection_intent_is_observed_but_not_retried_after_restart(t
     path = tmp_path / "execution.sqlite3"
     first = create(path)
     order = first.place_stop_order("A", "SELL", 10, 99)
-    first.apply_ws_fill("remote", order.order_id, "open", 0, 0)
+    fixture_ws(first, "remote", order.order_id, "open", 0, 0)
     first._adapter.cancel_order.side_effect = ccxt.RequestTimeout("unknown cancellation")
     first.cancel_order(order.order_id)
     first.close()
@@ -380,8 +382,9 @@ def test_uninitialized_inspection_does_not_create_marker_database_or_directory(t
 
 def test_late_execution_revision_prevents_stale_flat_checkpoint(ex):
     observed_at = ex.verify_flat_account()
+    ex.reconcile_account(force=True)
     order = place(ex)
-    ex.apply_ws_fill("remote", order.order_id, "canceled", 0, 0)
+    fixture_ws(ex, "remote", order.order_id, "canceled", 0, 0)
     with pytest.raises(JournalError, match="Execution changed"):
         ex.checkpoint_flat(observed_at)
     assert not ex._journal._connection.execute("SELECT clean FROM metadata").fetchone()[0]
@@ -398,6 +401,6 @@ def test_api_preflight_uses_only_readonly_check():
 
 def test_journal_schema_is_exact_and_separate_from_trade_history(ex):
     tables = {row[0] for row in ex._journal._connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert tables == {"metadata", "requests", "events"}
+    assert tables == {"metadata", "requests", "events", "financial_orders", "execution_facts"}
     assert ex._journal._connection.execute("PRAGMA synchronous").fetchone() == (2,)
     assert ex._journal._connection.execute("PRAGMA journal_mode").fetchone() == ("delete",)

@@ -86,39 +86,63 @@ class PhemexAdapter:
         except Exception as e:
             logger.warning(f"Failed to load markets on init: {e}")
 
+    def set_market_type(self, market_type: str) -> None:
+        """Keep public-source identity and transport defaults in agreement."""
+        if market_type not in ("spot", "swap"):
+            raise ValueError(f"MARKET_SOURCE_UNRESOLVED: unsupported market type {market_type!r}")
+        self.exchange.options["defaultType"] = market_type
+        self.default_type = market_type
+
+    def _resolve_data_symbol(self, symbol: str, market_type: Optional[str] = None) -> str:
+        """Resolve one market from metadata, never substitute spot for a swap.
+
+        Plain BASE/QUOTE is a pair request; a qualified symbol pins its contract.
+        Ambiguous settlements and unavailable requested markets must reject.
+        """
+        requested = market_type or self.default_type
+        if requested not in ("spot", "swap"):
+            raise ValueError(f"MARKET_SOURCE_UNRESOLVED: unsupported market type {requested!r}")
+        markets = getattr(self.exchange, "markets", None) or self.exchange.load_markets()
+        candidates = []
+        for name, market in markets.items():
+            if not isinstance(market, dict) or market.get("type") != requested:
+                continue
+            canonical = market.get("symbol") or name
+            matches = canonical == symbol if ":" in symbol else canonical.split(":", 1)[0] == symbol
+            if matches:
+                candidates.append(canonical)
+        if len(candidates) != 1:
+            raise ValueError(
+                f"MARKET_SOURCE_UNRESOLVED: {symbol} {requested} matched {len(candidates)} markets"
+            )
+        return candidates[0]
+
     def get_market_info(self, symbol: str) -> Dict[str, float]:
-        """
-        Fetch market precision information (tick size and lot size).
-        
-        Args:
-            symbol: Trading pair
-            
-        Returns:
-            Dict with tick_size and lot_size
-        """
+        """Return absolute increments for the resolved market using CCXT units."""
         try:
-            if not self.exchange.markets:
-                self.exchange.load_markets()
-            
-            market = self.exchange.market(symbol)
-            # CCXT precision can be standard (e.g. 0.01) or decimal places (e.g. 2)
-            # We want the absolute value (tick size)
-            tick_size = market["precision"].get("price", 0.0)
-            lot_size = market["precision"].get("amount", 0.0)
-            
-            # If CCXT returns decimal places (int), convert to absolute value
-            if isinstance(tick_size, int):
-                tick_size = 10 ** -tick_size
-            if isinstance(lot_size, int):
-                lot_size = 10 ** -lot_size
-                
-            return {
-                "tick_size": float(tick_size),
-                "lot_size": float(lot_size),
-            }
-        except Exception as e:
-            logger.warning(f"Failed to fetch market info for {symbol}: {e}")
-            return {"tick_size": 0.0, "lot_size": 0.0}
+            market = self.exchange.market(self._resolve_data_symbol(symbol))
+            mode = self.exchange.precisionMode
+            if mode not in (ccxt.TICK_SIZE, ccxt.DECIMAL_PLACES):
+                raise ValueError("absolute increments unavailable for this precision mode")
+            increments = {}
+            for field, output in (("price", "tick_size"), ("amount", "lot_size")):
+                raw = market["precision"].get(field)
+                if raw is None or isinstance(raw, bool):
+                    raise ValueError(f"missing {field} precision")
+                value = float(raw)
+                if not math.isfinite(value):
+                    raise ValueError(f"nonfinite {field} precision")
+                if mode == ccxt.DECIMAL_PLACES:
+                    if not value.is_integer():
+                        raise ValueError(f"noninteger {field} decimal places")
+                    value = 10.0 ** -int(value)
+                if not math.isfinite(value) or value <= 0:
+                    raise ValueError(f"invalid {field} increment")
+                increments[output] = value
+            return increments
+        except Exception as exc:
+            logger.warning("MARKET_PRECISION_UNAVAILABLE: %s: %s", symbol, exc)
+            raise ValueError(f"MARKET_PRECISION_UNAVAILABLE: {symbol}: {exc}") from exc
 
     @retry_on_rate_limit(max_retries=3)
     def fetch_ohlcv(
@@ -129,127 +153,24 @@ class PhemexAdapter:
         limit: int = 500,
         since: Optional[int] = None,
     ) -> pd.DataFrame:
-        """
-        Fetch OHLCV data using CCXT (Primary) with Direct REST Fallback.
+        """Fetch normalized candles from the explicitly selected CCXT market.
 
-        Improvements:
-        1. Enforces limit >= 500 (Phemex Requirement)
-        2. Uses CCXT's built-in rate limiter
-        3. Falls back to Direct REST if CCXT fails
+        Transient transport failures use the shared bounded retry policy. The
+        retired direct-REST fallback misread the raw row layout and guessed
+        price/volume scales; it must never supply decision inputs.
         """
-        import requests
-
-        # Enforce Phemex minimum limit of 500 to avoid Error 30000
+        resolved = self._resolve_data_symbol(symbol, market_type)
         safe_limit = max(500, limit)
-
         try:
-            # 1. Primary: CCXT Fetch (Handles Rate Limits & Parsing)
-            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=safe_limit, since=since)
-
-            df = pd.DataFrame(
-                ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
-            )
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-            df.set_index("timestamp", inplace=True)
-            df.reset_index(inplace=True)
-
-            # Simple check to ensure we got data
-            if df.empty:
-                logger.warning(f"CCXT returned empty data for {symbol}")
-                # Don't fallback on empty, it might be valid empty.
-                return df
-
-            return df
-
-        except Exception as e:
-            logger.warning(f"CCXT fetch failed for {symbol}: {e}. Attempting Direct REST Fallback.")
-
-            # 2. Fallback: Direct REST API
-            try:
-                # Resolve Symbol
-                phemex_symbol = symbol.replace("/", "").replace(":USDT", "")
-                if self.is_spot(symbol) and not phemex_symbol.startswith("s"):
-                    phemex_symbol = f"s{phemex_symbol}"
-
-                # Resolve Resolution
-                tf_map = {
-                    "1m": 60,
-                    "3m": 180,
-                    "5m": 300,
-                    "15m": 900,
-                    "30m": 1800,
-                    "1h": 3600,
-                    "2h": 7200,
-                    "4h": 14400,
-                    "6h": 21600,
-                    "12h": 43200,
-                    "1d": 86400,
-                    "1w": 604800,
-                    "1M": 2592000,
-                }
-                resolution = tf_map.get(timeframe, 60)
-
-                _base = "https://testnet-api.phemex.com" if self.testnet else "https://api.phemex.com"
-                url = f"{_base}/exchange/public/md/kline"
-                end_time = int(time.time())
-
-                params = {
-                    "symbol": phemex_symbol,
-                    "resolution": resolution,
-                    "limit": safe_limit,
-                    "to": end_time,
-                }
-                if since:
-                    params["from"] = int(since / 1000)
-                else:
-                    params["from"] = end_time - (resolution * params["limit"])
-
-                # Polite request
-                time.sleep(random.uniform(0.5, 1.0))  # Extra polite on fallback
-                response = requests.get(url, params=params, timeout=5)
-                data = response.json()
-
-                if data.get("code", -1) != 0:
-                    raise ccxt.ExchangeError(f"Phemex API Error: {data.get('msg')}")
-
-                rows = data.get("data", {}).get("rows", [])
-                if not rows:
-                    return pd.DataFrame()
-
-                # Phemex returns scaled-integer ("Ep") prices whose scale is per-contract,
-                # NOT a function of magnitude. Derive it from an independent (CCXT) ticker
-                # and reject the frame if it can't be verified — a magnitude guess left
-                # sub-$0.01 coins 1e8x inflated, feeding a corrupt price into sizing/
-                # liquidation (audit bug #4). See
-                # decisions/2026-05-30__fix-design__phemex-fallback-scale.md.
-                scale = self._derive_fallback_scale(symbol, float(rows[-1][4]))
-                if scale is None:
-                    return pd.DataFrame()  # rejected — symbol dropped this cycle (loud-logged)
-
-                parsed_data = []
-                for r in rows:
-                    parsed_data.append(
-                        {
-                            "timestamp": r[0] * 1000,
-                            "open": r[1] / scale,
-                            "high": r[2] / scale,
-                            "low": r[3] / scale,
-                            "close": r[4] / scale,
-                            "volume": r[5] / scale if self.is_spot(symbol) else r[5],
-                        }
-                    )
-
-                df_direct = pd.DataFrame(parsed_data)
-                df_direct["timestamp"] = pd.to_datetime(df_direct["timestamp"], unit="ms")
-                df_direct.set_index("timestamp", inplace=True)
-                df_direct.reset_index(inplace=True)
-
-                logger.info(f"✓ Recovered {symbol} via Direct REST Fallback")
-                return df_direct
-
-            except Exception as direct_err:
-                logger.error(f"Direct REST Fallback also failed for {symbol}: {direct_err}")
-                raise e  # Raise original CCXT error if both fail
+            ohlcv = self.exchange.fetch_ohlcv(resolved, timeframe, limit=safe_limit, since=since)
+        except Exception as exc:
+            logger.warning("OHLCV_SOURCE_UNAVAILABLE: %s %s: %s", resolved, timeframe, exc)
+            raise
+        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        if df.empty:
+            logger.warning("OHLCV_SOURCE_EMPTY: %s %s", resolved, timeframe)
+        return df  # Raise original CCXT error if both fail
 
     @retry_on_rate_limit(max_retries=3)
     def fetch_ticker(self, symbol: str, market_type: Optional[str] = None) -> Dict[str, Any]:
@@ -270,7 +191,8 @@ class PhemexAdapter:
             mt = market_type or self.default_type
             params = {"type": mt} if mt else {}
 
-            ticker = self.exchange.fetch_ticker(symbol, params=params)
+            resolved = self._resolve_data_symbol(symbol, mt)
+            ticker = self.exchange.fetch_ticker(resolved, params=params)
             logger.debug(f"Fetched ticker for {symbol} ({mt}): {ticker.get('last', 'N/A')}")
             return cast(Dict[str, Any], ticker)
 
@@ -949,6 +871,82 @@ class PhemexAdapter:
             f"returned {len(trades)} rows"
         )
         return trades
+
+    @retry_on_rate_limit(max_retries=3)
+    def fetch_execution_history_page(self, offset: int = 0, limit: int = 200) -> Dict[str, Any]:
+        """Raw USDT execution history; retain the documented count/page contract.
+
+        Unlike CCXT's unified trade helper, this preserves the envelope and raw
+        fields. Numeric history enums are not interpreted as WS/order evidence.
+        """
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError('API keys required to fetch execution history')
+        if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 200:
+            raise ValueError('Invalid execution history page bounds')
+        self.metrics['rest_calls_total'] += 1
+        self.metrics['fetch_my_trades_calls_total'] += 1
+        self.metrics['last_rest_call_ts'] = int(time.time() * 1000)
+        response = self.exchange.privateGetExchangeOrderV2TradingList({
+            'currency': 'USDT', 'offset': offset, 'limit': limit, 'withCount': True})
+        if not isinstance(response, dict) or type(response.get('code')) is not int or response['code'] != 0:
+            raise ValueError('HISTORY_RESPONSE_INVALID')
+        data = response.get('data')
+        if not isinstance(data, dict) or type(data.get('total')) is not int or data['total'] < 0:
+            raise ValueError('HISTORY_COUNT_UNAVAILABLE')
+        rows = data.get('rows')
+        if not isinstance(rows, list) or len(rows) > limit:
+            raise ValueError('HISTORY_ROWS_INVALID')
+        for row in rows:
+            if not isinstance(row, dict) or row.get('currency') != 'USDT':
+                raise ValueError('HISTORY_ROW_SCOPE_INVALID')
+            eid = row.get('execId', row.get('execID'))
+            if not isinstance(eid, str) or not eid.strip() or not eid.replace('-', '').strip('0'):
+                raise ValueError('HISTORY_EXECUTION_ID_REQUIRED')
+            if 'execId' in row and 'execID' in row and row['execId'] != row['execID']:
+                raise ValueError('HISTORY_EXECUTION_ID_CONFLICT')
+        self.metrics['fetch_my_trades_rows_total'] += len(rows)
+        return {'scope': 'phemex:swap:USDT', 'offset': offset, 'total': data['total'], 'rows': rows}
+
+    @retry_on_rate_limit(max_retries=3)
+    def fetch_trade_execution_page(self, symbol: str, start: int, end: int,
+                                   offset: int = 0, limit: int = 200) -> List[Dict[str, Any]]:
+        """Raw identified trade executions in an explicit, fixed millisecond window."""
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError('API keys required to fetch executions')
+        if (any(type(v) is not int for v in (start, end, offset, limit))
+                or not 0 <= start <= end or offset < 0 or not 1 <= limit <= 200):
+            raise ValueError('Invalid trade execution page bounds')
+        market = self.exchange.markets.get(symbol)
+        if (self.default_type != 'swap' or not isinstance(market, dict)
+                or market.get('symbol') != symbol or not market.get('id')
+                or market.get('swap') is not True or market.get('linear') is not True
+                or market.get('settle') != 'USDT' or market.get('quote') != 'USDT'
+                or market.get('contractSize') != 1):
+            raise ValueError('EXECUTION_HISTORY_MARKET_UNSUPPORTED')
+        self.metrics['rest_calls_total'] += 1
+        self.metrics['fetch_my_trades_calls_total'] += 1
+        self.metrics['last_rest_call_ts'] = int(time.time() * 1000)
+        rows = self.exchange.privateGetApiDataGFuturesTrades({
+            'symbol': market['id'], 'start': start, 'end': end, 'offset': offset, 'limit': limit})
+        if not isinstance(rows, list) or len(rows) > limit:
+            raise ValueError('EXECUTION_HISTORY_ROWS_INVALID')
+        seen = set()
+        for row in rows:
+            if (not isinstance(row, dict) or row.get('symbol') != market['id']
+                    or row.get('currency') != 'USDT' or row.get('side') not in ('Buy', 'Sell')
+                    or row.get('tradeType') not in ('Trade', 'LiqTrade', 'AdlTrade')):
+                raise ValueError('EXECUTION_HISTORY_ROW_SCOPE_INVALID')
+            eid, remote, client = row.get('execID'), row.get('orderID'), row.get('clOrdID')
+            if (not isinstance(eid, str) or not eid.strip() or not eid.replace('-', '').strip('0')
+                    or eid in seen or not any(isinstance(v, str) and v.strip() for v in (remote, client))):
+                raise ValueError('EXECUTION_HISTORY_IDENTITY_INVALID')
+            stamp = row.get('transactTimeNs')
+            if (type(stamp) not in (int, str) or not str(stamp).isdigit()
+                    or not start * 1_000_000 <= int(stamp) < (end + 1) * 1_000_000):
+                raise ValueError('EXECUTION_HISTORY_TIME_INVALID')
+            seen.add(eid)
+        self.metrics['fetch_my_trades_rows_total'] += len(rows)
+        return rows
 
     @retry_on_rate_limit(max_retries=3)
     def set_leverage(self, leverage: int, symbol: str) -> None:

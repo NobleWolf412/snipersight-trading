@@ -8,11 +8,13 @@ same PositionManager callbacks, same signal processing.
 
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
+from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from decimal import Decimal
 from pathlib import Path
 import asyncio
+import os
 import json
 import logging
 import math
@@ -20,6 +22,9 @@ import uuid
 import time
 
 from backend.bot.executor.live_executor import LiveExecutor
+from backend.bot.executor.execution_outcomes import ExecutionReceipt
+from backend.bot.executor.execution_fee_recovery import ExecutionFeeRecovery
+from backend.bot.executor.execution_reports import ExecutionReportPublisher
 from backend.bot.executor.paper_executor import OrderStatus, OrderType
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
 from backend.bot.paper_trading_service import (
@@ -87,6 +92,10 @@ class LiveTradingService:
         self._monitor_task: Optional[asyncio.Task] = None
         self._ws_task: Optional[asyncio.Task] = None
         self._backfill_task: Optional[asyncio.Task] = None
+        self._fee_recovery_task = None
+        self._fee_recovery = None
+        self._reporting_status = {}
+        self._shutdown_fee_recovery = None
         self._ws_client: Optional[PhemexWebSocketClient] = None
         self._running = False
         self._lifecycle_busy = False
@@ -106,6 +115,7 @@ class LiveTradingService:
         # Phemex fill backfill state — persisted between sessions so a restart
         # does not re-scan history from epoch.
         self._last_trade_sync_ts: Optional[int] = None
+        self._backfill_lock = asyncio.Lock()
         self._backfill_metrics: Dict[str, Any] = {
             "runs_total": 0,
             "errors_total": 0,
@@ -114,6 +124,8 @@ class LiveTradingService:
             "last_run_ts": None,
             "last_error_ts": None,
             "last_error_msg": None,
+            "state": "not_run",
+            "completeness": "unverified",
         }
         self._fills_log_path: Optional[Path] = None
 
@@ -223,6 +235,7 @@ class LiveTradingService:
             dry_run=config.dry_run,
             target_leverage=config.leverage,
             owner="live_service", generation=f"{self.session_id}:{self._generation}",
+            account_refresh_interval=config.balance_reconcile_interval,
         )
         self.executor.set_entry_admission(False)
 
@@ -232,12 +245,12 @@ class LiveTradingService:
             return self._begin_restart_recovery("Interrupted execution session restored; strategy resumption blocked")
 
         # Preflight
-        preflight = self.executor.preflight_check()
+        preflight = await asyncio.to_thread(self.executor.preflight_check)
         if not preflight["ok"] and not config.dry_run:
             issues = "; ".join(preflight.get("issues", []))
             raise ValueError(f"Preflight failed: {issues}")
 
-        self._peak_equity = self.executor.get_balance()
+        self._peak_equity = 0.0
 
         # Position manager — identical callbacks as paper service
         self.position_manager = PositionManager(
@@ -248,6 +261,7 @@ class LiveTradingService:
             trailing_stop_activation=config.trailing_activation,
             trailing_stop_distance=0.75,
             max_hours_open=config.max_hours_open,
+            receipt_execution=bool(getattr(self.executor, '_accounting', None)),
         )
 
         # Orchestrator (same as paper)
@@ -340,12 +354,19 @@ class LiveTradingService:
         if not self._entry_reconciliation_ready():
             return self._begin_restart_recovery("Startup account state requires reconciliation")
         self.executor.initialize_trading()
+        equity = self._valuation_equity()
+        if equity is not None:
+            self._peak_equity = equity
 
         self._scan_task = asyncio.create_task(self._scan_loop(), name=f"live_scan_{self.session_id}")
         generation = self._generation
         self._scan_task.add_done_callback(lambda task: self._task_done_callback(task, generation))
         self._monitor_task = asyncio.create_task(self._monitor_loop(), name=f"live_monitor_{self.session_id}")
         self._monitor_task.add_done_callback(lambda task: self._task_done_callback(task, generation))
+        if getattr(self.executor, '_accounting', None):
+            self._fee_recovery = ExecutionFeeRecovery(self.executor, report_journal=get_trade_journal())
+            self._fee_recovery_task = asyncio.create_task(self._fee_recovery.run(), name=f'live_fee_recovery_{self.session_id}')
+            self._fee_recovery_task.add_done_callback(lambda task: self._task_done_callback(task, generation))
 
         # Start WebSocket order feed for real-time fill detection (skipped in dry_run)
         if not config.dry_run and api_key and api_secret:
@@ -353,7 +374,10 @@ class LiveTradingService:
                 api_key=api_key,
                 api_secret=api_secret,
                 testnet=config.testnet,
-                on_order_update=self.executor.apply_ws_fill,
+                on_raw_order=self.executor.apply_ws_order,
+                on_invalidate=self.executor.invalidate_account,
+                on_pending=self.executor.ws_event_pending,
+                on_complete=self.executor.ws_event_complete,
             )
             self._ws_task = asyncio.create_task(
                 self._ws_client.run(), name=f"live_ws_{self.session_id}"
@@ -366,7 +390,7 @@ class LiveTradingService:
         # Periodic Phemex fill backfill — protects against fills lost while WS was
         # disconnected or while the bot was offline. Skipped in dry_run.
         if not config.dry_run and self.adapter is not None:
-            self._fills_log_path = self._session_log_dir / "phemex_fills.jsonl"
+            self._fills_log_path = self.executor._journal.path.with_suffix('.fills.jsonl')
             self._load_last_trade_sync_ts()
             self._backfill_task = asyncio.create_task(
                 self._backfill_loop(), name=f"live_backfill_{self.session_id}"
@@ -424,6 +448,10 @@ class LiveTradingService:
 
     async def _shutdown_loop(self, generation: int):
         try:
+            if self._fee_recovery:
+                self._fee_recovery.request_stop()
+            if self._fee_recovery_task:
+                self._fee_recovery_task.cancel()
             for task in (self._scan_task, self._monitor_task, self._backfill_task):
                 if task:
                     task.cancel()
@@ -447,10 +475,18 @@ class LiveTradingService:
                     finally:
                         if self._shutdown_step_task.done():
                             self._shutdown_step_task = None
+                    # Exit requests go first; drain history before final checkpoint.
+                    if self._fee_recovery_task:
+                        try:
+                            await self._fee_recovery_task
+                        except asyncio.CancelledError:
+                            pass
+                        self._fee_recovery_task = None
                     if (self._local_shutdown_settled() or
                             self.executor and self.executor.recovery_snapshot().get("recovery_only")):
                         await self._observe_account()
-                        if self._account_state == "flat_confirmed" and self._local_shutdown_settled():
+                        reports_settled = all(r.get("state") == "published" for r in self._reporting_status.values())
+                        if self._account_state == "flat_confirmed" and self._local_shutdown_settled() and reports_settled:
                             if self._ws_task:
                                 self._ws_task.cancel()
                                 try:
@@ -483,6 +519,17 @@ class LiveTradingService:
             self._recovery_error = str(exc)
             logger.exception("Shutdown supervisor failed; session retained")
 
+    def _recover_execution_reports(self):
+        if not getattr(self.executor, '_accounting', None):
+            return
+        if self._shutdown_fee_recovery is None:
+            self._shutdown_fee_recovery = ExecutionFeeRecovery(self.executor, report_journal=get_trade_journal())
+        # The normal worker is being drained; avoid starting a competing sweep.
+        if not getattr(self.executor, '_inflight_history', 0):
+            self._shutdown_fee_recovery.recover_once()
+        for result in self._shutdown_fee_recovery.recover_reports():
+            self._reporting_status[result['entry_order_id']] = {k: v for k, v in result.items() if k != 'trade'}
+
     def _shutdown_step(self):
         async def recover():
             if not self.executor:
@@ -496,15 +543,20 @@ class LiveTradingService:
                 # Publish account positions, but never replay historical fills into
                 # fresh strategy positions or flatten exposure of unknown ownership.
                 self.executor.reconcile_positions()
+                self._recover_execution_reports()
                 return
             await self._monitor_pending_entries()
             await self._close_all_positions(self._shutdown_reason)
             await self._sync_closed_positions()
+            self._recover_execution_reports()
+            if getattr(self.executor, '_accounting', None):
+                await self._sync_closed_positions()
         asyncio.run(recover())
 
     def _local_shutdown_settled(self) -> bool:
         snap = self.executor.recovery_snapshot() if self.executor else {}
-        return not (snap.get("requests") or snap.get("storage_error") or snap.get("inflight_mutations")) and not (
+        return not (snap.get("requests") or snap.get("storage_error") or snap.get("inflight_mutations")
+                    or snap.get('inflight_account_reads') or snap.get('inflight_evidence_events')) and not (
             self._pending_plans or self._pending_exit_orders or self._pending_stop_orders
             or (self.position_manager and self.position_manager.get_open_positions()))
 
@@ -624,6 +676,10 @@ class LiveTradingService:
         self._generation += 1
         self._phase = "idle"
         self._shutdown_task = None
+        self._fee_recovery_task = None
+        self._fee_recovery = None
+        self._reporting_status = {}
+        self._shutdown_fee_recovery = None
         self._shutdown_reason = None
         self._account_state = "unknown"
         self._account_observed_at = None
@@ -695,7 +751,13 @@ class LiveTradingService:
         active_positions = self._get_active_positions()
         result["positions"] = active_positions
 
-        if self.executor:
+        if self.executor and getattr(self.executor, '_accounting', None):
+            result['accounting'] = self.executor.accounting_status()
+            result['balance'] = self.executor.balance_status(result['accounting'])
+            result['outcome_basis'] = 'executions_excluding_funding_and_transfers'
+            result['execution_reporting'] = deepcopy(self._reporting_status)
+            result['execution_history'] = self._fee_recovery.status() if self._fee_recovery else {'state': 'inactive', 'running': False}
+        elif self.executor:
             current = self.executor.get_balance()
             initial = self.executor._initial_balance
             unrealized = sum(
@@ -712,7 +774,11 @@ class LiveTradingService:
                 "pnl_pct": ((equity - initial) / initial * 100) if initial > 0 else 0,
             }
         else:
-            result["balance"] = {"initial": 0, "current": 0, "equity": 0, "pnl": 0, "pnl_pct": 0}
+            result["balance"] = {"initial": None, "current": None, "equity": None, "pnl": None, "pnl_pct": None}
+
+        if 'accounting' not in result:
+            from backend.bot.executor.accounting_runtime import non_runtime_status
+            result['accounting'] = non_runtime_status(result['balance'], simulation=bool(self.executor and self.executor.dry_run))
 
         result["statistics"] = self.stats.to_dict()
         result["recent_activity"] = self.activity_log[-50:]
@@ -721,13 +787,16 @@ class LiveTradingService:
         if self.executor:
             for order_id, plan in list(self._pending_plans.items()):
                 order = self.executor.get_order(order_id)
-                if order and order.status in (OrderStatus.PENDING, OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED):
+                if order:
                     result["pending_orders"].append({
                         "order_id": order_id,
                         "symbol": order.symbol,
                         "direction": plan.direction,
                         "limit_price": order.price,
                         "quantity": order.quantity,
+                        "filled_qty": order.filled_quantity,
+                        "average_fill_price": order.average_fill_price,
+                        "awaiting_adoption": bool(order.filled_quantity > 0),
                         "status": order.status.value,
                     })
         return result
@@ -806,14 +875,7 @@ class LiveTradingService:
     # ------------------------------------------------------------------
 
     def _last_trade_sync_path(self) -> Optional[Path]:
-        if not self._session_log_dir:
-            return None
-        # Persist at project-root scope, not per-session, so a new session resumes
-        # from the prior sync timestamp.
-        project_root = Path(__file__).parent.parent.parent
-        state_dir = project_root / ".live_trading"
-        state_dir.mkdir(parents=True, exist_ok=True)
-        return state_dir / "last_trade_sync.json"
+        return self._fills_log_path.with_suffix('.state.json') if self._fills_log_path else None
 
     def _load_last_trade_sync_ts(self) -> None:
         path = self._last_trade_sync_path()
@@ -823,7 +885,9 @@ class LiveTradingService:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             ts = data.get("last_synced_ts")
-            self._last_trade_sync_ts = int(ts) if ts is not None else None
+            if data.get('version') != 2 or data.get('scope') != 'phemex:swap:USDT' or type(ts) is not int or ts < 0:
+                raise ValueError('HISTORY_CHECKPOINT_INVALID')
+            self._last_trade_sync_ts = ts
         except Exception as e:
             logger.warning(f"Could not read last_trade_sync.json: {e}")
             self._last_trade_sync_ts = None
@@ -832,13 +896,13 @@ class LiveTradingService:
         path = self._last_trade_sync_path()
         if not path or self._last_trade_sync_ts is None:
             return
-        try:
-            path.write_text(
-                json.dumps({"last_synced_ts": self._last_trade_sync_ts}),
-                encoding="utf-8",
-            )
-        except Exception as e:
-            logger.warning(f"Could not persist last_trade_sync.json: {e}")
+        temporary = path.with_suffix('.tmp')
+        with temporary.open('w', encoding='utf-8') as stream:
+            json.dump({'version': 2, 'scope': 'phemex:swap:USDT',
+                       'last_synced_ts': self._last_trade_sync_ts}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
 
     async def _backfill_loop(self) -> None:
         """
@@ -862,9 +926,6 @@ class LiveTradingService:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                self._backfill_metrics["errors_total"] += 1
-                self._backfill_metrics["last_error_ts"] = int(time.time() * 1000)
-                self._backfill_metrics["last_error_msg"] = str(e)
                 logger.warning(f"Phemex backfill iteration failed: {e!r}")
             try:
                 await asyncio.sleep(BACKFILL_INTERVAL)
@@ -872,88 +933,104 @@ class LiveTradingService:
                 raise
 
     async def _run_backfill_once(self) -> None:
-        if not self.adapter:
+        """Sweep raw offset pages without a timestamp boundary that can skip fills."""
+        if not self.adapter or self._fills_log_path is None:
             return
-        loop = asyncio.get_running_loop()
-        since = self._last_trade_sync_ts
-        trades = await loop.run_in_executor(
-            None,
-            lambda: self.adapter.fetch_my_trades(symbol=None, since=since, limit=200),
-        )
-        self._backfill_metrics["runs_total"] += 1
-        self._backfill_metrics["last_run_ts"] = int(time.time() * 1000)
-        self._backfill_metrics["rows_seen_total"] += len(trades)
+        async with self._backfill_lock:
+            self._backfill_metrics["runs_total"] += 1
+            self._backfill_metrics["last_run_ts"] = int(time.time() * 1000)
+            self._backfill_metrics.update(state="running", completeness="unverified")
+            previous_sync = self._last_trade_sync_ts
+            try:
+                existing = self._load_existing_fill_records()
+                collected, total, first = {}, None, None
+                offset, pages = 0, 0
+                while pages < 50:
+                    page = await asyncio.to_thread(self.adapter.fetch_execution_history_page, offset=offset, limit=200)
+                    pages += 1
+                    if (page.get('scope') != 'phemex:swap:USDT' or page.get('offset') != offset
+                            or type(page.get('total')) is not int or page['total'] < 0
+                            or not isinstance(page.get('rows'), list) or len(page['rows']) > 200):
+                        raise ValueError('HISTORY_PAGE_CONTRACT_INVALID')
+                    if total is None:
+                        total, first = page['total'], page
+                    elif page['total'] != total:
+                        raise ValueError('HISTORY_COUNT_CHANGED')
+                    rows = page['rows']
+                    self._backfill_metrics['rows_seen_total'] += len(rows)
+                    for raw in rows:
+                        if not isinstance(raw, dict) or raw.get('currency') != 'USDT':
+                            raise ValueError('HISTORY_ROW_SCOPE_INVALID')
+                        eid = raw.get('execId', raw.get('execID'))
+                        if (not isinstance(eid, str) or not eid.strip()
+                                or not eid.replace('-', '').strip('0')
+                                or ('execId' in raw and 'execID' in raw and raw['execId'] != raw['execID'])):
+                            raise ValueError('HISTORY_EXECUTION_ID_INVALID')
+                        if eid in collected:
+                            raise ValueError('HISTORY_PAGE_OVERLAP')
+                        if eid in existing and existing[eid] != raw:
+                            raise ValueError('HISTORY_EXECUTION_CONFLICT')
+                        collected[eid] = raw
+                    offset += len(rows)
+                    if offset == total:
+                        break
+                    if not rows or offset > total:
+                        raise ValueError('HISTORY_COUNT_MISMATCH')
+                if offset != total:
+                    raise ValueError('HISTORY_PAGE_LIMIT')
+                # Offset pagination has no documented snapshot token. Detect common
+                # shifting-page races; do not claim exchange-wide completeness.
+                check = await asyncio.to_thread(self.adapter.fetch_execution_history_page, offset=0, limit=200)
+                if check != first:
+                    raise ValueError('HISTORY_CHANGED_DURING_SWEEP')
+                added = 0
+                with self._fills_log_path.open('a', encoding='utf-8') as stream:
+                    for eid, raw in collected.items():
+                        if eid in existing:
+                            continue
+                        record = dict(version=2, fill_id=eid, scope='phemex:swap:USDT',
+                            raw=raw, session_id=self.session_id,
+                            backfilled_at=datetime.now(timezone.utc).isoformat())
+                        stream.write(json.dumps(record, allow_nan=False) + '\n')
+                        added += 1
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                # Diagnostic timestamp only: never used as a filter or +1 cursor.
+                self._last_trade_sync_ts = int(time.time() * 1000)
+                self._save_last_trade_sync_ts()
+                self._backfill_metrics['rows_new_total'] += added
+                self._backfill_metrics.update(state='ready', completeness='consistent_available_history',
+                    pages=pages, available_rows=total, last_error_msg=None)
+            except Exception as exc:
+                self._last_trade_sync_ts = previous_sync
+                self._backfill_metrics['errors_total'] += 1
+                self._backfill_metrics.update(state='incomplete', completeness='unverified',
+                    last_error_ts=int(time.time() * 1000), last_error_msg=str(exc))
+                logger.exception('HISTORY_SWEEP_INCOMPLETE; no history boundary advanced')
+                raise
 
-        if not trades:
-            return
-
-        # Track max timestamp seen so the next iteration narrows the window.
-        max_ts = since or 0
-        new_rows = 0
-        seen_ids = self._load_existing_fill_ids()
-        if self._fills_log_path is None:
-            return
-        try:
-            with self._fills_log_path.open("a", encoding="utf-8") as f:
-                for t in trades:
-                    ts = int(t.get("timestamp") or 0)
-                    if ts > max_ts:
-                        max_ts = ts
-                    fill_id = str(t.get("id") or f"{t.get('order')}-{ts}-{t.get('amount')}")
-                    if fill_id in seen_ids:
-                        continue
-                    record = {
-                        "fill_id": fill_id,
-                        "order_id": t.get("order"),
-                        "symbol": t.get("symbol"),
-                        "side": t.get("side"),
-                        "price": t.get("price"),
-                        "amount": t.get("amount"),
-                        "cost": t.get("cost"),
-                        "fee": t.get("fee"),
-                        "timestamp": ts,
-                        "datetime": t.get("datetime"),
-                        "session_id": self.session_id,
-                        "backfilled_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                    f.write(json.dumps(record, default=str) + "\n")
-                    seen_ids.add(fill_id)
-                    new_rows += 1
-        except Exception as e:
-            self._backfill_metrics["errors_total"] += 1
-            self._backfill_metrics["last_error_ts"] = int(time.time() * 1000)
-            self._backfill_metrics["last_error_msg"] = f"write: {e}"
-            logger.warning(f"Phemex backfill: failed to write fills log: {e}")
-            return
-
-        self._backfill_metrics["rows_new_total"] += new_rows
-        if max_ts and (since is None or max_ts > since):
-            # +1ms so the next call doesn't re-fetch the boundary trade.
-            self._last_trade_sync_ts = max_ts + 1
-            self._save_last_trade_sync_ts()
-        if new_rows:
-            logger.info(f"Phemex backfill: appended {new_rows} new fills (since={since})")
-
-    def _load_existing_fill_ids(self) -> set:
-        ids: set = set()
+    def _load_existing_fill_records(self) -> dict:
+        """Never conceal a truncated or conflicting evidence record."""
+        records = {}
         if not self._fills_log_path or not self._fills_log_path.exists():
-            return ids
-        try:
-            with self._fills_log_path.open("r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    fid = rec.get("fill_id")
-                    if fid:
-                        ids.add(fid)
-        except Exception as e:
-            logger.debug(f"Could not load existing fills: {e}")
-        return ids
+            return records
+        with self._fills_log_path.open('r', encoding='utf-8') as stream:
+            for line in stream:
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                if (not isinstance(record, dict) or record.get('version') != 2
+                        or record.get('scope') != 'phemex:swap:USDT'
+                        or not isinstance(record.get('raw'), dict)):
+                    raise ValueError('HISTORY_LOG_FORMAT_INVALID')
+                raw, eid = record['raw'], record.get('fill_id')
+                if (not isinstance(eid, str) or not eid
+                        or eid != raw.get('execId', raw.get('execID'))):
+                    raise ValueError('HISTORY_LOG_IDENTITY_INVALID')
+                if eid in records and records[eid] != raw:
+                    raise ValueError('HISTORY_LOG_IDENTITY_CONFLICT')
+                records[eid] = raw
+        return records
 
     def get_phemex_healthz(self) -> Dict[str, Any]:
         """
@@ -1017,7 +1094,8 @@ class LiveTradingService:
             self._log_activity("exchange_reconciliation", {"known": known, "reason": reason})
 
     def _entry_reconciliation_ready(self) -> bool:
-        return (getattr(self, "_startup_reconciled", False)
+        accounting = self.executor.accounting_status() if self.executor and getattr(self.executor, '_accounting', None) else None
+        return ((accounting is None or accounting['entry_eligible']) and getattr(self, "_startup_reconciled", False)
                 and getattr(self, "_exchange_state_known", False))
 
     async def _startup_reconcile(self) -> bool:
@@ -1038,6 +1116,11 @@ class LiveTradingService:
 
         loop = asyncio.get_running_loop()
         try:
+            if getattr(self.executor, '_accounting', None):
+                await asyncio.to_thread(self.executor.verify_flat_account)
+                view = await asyncio.to_thread(self.executor.reconcile_account, force=True)
+                if not view['entry_eligible']:
+                    raise ValueError(', '.join(view['reasons']))
             protected_symbols = await loop.run_in_executor(None, self.executor.reconcile_positions)
             if protected_symbols is None:
                 raise ValueError("Position snapshot unavailable; order cleanup deferred")
@@ -1152,17 +1235,17 @@ class LiveTradingService:
                 if order is None:
                     logger.error("Pending entry %s has no executor order; retaining plan", order_id)
                     continue
-                if order.status not in terminal:
+                if order.status not in terminal or (order.filled_quantity > 0 and order.average_fill_price is None):
                     price = self._price_cache.get(order.symbol)
                     if price and order.order_type == OrderType.LIMIT:
-                        self.executor.execute_limit_order(order_id, price)
+                        await asyncio.to_thread(self.executor.execute_limit_order, order_id, price)
                     placed_at = self._pending_placed_at.get(order_id)
                     age = (datetime.now(timezone.utc) - placed_at).total_seconds() if placed_at else 0
                     if order.status not in terminal and placed_at and self.config:
                         trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
                         ttl_seconds = 60 * _PENDING_TTL_MINUTES.get(trade_type, 10.0)
                         if age > ttl_seconds:
-                            self.executor.cancel_order(order_id)
+                            await asyncio.to_thread(self.executor.cancel_order, order_id)
                             if order.status not in terminal:
                                 logger.warning("Cancel unconfirmed for expired entry %s; will retry", order_id)
 
@@ -1171,9 +1254,12 @@ class LiveTradingService:
                 if order.status == OrderStatus.FILLED or (
                     order.status in terminal and order.filled_quantity > 0
                 ):
+                    if order.average_fill_price is None:
+                        await self._protect_unpriced_entry(order, plan)
+                        continue
                     await self._open_filled_entry(
                         order_id, plan,
-                        order.average_fill_price or order.price or 0.0,
+                        order.average_fill_price,
                         order.filled_quantity,
                     )
                 elif order.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED):
@@ -1185,6 +1271,15 @@ class LiveTradingService:
                 # Retain the plan for retry, and keep monitoring other positions.
                 logger.exception("Pending entry reconciliation failed for %s; retaining plan", order_id)
 
+    async def _protect_unpriced_entry(self, order, plan):
+        self._log_activity('entry_adoption_deferred', {
+            'symbol': order.symbol, 'order_id': order.order_id,
+            'filled_quantity': order.filled_quantity, 'reason': 'execution_cost_unavailable'})
+        if plan.stop_loss is None:
+            logger.error('UNPRICED_ENTRY_STOP_UNAVAILABLE %s', order.order_id)
+            return
+        await asyncio.to_thread(self.executor.protect_confirmed_entry, order.order_id, float(plan.stop_loss.level))
+
     async def _monitor_loop(self):
         while self._running:
             try:
@@ -1192,19 +1287,16 @@ class LiveTradingService:
                     await self._refresh_price_cache()
 
                     if self.executor:
-                        self.executor.recover_uncertain_orders()
+                        await asyncio.to_thread(self.executor.recover_uncertain_orders)
                         await self._monitor_pending_entries()
-
-                    # Run position monitoring
-                    await self.position_manager.monitor_all_positions()
-                    await self._sync_exchange_stops()
-                    await self._sync_closed_positions()
 
                     # Periodic balance + position reconciliation
                     if self.executor and self.config:
                         now_ts = time.monotonic()
                         if now_ts - self._last_reconcile_at >= self.config.balance_reconcile_interval:
-                            self.executor.reconcile_balance()
+                            if getattr(self.executor, '_accounting', None):
+                                await asyncio.to_thread(self.executor.cleanup_flat_protection)
+                            await asyncio.to_thread(self.executor.reconcile_balance)
                             if not self._startup_reconciled:
                                 await self._startup_reconcile()
                                 self.executor.set_entry_admission(self._running and self._entry_reconciliation_ready())
@@ -1216,17 +1308,24 @@ class LiveTradingService:
                                     managed = {p.symbol for p in self.position_manager.get_open_positions()}
                                     pending = {p.symbol for p in self._pending_plans.values()}
                                     self._orphaned_symbols.update(ex_open_symbols - managed - pending)
-                                    await self._detect_exchange_closed_positions(ex_open_symbols)
-                                    self._set_exchange_state_known(True, "position snapshot verified")
+                                    if await self._detect_exchange_closed_positions(ex_open_symbols):
+                                        self._set_exchange_state_known(True, "position snapshot verified")
                             self._last_reconcile_at = now_ts
 
                             # Auto kill switch on low balance
+                            free_balance = self.executor.get_balance()
                             if (
                                 self.config.kill_switch_enabled
-                                and self.executor.get_balance() < self.config.min_balance_usd
+                                and free_balance is not None
+                                and free_balance < self.config.min_balance_usd
                             ):
                                 logger.critical("Balance below minimum — activating kill switch")
                                 asyncio.create_task(self.kill_switch())
+
+                    # Apply current exchange executions before evaluating software targets.
+                    await self.position_manager.monitor_all_positions()
+                    await self._sync_exchange_stops()
+                    await self._sync_closed_positions()
 
             except Exception as e:
                 logger.error(f"Live monitor error: {e}")
@@ -1535,7 +1634,7 @@ class LiveTradingService:
             # Executor/PositionManager quantities and USD caps currently assume
             # one base unit per contract. Do not silently size inverse/non-unit lots.
             if (market.get("linear") is not True or market.get("contract") is not True
-                    or market.get("settle") not in ("USDT", "USDC")
+                    or market.get("settle") != "USDT"
                     or market.get("quote") != market.get("settle")
                     or Decimal(str(market.get("contractSize"))) != Decimal("1")):
                 raise ValueError("unsupported contract units for live risk sizing")
@@ -1764,12 +1863,12 @@ class LiveTradingService:
     # ------------------------------------------------------------------
 
     def _get_price(self, symbol: str) -> float:
-        return self._price_cache.get(symbol, 0.0)
+        return self._fresh_price_cache().get(symbol, 0.0)
 
     async def _fetch_price(self, symbol: str) -> float:
         if not self.orchestrator or not hasattr(self.orchestrator, "exchange_adapter"):
             raise ValueError("No exchange adapter")
-        ticker = self.orchestrator.exchange_adapter.fetch_ticker(symbol)
+        ticker = await asyncio.to_thread(self.orchestrator.exchange_adapter.fetch_ticker, symbol)
         price = ticker.get("last", ticker.get("close", 0.0))
         if price and price > 0:
             return float(price)
@@ -1790,6 +1889,30 @@ class LiveTradingService:
             self._adopted_entry_orders[order_id] = pos_id
             self._clear_pending_entry(order_id)
             return pos_id
+
+        initial_progress = None
+        protector = (getattr(getattr(self, 'executor', None), '_pending_entry_protection', {}).get(order_id)
+                     or getattr(getattr(self, 'executor', None), '_entry_protection', {}).get(order_id))
+        if protector:
+            await asyncio.to_thread(self.executor.refresh_order, protector)
+            protection = self.executor.get_order(protector)
+            if protection is None or (protection.filled_quantity > 0 and not getattr(self.executor, '_accounting', None)):
+                logger.error('PENDING_ENTRY_PROTECTION_UNSETTLED %s; retaining plan for outcome reconciliation', order_id)
+                return None
+            if protection.filled_quantity > 0:
+                try:
+                    await asyncio.to_thread(self.executor.refresh_entry_exits, order_id)
+                    await asyncio.to_thread(self.executor.reconcile_account, force=True)
+                    initial_progress = self.executor.reconciled_execution_progress(order_id)
+                except Exception:
+                    logger.exception('PENDING_ENTRY_PROTECTION_UNSETTLED %s; retaining plan', order_id)
+                    return None
+            if protection.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                protector = None
+            # Another event may have adopted the entry during the REST await.
+            existing_id = self._adopted_entry_orders.get(order_id)
+            if existing_id:
+                return existing_id
 
         if any(
             isinstance(value, bool) or not isinstance(value, (int, float))
@@ -1821,14 +1944,32 @@ class LiveTradingService:
             entry_price=entry_px,
             quantity=entry_qty,
             entry_order_id=order_id,
+            **({'execution_progress': initial_progress} if initial_progress is not None else {}),
         )
         # Publish before any await: duplicate events cannot open a second position.
         # Keep the marker after closure so a replay cannot resurrect a closed trade.
         self._adopted_entry_orders[order_id] = pos_id
         self.stats.signals_taken += 1
         self._clear_pending_entry(order_id)
+        if initial_progress is not None:
+            pos = self.position_manager.get_position(pos_id)
+            if initial_progress.remaining_quantity == 0:
+                await asyncio.to_thread(self.executor.cleanup_flat_protection)
+                self._log_activity('entry_adopted_after_native_exit', {
+                    'entry_order_id': order_id, 'position_id': pos_id, 'remaining_quantity': '0',
+                })
+                return pos_id
+            native = next(r for r in initial_progress.exits if r.order_id == protector)
+            if native.terminal:
+                pos.pending_exit_reason = 'NATIVE_STOP'
+            else:
+                pos.exchange_close_pending = True
+        if protector:
+            self._exchange_stop_orders[pos_id] = protector
+            self._exchange_stop_levels[pos_id] = float(plan.stop_loss.level)
         try:
-            await self._place_exchange_stop(pos_id, plan, entry_px, entry_qty)
+            if not protector:
+                await self._place_exchange_stop(pos_id, plan, entry_px, entry_qty)
         except Exception:
             logger.exception(
                 "Native exit placement failed for %s (pos %s); local monitoring continues, "
@@ -1842,13 +1983,28 @@ class LiveTradingService:
         })
         return pos_id
 
-    async def _execute_exit_order(self, symbol: str, side: str, quantity: float, price: float) -> bool:
+    async def _execute_exit_order(self, symbol: str, side: str, quantity: float, price: float,
+                                  entry_order_id: Optional[str] = None) -> bool | ExecutionReceipt:
         """Keep protection and the original request until the entire requested exit is confirmed."""
         if not self.executor or any(not isinstance(v, (int, float)) or isinstance(v, bool)
                                    or not math.isfinite(v) or v <= 0 for v in (quantity, price)):
             return False
+        if not hasattr(self, '_exit_callbacks_active'):
+            self._exit_callbacks_active = set()
+        if symbol in self._exit_callbacks_active:
+            return False
+        self._exit_callbacks_active.add(symbol)
         try:
+            runtime = bool(getattr(self.executor, '_accounting', None))
+            if runtime and not entry_order_id:
+                raise ValueError('EXIT_PARENT_REQUIRED')
             order_id = self._pending_exit_orders.get(symbol)
+            if runtime and not order_id and self.position_manager and any(
+                pos.entry_order_id == entry_order_id and pos.exchange_close_pending
+                for pos in self.position_manager.get_open_positions()
+            ):
+                logger.warning('EXCHANGE_CLOSE_EVIDENCE_PENDING %s; no replacement exit sent', entry_order_id)
+                return False
             order = self.executor.get_order(order_id) if order_id else None
             if order_id and order is None:
                 logger.error("EXIT_OUTCOME_UNKNOWN %s: missing local order %s", symbol, order_id)
@@ -1857,30 +2013,37 @@ class LiveTradingService:
                 order = self.executor.place_order(
                     symbol=symbol, side=side, order_type="MARKET",
                     quantity=quantity, price=price, reduce_only=True,
+                    **({'parent_entry_order_id': entry_order_id} if runtime else {}),
                 )
                 if order is None:
                     return False
                 self._pending_exit_orders[symbol] = order.order_id
-            if order.status not in (OrderStatus.FILLED, OrderStatus.REJECTED, OrderStatus.CANCELLED):
-                self.executor.execute_market_order(order.order_id, price)
-            if order.status in (OrderStatus.REJECTED, OrderStatus.CANCELLED) and order.filled_quantity <= 0:
-                self._pending_exit_orders.pop(symbol, None)
-                return False
-            # A partial cancellation can be terminal without completing this exit.
-            # A changed caller quantity also requires reconciliation, not a duplicate send.
-            complete = (order.status == OrderStatus.FILLED
-                        and order.side.value == side.upper()
-                        and abs(order.quantity - quantity) <= 1e-9
-                        and order.filled_quantity >= quantity - 1e-9)
-            if not complete:
-                logger.warning("EXIT_UNCONFIRMED %s order=%s status=%s filled=%.8f requested=%.8f",
-                               symbol, order.order_id, order.status.value, order.filled_quantity, quantity)
-                self._log_activity("exit_unconfirmed", {
-                    "symbol": symbol, "order_id": order.order_id, "status": order.status.value,
-                    "filled_quantity": order.filled_quantity, "requested_quantity": quantity,
-                })
-                return False
-            self._pending_exit_orders.pop(symbol, None)
+            if runtime and order.parent_entry_order_id != entry_order_id:
+                raise ValueError('EXIT_PARENT_CONFLICT')
+            if runtime:
+                if order.side.value != side.upper() or order.quantity != quantity:
+                    raise ValueError('EXIT_GOAL_CONFLICT')
+                confirmed = await asyncio.to_thread(self.executor.advance_reduction, order.order_id, price)
+                if not confirmed.confirms(quantity):
+                    self._log_activity('exit_settlement_pending', {
+                        'symbol': symbol, 'order_id': order.order_id,
+                        'filled_quantity': str(confirmed.quantity), 'reasons': list(confirmed.reasons),
+                    })
+                    return False
+            else:
+                if order.status not in (OrderStatus.FILLED, OrderStatus.REJECTED, OrderStatus.CANCELLED):
+                    self.executor.execute_market_order(order.order_id, price)
+                if order.status in (OrderStatus.REJECTED, OrderStatus.CANCELLED) and order.filled_quantity <= 0:
+                    self._pending_exit_orders.pop(symbol, None)
+                    return False
+                complete = (order.status == OrderStatus.FILLED and order.side.value == side.upper()
+                            and abs(order.quantity - quantity) <= 1e-9
+                            and order.filled_quantity >= quantity - 1e-9)
+                if not complete:
+                    logger.warning("EXIT_UNCONFIRMED %s order=%s status=%s filled=%.8f requested=%.8f",
+                                   symbol, order.order_id, order.status.value, order.filled_quantity, quantity)
+                    return False
+                confirmed = True
             # Partial target exits leave the remaining position's protection in place.
             try:
                 if self.position_manager:
@@ -1892,16 +2055,25 @@ class LiveTradingService:
                             break
             except Exception:
                 logger.exception("Confirmed exit %s needs protection cleanup", order.order_id)
-            return True
+            self._pending_exit_orders.pop(symbol, None)
+            return confirmed
         except Exception as exc:
             logger.exception("Exit order failed for %s: %s", symbol, exc)
             return False
+        finally:
+            self._exit_callbacks_active.discard(symbol)
 
     async def _place_exchange_stop(
         self, position_id: str, plan: "TradePlan", entry_price: float, quantity: float
     ):
         """Place exchange-native SL (stop-market) and TP1 (limit) on Phemex after fill."""
         if not self.executor:
+            return
+
+        pos = self.position_manager.get_position(position_id) if self.position_manager else None
+        parent = getattr(pos, 'entry_order_id', None)
+        if getattr(self.executor, '_accounting', None) and not parent:
+            logger.error('PROTECTION_PARENT_REQUIRED %s', position_id)
             return
 
         # --- Stop Loss ---
@@ -1935,9 +2107,14 @@ class LiveTradingService:
                     side=tp_side,
                     quantity=tp1_qty,
                     tp_price=tp1.level,
+                    parent_entry_order_id=parent,
                 )
                 if tp_order.status.value != "REJECTED":
                     self._exchange_tp_orders[position_id] = tp_order.order_id
+                    if getattr(self.executor, '_accounting', None):
+                        pos.native_target_order_id = tp_order.order_id
+                        pos.native_target_level = tp1.level
+                        pos.native_target_quantity = str(Decimal(str(tp1.percentage)) * Decimal(str(pos.quantity)) / Decimal(100))
                     self._log_activity("exchange_tp_pending" if tp_order.status == OrderStatus.PENDING else "exchange_tp_placed", {
                         "position_id": position_id,
                         "symbol": plan.symbol,
@@ -1965,6 +2142,7 @@ class LiveTradingService:
                 quantity=quantity,
                 activation_price=_activation,
                 callback_rate=_callback_rate,
+                parent_entry_order_id=parent,
             )
             if trail_order.status.value != "REJECTED":
                 self._exchange_trailing_orders[position_id] = trail_order.order_id
@@ -1984,14 +2162,7 @@ class LiveTradingService:
             return False
         last_stop = self._exchange_stop_levels.get(position_id)
         old_order_id = self._exchange_stop_orders.get(position_id)
-        if (old_order_id and last_stop is not None
-                and isinstance(stop_level, (int, float)) and math.isfinite(stop_level)
-                and abs(stop_level - last_stop) < 1e-8):
-            return True
         now = time.monotonic()
-        if now < self._exchange_stop_retry_at.get(position_id, 0.0):
-            return False
-        self._exchange_stop_retry_at[position_id] = now + 5.0
         try:
             if any(
                 isinstance(value, bool) or not isinstance(value, (int, float))
@@ -1999,23 +2170,65 @@ class LiveTradingService:
                 for value in (quantity, stop_level)
             ):
                 raise ValueError("invalid stop quantity or level")
+            pos = self.position_manager.get_position(position_id) if self.position_manager else None
+            old = self.executor.get_order(old_order_id) if old_order_id else None
+            if old_order_id and getattr(self.executor, '_accounting', None):
+                if old is None:
+                    raise ValueError('PROTECTION_IDENTITY_MISSING')
+                if not hasattr(self, '_stop_checked_at'):
+                    self._stop_checked_at = {}
+                if now >= self._stop_checked_at.get(old_order_id, 0):
+                    self.executor.refresh_order(old_order_id)
+                    self._stop_checked_at[old_order_id] = now + 5.0
+                if old.status == OrderStatus.PENDING or old.filled_quantity > 0:
+                    if pos:
+                        pos.exchange_close_pending = True
+                    raise ValueError('PROTECTION_EXECUTION_RECONCILIATION_PENDING')
+            if (old is not None and old.status == OrderStatus.OPEN and old.filled_quantity == 0
+                    and old.quantity == quantity and old.symbol == symbol
+                    and old.side.value == ('SELL' if direction == 'LONG' else 'BUY')
+                    and old.stop_price == stop_level
+                    and (not getattr(self.executor, '_accounting', None)
+                         or old.parent_entry_order_id == getattr(pos, 'entry_order_id', None))):
+                return True
+            if now < self._exchange_stop_retry_at.get(position_id, 0.0):
+                return False
+            self._exchange_stop_retry_at[position_id] = now + 5.0
             pending_id = self._pending_stop_orders.get(position_id)
             order = self.executor.get_order(pending_id) if pending_id else None
             if pending_id and order is None:
                 raise ValueError(f"missing unresolved stop {pending_id}")
             if order is None:
+                pos = self.position_manager.get_position(position_id) if self.position_manager else None
+                parent = getattr(pos, 'entry_order_id', None)
+                if getattr(self.executor, '_accounting', None) and not parent:
+                    raise ValueError('PROTECTION_PARENT_REQUIRED')
                 order = self.executor.place_stop_order(
                     symbol=symbol, side="SELL" if direction == "LONG" else "BUY",
                     quantity=quantity, stop_price=stop_level,
+                    parent_entry_order_id=parent,
                 )
+                self._pending_stop_orders[position_id] = order.order_id
             elif order.status == OrderStatus.PENDING:
                 self.executor.refresh_order(order.order_id)
             if order.status == OrderStatus.PENDING:
                 self._pending_stop_orders[position_id] = order.order_id
             elif order.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED):
                 self._pending_stop_orders.pop(position_id, None)
+            if order.filled_quantity > 0:
+                if pos:
+                    pos.exchange_close_pending = True
+                raise ValueError('PROTECTION_EXECUTION_RECONCILIATION_PENDING')
             if order.status not in (OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED) or not order.order_id:
                 raise ValueError(f"stop not accepted: {order.status.value}")
+            if (order.quantity != quantity or order.symbol != symbol
+                    or order.side.value != ('SELL' if direction == 'LONG' else 'BUY')
+                    or order.stop_price != stop_level
+                    or (getattr(self.executor, '_accounting', None)
+                        and order.parent_entry_order_id != getattr(pos, 'entry_order_id', None))):
+                if self.executor.cancel_order(order.order_id):
+                    self._pending_stop_orders.pop(position_id, None)
+                raise ValueError('PROTECTION_REQUEST_CHANGED')
         except Exception as exc:
             logger.error(
                 "Native stop unavailable for %s (pos %s): %s; retry in 5s",
@@ -2025,6 +2238,7 @@ class LiveTradingService:
                 "position_id": position_id, "symbol": symbol,
                 "stop_price": stop_level, "reason": str(exc), "retry_seconds": 5,
             })
+            self._exchange_stop_retry_at[position_id] = now + 5.0
             return False
 
         # Record the replacement before attempting cancellation. A rejected replacement
@@ -2045,7 +2259,8 @@ class LiveTradingService:
             "stop_price": self._exchange_stop_levels[position_id], "old_stop": last_stop,
             "new_stop": self._exchange_stop_levels[position_id],
         })
-        return abs(self._exchange_stop_levels[position_id] - stop_level) < 1e-8
+        return (abs(self._exchange_stop_levels[position_id] - stop_level) < 1e-8
+                and order.quantity - order.filled_quantity == quantity)
 
     async def _sync_exchange_stops(self):
         """Retry missing fixed stops and replace moved stops, without repeating TP/trailing."""
@@ -2069,11 +2284,10 @@ class LiveTradingService:
 
     async def _detect_exchange_closed_positions(self, ex_open_symbols: Optional[set]):
         """
-        Detect positions that are OPEN in the position manager but no longer exist on
-        the exchange (exchange-native stop fired, liquidation, or manual close).
+        Reconcile owned native target slices and verified full exchange closures.
 
-        Marks them as STOPPED_OUT so _sync_closed_positions() creates a CompletedTrade
-        and stops the monitor from repeatedly sending invalid exit orders.
+        Return false while any managed position still needs execution evidence.
+        Account absence alone cannot establish a runtime exit price or reason.
         """
         if ex_open_symbols is None:
             self._set_exchange_state_known(False, "position snapshot unavailable")
@@ -2081,6 +2295,91 @@ class LiveTradingService:
         if not self.position_manager:
             return
         for pos in self.position_manager.get_open_positions():
+            if self.executor and getattr(self.executor, '_accounting', None):
+                stop_id = self._pending_stop_orders.get(pos.position_id) or self._exchange_stop_orders.get(pos.position_id)
+                if (pos.native_target_order_id or stop_id) and not self._pending_exit_orders.get(pos.symbol):
+                    try:
+                        await asyncio.to_thread(self.executor.refresh_entry_exits, pos.entry_order_id)
+                        await asyncio.to_thread(self.executor.reconcile_account, force=True)
+                        progress = self.executor.reconciled_execution_progress(pos.entry_order_id)
+                        changed = self.position_manager.reconcile_execution_progress(
+                            pos.position_id, progress, self._get_price(pos.symbol))
+                        if not pos.native_target_order_id:
+                            self._exchange_tp_orders.pop(pos.position_id, None)
+                        triggered = [r for r in progress.exits if r.quantity and
+                                     self.executor.get_order(r.order_id).order_type == OrderType.STOP_LOSS]
+                        if progress.remaining_quantity == 0:
+                            pos.pending_exit_reason = None
+                            pos.pending_target = None
+                            pos.pending_target_quantity = None
+                            await self._cancel_exchange_stop(pos.position_id)
+                            await self._cancel_exchange_tp(pos.position_id)
+                            await self._cancel_exchange_trailing(pos.position_id)
+                        elif triggered:
+                            if any(not r.terminal for r in triggered):
+                                pos.exchange_close_pending = True
+                            else:
+                                pos.pending_exit_reason = pos.pending_exit_reason or 'NATIVE_STOP'
+                        if changed:
+                            self._log_activity('owned_partial_exit_reconciled', {
+                                'position_id': pos.position_id, 'entry_order_id': pos.entry_order_id,
+                                'exit_quantity': str(progress.exit_quantity),
+                                'remaining_quantity': str(progress.remaining_quantity),
+                                'realized_gross': str(progress.realized_gross),
+                            })
+                    except Exception as exc:
+                        pos.exchange_close_pending = True
+                        self._set_exchange_state_known(False, 'Native exit execution reconciliation pending')
+                        self._log_activity('native_exit_reconciliation_pending', {
+                            'position_id': pos.position_id, 'reason': str(exc),
+                        })
+                    continue
+                if pos.symbol in ex_open_symbols:
+                    observed = abs(self.executor.get_position(pos.symbol))
+                    pos.exchange_close_pending = abs(observed - pos.remaining_quantity) > 1e-9
+                    if pos.exchange_close_pending:
+                        self._set_exchange_state_known(False, 'Position quantity requires execution reconciliation')
+                        self._log_activity('exchange_quantity_evidence_pending', {
+                            'position_id': pos.position_id, 'observed_quantity': observed,
+                            'managed_quantity': pos.remaining_quantity,
+                        })
+                    continue
+                pos.exchange_close_pending = True
+                try:
+                    outcome = self.executor.execution_outcome(pos.entry_order_id)
+                    if not self.executor.execution_receipt(pos.entry_order_id).terminal:
+                        raise ValueError('Entry remainder unresolved')
+                    # Fees may still be pending, but quantity/cost must be owned,
+                    # consistent and complete before management settlement.
+                    pending = set(outcome.reasons) - {
+                        'EXECUTION_FEES_UNAVAILABLE', 'FEE_CONVERSION_UNAVAILABLE',
+                        'ORDER_REMAINDER_UNRESOLVED',
+                    }
+                    if pending or outcome.gross_pnl is None or outcome.exit_quantity <= 0:
+                        raise ValueError('Owned exit quantity/cost unavailable')
+                    price = float(outcome.exit_cost / outcome.exit_quantity)
+                    self.position_manager.close_position(pos.position_id, 'exchange_exit', price)
+                    # Includes all explicitly linked partial exits exactly once.
+                    pos.realized_pnl = float(outcome.gross_pnl)
+                    pos.unrealized_pnl = 0.0
+                    pos.exchange_close_pending = False
+                    pos.pending_exit_reason = None
+                    pos.pending_target = None
+                    pos.pending_target_quantity = None
+                    self._pending_exit_orders.pop(pos.symbol, None)
+                    await self._cancel_exchange_stop(pos.position_id)
+                    await self._cancel_exchange_tp(pos.position_id)
+                    await self._cancel_exchange_trailing(pos.position_id)
+                    self._log_activity('exchange_exit_confirmed', {
+                        'position_id': pos.position_id, 'entry_order_id': pos.entry_order_id,
+                        'exit_order_ids': list(outcome.exit_order_ids), 'exit_price': price,
+                    })
+                except Exception as exc:
+                    self._set_exchange_state_known(False, 'Exchange closure requires execution evidence')
+                    self._log_activity('exchange_close_evidence_pending', {
+                        'position_id': pos.position_id, 'symbol': pos.symbol, 'reason': str(exc),
+                    })
+                continue
             if pos.symbol not in ex_open_symbols:
                 stop_level = self._exchange_stop_levels.get(pos.position_id)
                 exit_price = stop_level or self._price_cache.get(pos.symbol, pos.entry_price)
@@ -2103,6 +2402,7 @@ class LiveTradingService:
                     "direction": pos.direction,
                     "exit_price": exit_price,
                 })
+        return all(not p.exchange_close_pending for p in self.position_manager.get_open_positions())
 
     async def _cancel_exchange_stop(self, position_id: str):
         """Request cleanup after a confirmed exit; executor retains unconfirmed cancellations."""
@@ -2152,6 +2452,8 @@ class LiveTradingService:
     def _valuation_equity(self) -> Optional[float]:
         if not self.executor:
             return None
+        if getattr(self.executor, '_accounting', None):
+            return self.executor.get_equity({})
         # Allow two scheduled balance intervals; a failed query blocks immediately
         # through balance_known, and a stalled monitor cannot reuse cash forever.
         observed = self.executor.last_balance_observed_at
@@ -2219,6 +2521,7 @@ class LiveTradingService:
                 "entry_price": pos.entry_price,
                 "current_price": current_price,
                 "quantity": pos.quantity,
+                "exchange_close_pending": pos.exchange_close_pending,
                 "stop_loss": pos.stop_loss,
                 "initial_stop_loss": pos.initial_stop_loss,
                 "unrealized_pnl": pos.unrealized_pnl,
@@ -2320,9 +2623,35 @@ class LiveTradingService:
                 setup_qualifier=getattr(pos, "setup_qualifier", "Unknown"),
             )
 
+            stats_before = peak_before = None
+            try:
+                if getattr(self.executor, '_accounting', None):
+                    publisher = ExecutionReportPublisher(self.executor, get_trade_journal())
+                    publisher.capture(pos.entry_order_id, trade.to_dict(), self.session_id or 'live')
+                    result = await asyncio.to_thread(publisher.publish, pos.entry_order_id)
+                    self._reporting_status[pos.entry_order_id] = {k: v for k, v in result.items() if k != 'trade'}
+                    if result['state'] != 'published':
+                        logger.warning('EXECUTION_REPORT_PENDING %s: %s', pos.entry_order_id, result.get('reasons'))
+                        continue
+                    if pos.position_id in self._completed_trade_ids:
+                        continue
+                    trade.apply_execution_report(result['trade'])
+                else:
+                    get_trade_journal().upsert(trade.to_dict(), self.session_id or "live")
+                stats_before, peak_before = deepcopy(self.stats), self._peak_equity
+                self._update_stats(trade)
+            except Exception as exc:
+                if stats_before is not None:
+                    self.stats, self._peak_equity = stats_before, peak_before
+                self._reporting_status[getattr(pos, 'entry_order_id', None) or pos.position_id] = {
+                    'state': 'error', 'reasons': [str(exc)]}
+                logger.exception('TRADE_PUBLICATION_PENDING %s', trade.trade_id)
+                self._log_activity('journal_write_error', {'trade_id': trade.trade_id, 'error': str(exc)})
+                continue
+
             self.completed_trades.append(trade)
             self._completed_trade_ids.add(trade.trade_id)
-            self._update_stats(trade)
+            self._completed_trade_ids.add(pos.position_id)
             if self._session_log_dir:
                 try:
                     with open(self._session_log_dir / "trades.jsonl", "a", encoding="utf-8") as f:
@@ -2334,24 +2663,9 @@ class LiveTradingService:
             self._log_activity("trade_closed", {
                 "position_id": pos.position_id,
                 "symbol": pos.symbol,
-                "pnl": pos.total_pnl,
+                "pnl": trade.pnl,
                 "exit_reason": exit_reason,
             })
-
-            # Write to journal — use upsert so a re-run / replay doesn't duplicate.
-            try:
-                get_trade_journal().upsert(trade.to_dict(), self.session_id or "live")
-            except Exception as e:
-                # Surface persistence failures loudly — losing a trade row is the bug
-                # this whole rework is meant to prevent.
-                logger.error(
-                    f"Failed to write live trade {trade.trade_id} to journal: {e}",
-                    exc_info=True,
-                )
-                self._log_activity("journal_write_error", {
-                    "trade_id": trade.trade_id,
-                    "error": str(e),
-                })
 
     async def _close_all_positions(self, reason: str):
         """Request exits; retain positions whose full exit has not been confirmed."""
@@ -2359,6 +2673,12 @@ class LiveTradingService:
             return
         for pos in self.position_manager.get_open_positions():
             try:
+                price = self._price_cache.get(pos.symbol, pos.entry_price)
+                if getattr(self.position_manager, 'receipt_execution', False) and (
+                        pos.pending_target is not None or pos.pending_exit_reason):
+                    await self.position_manager._retry_pending_reduction(pos, price)
+                    if pos.pending_target is not None or pos.pending_exit_reason or pos.remaining_quantity <= 0:
+                        continue
                 close_side = "SELL" if pos.direction == "LONG" else "BUY"
                 qty = getattr(pos, "remaining_quantity", None)
                 if qty is None:
@@ -2367,14 +2687,16 @@ class LiveTradingService:
                     continue
                 price = self._price_cache.get(pos.symbol, pos.entry_price)
                 # The callback retains native protection until the exit is confirmed.
-                success = await self._execute_exit_order(pos.symbol, close_side, qty, price)
+                success = await self._execute_exit_order(pos.symbol, close_side, qty, price,
+                    **({'entry_order_id': pos.entry_order_id} if getattr(pos, 'entry_order_id', None) else {}))
                 if not success:
                     logger.warning(
                         f"Market exit failed for {pos.symbol} {pos.position_id} — "
                         f"position remains locally open; exit requires reconciliation."
                     )
                     continue
-                self.position_manager.close_position(pos.position_id, reason, current_price=price)
+                settlement_price = success.average_price if isinstance(success, ExecutionReceipt) else price
+                self.position_manager.close_position(pos.position_id, reason, current_price=settlement_price)
             except Exception as e:
                 logger.error(f"Failed to close position {pos.position_id}: {e}")
 

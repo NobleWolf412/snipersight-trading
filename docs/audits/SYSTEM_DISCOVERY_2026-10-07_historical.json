@@ -1,0 +1,680 @@
+{
+  "scope": "Saved evidence only; reported outcomes are not verified actual-fee P&L or strategy edge.",
+  "journal": {
+    "sha256": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+    "bytes": 428074,
+    "valid_records": 384,
+    "invalid_records": [],
+    "path": "backend\\cache\\trade_journal.jsonl",
+    "outcomes": {
+      "reported_negative": 195,
+      "reported_positive": 188,
+      "reported_zero": 1
+    },
+    "duplicate_trade_ids": {},
+    "records_missing_trade_id": 0,
+    "evidence_key_presence": {
+      "revision": 0,
+      "frozen_prices": 0,
+      "config_identity": 0,
+      "execution_identity": 0,
+      "actual_fees": 0
+    },
+    "sample_cases": {
+      "reported_negative": {
+        "line": 1,
+        "trade_id": "ADA/USDT_1779324565.624183",
+        "session_id": "50b2ba17",
+        "symbol": "ADA/USDT",
+        "direction": "SHORT",
+        "entry_time": "2026-05-21T00:49:25.624183+00:00",
+        "exit_time": "2026-05-21T01:22:05.048484+00:00",
+        "pnl": -2.0324510591244853,
+        "exit_reason": "direction_flip"
+      },
+      "reported_positive": {
+        "line": 2,
+        "trade_id": "APT/USDT_1779323617.7944",
+        "session_id": "50b2ba17",
+        "symbol": "APT/USDT",
+        "direction": "LONG",
+        "entry_time": "2026-05-21T00:33:37.794920+00:00",
+        "exit_time": "2026-05-21T02:04:54.818537+00:00",
+        "pnl": 11.360846328195322,
+        "exit_reason": "session_stopped"
+      },
+      "reported_zero": {
+        "line": 4,
+        "trade_id": "ADA/USDT_1779326718.186376",
+        "session_id": "50b2ba17",
+        "symbol": "ADA/USDT",
+        "direction": "LONG",
+        "entry_time": "2026-05-21T01:25:18.186982+00:00",
+        "exit_time": "2026-05-21T02:04:54.818537+00:00",
+        "pnl": 0.0,
+        "exit_reason": "session_stopped"
+      }
+    },
+    "session_count": 43,
+    "recorded_execution_modes": {
+      "None": 292,
+      "rest_maker": 69,
+      "snap_taker": 23
+    }
+  },
+  "session_sample": [
+    {
+      "kind": "paper_trading",
+      "session": "session_fb282a6a",
+      "selection": "directory_mtime_desc",
+      "files": {
+        "signals.jsonl": {
+          "sha256": "0b99c7202d59b9171d804f0c67c2b749e2382ca8579f33dc1582392e302de595",
+          "bytes": 7424719,
+          "valid_records": 6835,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          },
+          "results": {
+            "filtered": 6805,
+            "pending": 28,
+            "executed": 2
+          },
+          "reason_types": {
+            "no_trade_plan": 507,
+            "conflict_density": 1048,
+            "no_thesis": 4926,
+            "pullback_prob": 107,
+            "regime_counter_trend": 122,
+            "None": 30,
+            "pending_order": 74,
+            "no_data": 1,
+            "has_position": 20
+          },
+          "missing_run_id": 6835,
+          "zero_score_long_filtered": 508,
+          "first_case_per_result": {
+            "filtered": {
+              "line": 1,
+              "symbol": "LINK/USDT",
+              "direction": "LONG",
+              "timestamp": "2026-06-30T22:28:47.508841+00:00",
+              "result": "filtered",
+              "reason_type": "no_trade_plan",
+              "scan_number": 1,
+              "confluence": 0.0
+            },
+            "pending": {
+              "line": 653,
+              "symbol": "BNB/USDT",
+              "direction": "SHORT",
+              "timestamp": "2026-07-01T00:47:16.439172+00:00",
+              "result": "pending",
+              "reason_type": null,
+              "scan_number": 48,
+              "confluence": 44.9
+            },
+            "executed": {
+              "line": 6548,
+              "symbol": "SOL/USDT",
+              "direction": "LONG",
+              "timestamp": "2026-07-01T22:56:39.974341+00:00",
+              "result": "executed",
+              "reason_type": null,
+              "scan_number": 502,
+              "confluence": 51.5
+            }
+          }
+        },
+        "trades.jsonl": {
+          "sha256": "5abc2eb7caf13feba64f2743f6e74f96724995fe4c756ddf7e7cef04a85804ac",
+          "bytes": 3669,
+          "valid_records": 2,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          }
+        }
+      },
+      "config_source": {
+        "path": "config.json",
+        "sha256": "039c7e4f52a33e18b009f206f68faf6e79a30c09fd626117619853c92b75f8f2",
+        "selected_values": {
+          "sensitivity_preset": "custom",
+          "execution_mode": "rest_maker",
+          "rr_floor_at_entry": 1.0,
+          "risk_per_trade": 2.0,
+          "macro_overlay_enabled": false,
+          "sniper_mode": "stealth",
+          "use_testnet": false,
+          "min_confluence": 68.0,
+          "leverage": 1
+        },
+        "evidence_key_presence": {
+          "revision": 0,
+          "frozen_prices": 0,
+          "config_identity": 0,
+          "execution_identity": 0,
+          "actual_fees": 0
+        }
+      }
+    },
+    {
+      "kind": "paper_trading",
+      "session": "session_42df73ab",
+      "selection": "directory_mtime_desc",
+      "files": {
+        "signals.jsonl": {
+          "sha256": "ece79e8ebb458abafda58dbb1a98528daf2cfd6aca021642aa427385a66d0c34",
+          "bytes": 7783306,
+          "valid_records": 6679,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          },
+          "results": {
+            "filtered": 6637,
+            "pending": 34,
+            "executed": 8
+          },
+          "reason_types": {
+            "no_trade_plan": 251,
+            "cooldown_active": 217,
+            "conflict_density": 995,
+            "no_thesis": 4718,
+            "regime_counter_trend": 92,
+            "None": 42,
+            "has_position": 213,
+            "pullback_prob": 55,
+            "rr_too_wide": 24,
+            "pending_order": 72
+          },
+          "missing_run_id": 6679,
+          "zero_score_long_filtered": 380,
+          "first_case_per_result": {
+            "filtered": {
+              "line": 1,
+              "symbol": "OP/USDT",
+              "direction": "LONG",
+              "timestamp": "2026-06-29T21:24:03.936908+00:00",
+              "result": "filtered",
+              "reason_type": "no_trade_plan",
+              "scan_number": 1,
+              "confluence": 0.0
+            },
+            "pending": {
+              "line": 26,
+              "symbol": "NEAR/USDT",
+              "direction": "SHORT",
+              "timestamp": "2026-06-29T21:27:00.469935+00:00",
+              "result": "pending",
+              "reason_type": null,
+              "scan_number": 2,
+              "confluence": 50.3
+            },
+            "executed": {
+              "line": 52,
+              "symbol": "NEAR/USDT",
+              "direction": "SHORT",
+              "timestamp": "2026-06-29T21:33:06.741091+00:00",
+              "result": "executed",
+              "reason_type": null,
+              "scan_number": 4,
+              "confluence": 50.3
+            }
+          }
+        },
+        "trades.jsonl": {
+          "sha256": "6f08246d18618e713cbb245efbca87a83322e3977ec2a8a5d18bc02b0ba98045",
+          "bytes": 12840,
+          "valid_records": 8,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          }
+        }
+      },
+      "config_source": {
+        "path": "config.json",
+        "sha256": "6e82e3a028ca9600ed5d179121f777269d2ceb8c3112b402032a855e1d101ef7",
+        "selected_values": {
+          "sensitivity_preset": "custom",
+          "execution_mode": "rest_maker",
+          "rr_floor_at_entry": 1.0,
+          "risk_per_trade": 2.0,
+          "macro_overlay_enabled": false,
+          "sniper_mode": "stealth",
+          "use_testnet": false,
+          "min_confluence": 68.0,
+          "leverage": 1
+        },
+        "evidence_key_presence": {
+          "revision": 0,
+          "frozen_prices": 0,
+          "config_identity": 0,
+          "execution_identity": 0,
+          "actual_fees": 0
+        }
+      }
+    },
+    {
+      "kind": "paper_trading",
+      "session": "session_6117c631",
+      "selection": "directory_mtime_desc",
+      "files": {
+        "signals.jsonl": {
+          "sha256": "7a96566617d116c8ade2b7982a3cfe7abab92865e6cab436ea4b34a8a4a3a30a",
+          "bytes": 7713290,
+          "valid_records": 5884,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          },
+          "results": {
+            "filtered": 5796,
+            "pending": 75,
+            "executed": 13
+          },
+          "reason_types": {
+            "cooldown_active": 461,
+            "conflict_density": 1162,
+            "no_thesis": 3281,
+            "None": 88,
+            "pending_order": 201,
+            "no_trade_plan": 323,
+            "has_position": 115,
+            "regime_counter_trend": 106,
+            "rr_too_wide": 29,
+            "rr_collapsed_at_entry": 3,
+            "max_positions": 115
+          },
+          "missing_run_id": 5884,
+          "zero_score_long_filtered": 592,
+          "first_case_per_result": {
+            "filtered": {
+              "line": 1,
+              "symbol": "ADA/USDT",
+              "direction": "SHORT",
+              "timestamp": "2026-06-28T23:48:23.415147+00:00",
+              "result": "filtered",
+              "reason_type": "cooldown_active",
+              "scan_number": 1,
+              "confluence": 0.0
+            },
+            "pending": {
+              "line": 12,
+              "symbol": "OP/USDT",
+              "direction": "SHORT",
+              "timestamp": "2026-06-28T23:48:23.720232+00:00",
+              "result": "pending",
+              "reason_type": null,
+              "scan_number": 1,
+              "confluence": 48.1
+            },
+            "executed": {
+              "line": 312,
+              "symbol": "ADA/USDT",
+              "direction": "SHORT",
+              "timestamp": "2026-06-29T00:55:24.369010+00:00",
+              "result": "executed",
+              "reason_type": null,
+              "scan_number": 24,
+              "confluence": 44.6
+            }
+          }
+        }
+      },
+      "config_source": {
+        "path": "state.json",
+        "sha256": "f0652c19d08042533811c5a4269f1f378181a7905707c167348d45ded8464a69",
+        "selected_values": {
+          "sensitivity_preset": "custom",
+          "execution_mode": "rest_maker",
+          "rr_floor_at_entry": 1.0,
+          "risk_per_trade": 2.0,
+          "macro_overlay_enabled": false,
+          "sniper_mode": "stealth",
+          "use_testnet": false,
+          "min_confluence": 68.0,
+          "leverage": 1
+        },
+        "evidence_key_presence": {
+          "revision": 0,
+          "frozen_prices": 0,
+          "config_identity": 0,
+          "execution_identity": 0,
+          "actual_fees": 0
+        }
+      }
+    },
+    {
+      "kind": "live_trading",
+      "session": "session_0f03fdbc",
+      "selection": "directory_mtime_desc",
+      "files": {
+        "signals.jsonl": {
+          "sha256": "ccf572376235429ddbce23193132cbd15cf93d6b0dcbd87ac82ee46fa23b7d66",
+          "bytes": 900946,
+          "valid_records": 887,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          },
+          "results": {
+            "filtered": 887
+          },
+          "reason_types": {
+            "low_confluence": 508,
+            "no_trade_plan": 25,
+            "conflict_density": 342,
+            "position_size": 12
+          },
+          "missing_run_id": 887,
+          "zero_score_long_filtered": 367,
+          "first_case_per_result": {
+            "filtered": {
+              "line": 1,
+              "symbol": "BNB/USDT:USDT",
+              "direction": "SHORT",
+              "timestamp": "2026-05-12T09:56:10.942014+00:00",
+              "result": "filtered",
+              "reason_type": "low_confluence",
+              "scan_number": 1,
+              "confluence": 59.4
+            }
+          }
+        },
+        "phemex_fills.jsonl": {
+          "sha256": "ba754d4bdad65c8804b7afe88d022da9f834d031bc5d211d978eb3dc3e20f74b",
+          "bytes": 3117,
+          "valid_records": 9,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          }
+        }
+      },
+      "config_source": {
+        "path": "config.json",
+        "sha256": "4fe0c8f90faffde10697474b2a5d33590f02f697104cdabdcb827e511e9df0d7",
+        "selected_values": {
+          "sensitivity_preset": "custom",
+          "risk_per_trade": 1.0,
+          "sniper_mode": "stealth",
+          "min_confluence": 65.0,
+          "leverage": 1
+        },
+        "evidence_key_presence": {
+          "revision": 0,
+          "frozen_prices": 0,
+          "config_identity": 0,
+          "execution_identity": 0,
+          "actual_fees": 0
+        }
+      }
+    },
+    {
+      "kind": "live_trading",
+      "session": "session_e6c0e76e",
+      "selection": "directory_mtime_desc",
+      "files": {
+        "signals.jsonl": {
+          "sha256": "0e9c0f98d593c600ac20f49ee398e12c34dc94437b149ed65ccbe0f838c221ff",
+          "bytes": 51315,
+          "valid_records": 54,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          },
+          "results": {
+            "filtered": 51,
+            "pending": 3
+          },
+          "reason_types": {
+            "low_confluence": 34,
+            "no_trade_plan": 5,
+            "conflict_density": 6,
+            "position_size": 6,
+            "pending_fill": 3
+          },
+          "missing_run_id": 54,
+          "zero_score_long_filtered": 11,
+          "first_case_per_result": {
+            "filtered": {
+              "line": 1,
+              "symbol": "SUI/USDT:USDT",
+              "direction": "LONG",
+              "timestamp": "2026-05-11T03:26:00.598844+00:00",
+              "result": "filtered",
+              "reason_type": "low_confluence",
+              "scan_number": 1,
+              "confluence": 65.3
+            },
+            "pending": {
+              "line": 18,
+              "symbol": "ONDO/USDT:USDT",
+              "direction": "LONG",
+              "timestamp": "2026-05-11T03:26:03.368588+00:00",
+              "result": "pending",
+              "reason_type": "pending_fill",
+              "scan_number": 1,
+              "confluence": 74.3
+            }
+          }
+        },
+        "trades.jsonl": {
+          "sha256": "fb3e0986b43591af9a7aa86ac70ed7505f654aedc8cf5128094ae6708ec01685",
+          "bytes": 2150,
+          "valid_records": 3,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          }
+        },
+        "phemex_fills.jsonl": {
+          "sha256": "e3ac750b865aa69fcf2010e11a1682e7d6375aff68531720e5d781dded14f7ce",
+          "bytes": 10758,
+          "valid_records": 31,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          }
+        }
+      },
+      "config_source": {
+        "path": "session_info.json",
+        "sha256": "9493bcfd012db488f759acf475a4c53637b0910844b2011dd0f4344ef8d44212",
+        "selected_values": {
+          "sensitivity_preset": "custom",
+          "risk_per_trade": 1.0,
+          "sniper_mode": "overwatch",
+          "min_confluence": 65.0,
+          "leverage": 1
+        },
+        "evidence_key_presence": {
+          "revision": 0,
+          "frozen_prices": 0,
+          "config_identity": 0,
+          "execution_identity": 0,
+          "actual_fees": 0
+        }
+      }
+    },
+    {
+      "kind": "live_trading",
+      "session": "session_a0cc0018",
+      "selection": "directory_mtime_desc",
+      "files": {
+        "signals.jsonl": {
+          "sha256": "570115d27f9b4548459f94d6877b983c070f4a4a5d504feebc364996ff38e9be",
+          "bytes": 344045,
+          "valid_records": 340,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          },
+          "results": {
+            "filtered": 340
+          },
+          "reason_types": {
+            "low_confluence": 253,
+            "no_trade_plan": 18,
+            "conflict_density": 68,
+            "has_position": 1
+          },
+          "missing_run_id": 340,
+          "zero_score_long_filtered": 86,
+          "first_case_per_result": {
+            "filtered": {
+              "line": 1,
+              "symbol": "SOL/USDT:USDT",
+              "direction": "LONG",
+              "timestamp": "2026-05-07T00:50:43.480342+00:00",
+              "result": "filtered",
+              "reason_type": "low_confluence",
+              "scan_number": 1,
+              "confluence": 61.4
+            }
+          }
+        },
+        "phemex_fills.jsonl": {
+          "sha256": "80e9801cdedfa3a74332709c969f0b0b9d0fbf9895bf2431893ecdc694209d8f",
+          "bytes": 68928,
+          "valid_records": 199,
+          "invalid_records": [],
+          "evidence_key_presence": {
+            "revision": 0,
+            "frozen_prices": 0,
+            "config_identity": 0,
+            "execution_identity": 0,
+            "actual_fees": 0
+          }
+        }
+      },
+      "config_source": {
+        "path": "session_info.json",
+        "sha256": "be33a86b88dc5789135a2ed2c5e1c95ad91bf803acf8ac76d13bbfa2f2b7ac7a",
+        "selected_values": {
+          "sensitivity_preset": "balanced",
+          "risk_per_trade": 1.0,
+          "sniper_mode": "stealth",
+          "min_confluence": null,
+          "leverage": 1
+        },
+        "evidence_key_presence": {
+          "revision": 0,
+          "frozen_prices": 0,
+          "config_identity": 0,
+          "execution_identity": 0,
+          "actual_fees": 0
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Sampling by directory mtime is not representative sampling.",
+    "Key-presence checks do not certify frozen payload completeness.",
+    "No current candles, market inputs or configuration substituted for missing historical evidence.",
+    "Existing coverage helper checks counts/symbol coverage; it does not prove exactly-once decisions or causal replay."
+  ],
+  "telemetry_sample": {
+    "path": "backend\\cache\\telemetry.db",
+    "database_bytes": 1509531648,
+    "selection": "latest inserted scan_completed IDs; read-only transaction",
+    "cycles": [
+      {
+        "run_id": "3e55fe9f",
+        "ts": "2026-07-01T23:58:03.532449+00:00",
+        "profile": "stealth_balanced",
+        "universe_size": 13,
+        "generated_count_completed": 1,
+        "rejected_count_completed": 12,
+        "generated_events": 1,
+        "rejected_events": 12,
+        "silent_drops": [],
+        "null_gate_count": 0,
+        "null_reason_count": 0,
+        "completed_event_id": 2992088,
+        "coverage_gap": 0,
+        "start_events": 1
+      },
+      {
+        "run_id": "6df11171",
+        "ts": "2026-07-01T23:54:59.737450+00:00",
+        "profile": "stealth_balanced",
+        "universe_size": 13,
+        "generated_count_completed": 1,
+        "rejected_count_completed": 12,
+        "generated_events": 1,
+        "rejected_events": 12,
+        "silent_drops": [],
+        "null_gate_count": 0,
+        "null_reason_count": 0,
+        "completed_event_id": 2991996,
+        "coverage_gap": 0,
+        "start_events": 1
+      },
+      {
+        "run_id": "bedfdc86",
+        "ts": "2026-07-01T23:52:07.483059+00:00",
+        "profile": "stealth_balanced",
+        "universe_size": 12,
+        "generated_count_completed": 1,
+        "rejected_count_completed": 11,
+        "generated_events": 1,
+        "rejected_events": 11,
+        "silent_drops": [],
+        "null_gate_count": 0,
+        "null_reason_count": 0,
+        "completed_event_id": 2991904,
+        "coverage_gap": 0,
+        "start_events": 1
+      }
+    ]
+  }
+}

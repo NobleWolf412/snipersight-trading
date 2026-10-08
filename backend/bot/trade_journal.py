@@ -11,6 +11,9 @@ import csv
 import io
 import logging
 import threading
+import os
+import tempfile
+from contextlib import contextmanager
 
 from .exit_classification import enrich
 from datetime import datetime, timezone
@@ -32,7 +35,7 @@ class TradeJournalService:
     """
 
     def __init__(self, path: Optional[Path] = None):
-        self._path = Path(path) if path else _JOURNAL_PATH
+        self._path = (Path(path) if path else _JOURNAL_PATH).resolve()
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         logger.info("Trade journal: %s", self._path)
@@ -56,35 +59,103 @@ class TradeJournalService:
         trade, which is the worse of the two lies.
         """
         record = self._classified(trade_dict, session_id)
-        with self._lock:
-            with self._path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(record, default=str) + "\n")
+        with self._write_guard():
+            original, _ = self._read_for_write()
+            self._publish_record(original, record)
 
     def upsert(self, trade_dict: Dict[str, Any], session_id: str) -> bool:
         """
         Append the trade only if no existing row shares the same trade_id.
 
-        Used by the periodic Phemex backfill task so re-running the sync does
-        not duplicate rows. Returns True if the row was newly written, False
-        if it was already present.
-
-        Note: dedupe is by trade_id only (the natural key from the exchange).
-        Backfill code is responsible for choosing a stable trade_id —
-        typically the Phemex order id, or a composite of (order_id, fill_seq).
+        Returns True after durable publication, False for an identical retry.
+        Reusing an identity with different data raises instead of hiding a conflict.
         """
         trade_id = trade_dict.get("trade_id")
         if not trade_id:
             # No id → fall back to plain append; better to risk a duplicate than drop.
             self.append(trade_dict, session_id)
             return True
-        with self._lock:
-            existing_ids = self._existing_trade_ids_unlocked()
-            if trade_id in existing_ids:
+        record = self._classified(trade_dict, session_id)
+        # Compare the same JSON representation that readers receive.
+        canonical = json.loads(json.dumps(record, default=str, allow_nan=False))
+        with self._write_guard():
+            original, records = self._read_for_write()
+            matches = [r for r in records if r.get('trade_id') == trade_id]
+            if matches:
+                if any(r != canonical for r in matches):
+                    raise ValueError(f'TRADE_ID_CONFLICT: {trade_id}')
+                # A preceding call may have replaced the file but failed while
+                # confirming durability. Retry that confirmation before success.
+                with self._path.open('r+b') as handle:
+                    os.fsync(handle.fileno())
+                self._sync_directory()
                 return False
-            record = self._classified(trade_dict, session_id)
-            with self._path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(record, default=str) + "\n")
+            self._publish_record(original, canonical)
             return True
+
+    @contextmanager
+    def _write_guard(self):
+        """Serialize all cooperating writers; unavailable ownership is retryable."""
+        with self._lock:
+            with self._path.with_suffix(self._path.suffix + '.lock').open('a+b') as handle:
+                if handle.seek(0, os.SEEK_END) == 0:
+                    handle.write(b'\0')
+                    handle.flush()
+                handle.seek(0)
+                try:
+                    if os.name == 'nt':
+                        import msvcrt
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError as exc:
+                    raise OSError('TRADE_JOURNAL_WRITER_BUSY') from exc
+                yield
+
+    def _read_for_write(self):
+        """Never append into a torn row or silently discard damaged evidence."""
+        original = self._path.read_bytes() if self._path.exists() else b''
+        records = []
+        def invalid_constant(value):
+            raise ValueError(f'Non-finite JSON constant: {value}')
+        try:
+            for line in original.decode('utf-8').splitlines():
+                if not line.strip():
+                    continue
+                record = json.loads(line, parse_constant=invalid_constant)
+                if not isinstance(record, dict):
+                    raise ValueError('Trade row must be an object')
+                records.append(record)
+        except (ValueError, UnicodeError) as exc:
+            raise ValueError(f'TRADE_JOURNAL_CORRUPT: {exc}') from exc
+        return original, records
+
+    def _publish_record(self, original, record):
+        """Publish old bytes plus one row atomically; no in-place history repair."""
+        row = (json.dumps(record, default=str, allow_nan=False) + '\n').encode('utf-8')
+        separator = b'\n' if original and not original.endswith(b'\n') else b''
+        fd, name = tempfile.mkstemp(prefix='.' + self._path.name + '.', suffix='.tmp', dir=self._path.parent)
+        temporary = Path(name)
+        try:
+            with os.fdopen(fd, 'wb') as handle:
+                handle.write(original)
+                handle.write(separator)
+                handle.write(row)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self._path)
+            self._sync_directory()
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _sync_directory(self):
+        if os.name != 'nt':
+            directory = os.open(self._path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
 
     def _classified(self, trade_dict: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         """Stamp the honest fields, and say so out loud when they disagree with

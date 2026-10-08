@@ -1,3 +1,4 @@
+import { accountingLabel, accountingColor, formatAccountMoney, executionReportNotice } from '../../services/accounting';
 /**
  * RangeBot — full paper-trading equivalent of the live bot
  *
@@ -79,13 +80,7 @@ function fmtDuration(seconds: number): string {
 }
 
 function fmtCurrency(v: number | null | undefined, decimals = 2): string {
-  if (v == null || !Number.isFinite(v)) return '—';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(v);
+  return formatAccountMoney(v, decimals);
 }
 
 function fmtPct(v: number | null | undefined, sign = false): string {
@@ -914,7 +909,7 @@ function StatusTab({
   const isRunning = status?.status === 'running';
   const cfg = status?.config;
   const balance = status?.balance;
-  const initialBalance = balance?.initial ?? DEFAULT_SETUP.initial_balance;
+  const initialBalance = balance?.initial;
   const positions = status?.positions ?? [];
   const stats = status?.statistics;
   const activity = status?.recent_activity ?? [];
@@ -1043,12 +1038,24 @@ function StatusTab({
           <section className="panel" style={{ padding: 14 }}>
             <SectionHead title="Equity Curve" right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{trades.length} trades</span>} />
             {tradesErr && <div style={{ color: 'var(--amber)', fontSize: 10, marginBottom: 6 }}>⚠ {tradesErr}</div>}
-            <EquitySparkline trades={trades} initialBalance={initialBalance} />
+            <div className="mono" style={{ color: 'var(--fg-3)', fontSize: 11 }}>
+                {accountingLabel(status?.accounting)}
+                {status?.outcome_basis === 'executions_excluding_funding_and_transfers' && (
+                  <div>Trade results include execution fees; funding and transfers are excluded.</div>
+                )}
+                {executionReportNotice(status?.execution_reporting, status?.execution_history) && (
+                  <div role="status" style={{ color: 'var(--amber)' }}>
+                    {executionReportNotice(status?.execution_reporting, status?.execution_history)}
+                  </div>
+                )}
+                {status?.accounting?.basis === 'exchange_mark' && <div>Account change includes funding and transfers.{status?.outcome_basis !== 'executions_excluding_funding_and_transfers' && ' Trade outcomes are estimates.'}</div>}
+              </div>
+              {status?.accounting?.basis !== 'exchange_mark' && initialBalance != null && <EquitySparkline trades={trades} initialBalance={initialBalance} />}
             <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--fg-4)', marginTop: 8, textTransform: 'uppercase', letterSpacing: '.14em' }}>
               <span>start {fmtCurrency(initialBalance)}</span>
-              <span>now {fmtCurrency(balance?.equity ?? initialBalance)}</span>
-              <span style={{ color: (balance?.pnl ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                {fmtCurrency(balance?.pnl ?? 0)} ({fmtPct(balance?.pnl_pct ?? 0, true)})
+              <span>now {fmtCurrency(balance?.equity)}</span>
+              <span style={{ color: accountingColor(balance?.pnl) }}>
+                {fmtCurrency(balance?.pnl)} ({fmtPct(balance?.pnl_pct, true)})
               </span>
             </div>
           </section>

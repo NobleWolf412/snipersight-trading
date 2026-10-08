@@ -1481,7 +1481,7 @@ export function Replay() {
         subtitle={
           session
             ? `${session.symbol} · ${up(session.mode)} · ${days}D · ${session.total_bars} bars at ${up(session.tf_step)}`
-            : 'Step through historical bars and watch the scanner score evolve'
+            : 'Inspect closed candles and market structure across historical bars'
         }
         badges={
           <>
@@ -1501,6 +1501,11 @@ export function Replay() {
           </>
         }
       />
+
+      <p role="status" style={{ color: '#cfe5d4', fontSize: 12, lineHeight: 1.5, margin: '12px 0' }}>
+        Candle and structure inspection is available. Historical macro data and original strategy settings
+        are missing, so trade-signal replay is unavailable.
+      </p>
 
       <SetupPanel
         defaultSymbol="BTC/USDT"
