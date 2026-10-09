@@ -1,4 +1,4 @@
-import type { AccountBalance, AccountingStatus, ExecutionReportState, ExecutionHistoryStatus, ExecutionOutcomeSnapshot } from './accounting';
+import type { AccountBalance,AccountingStatus,ExecutionHistoryStatus,ExecutionOutcomeSnapshot,ExecutionReportState } from './accounting';
 /**
  * paperTradingService — Phase 3 follow-up 3z.e
  *
@@ -18,9 +18,7 @@ import type { AccountBalance, AccountingStatus, ExecutionReportState, ExecutionH
  * `dry_run` parameter in any method signature.
  */
 
-const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE
-  ? (import.meta as any).env.VITE_API_BASE
-  : '/api';
+import { API_BASE as BASE } from './apiBase';
 
 export interface PaperTradingConfigRequest {
   selection_mode?: 'fixed' | 'adaptive';

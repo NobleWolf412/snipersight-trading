@@ -1,4 +1,4 @@
-import type { AccountBalance, AccountingStatus } from '../services/accounting';
+import type { AccountBalance,AccountingStatus } from '../services/accounting';
 /**
  * API Client for SniperSight Backend
  * 
@@ -10,14 +10,12 @@ import { debugLogger } from './debugLogger';
 
 // Resolve API base: prefer Vite env, otherwise use same-origin '/api' (proxied through Vite)
 // NOTE: Never hardcode localhost:8001 - breaks on Chromebook Crostini where localhost != container
-const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE)
-  ? (import.meta as any).env.VITE_API_BASE
-  : '/api';
+import { API_BASE } from '../services/apiBase';
 
 // Retry configuration
 const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
 const SCANNER_TIMEOUT_MS = 120000; // 2 minutes for scanner (fetches multi-TF data)
-const DEFAULT_MAX_RETRIES = 3;
+
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
 
@@ -379,13 +377,15 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     const {
       timeout = DEFAULT_TIMEOUT_MS,
-      maxRetries = DEFAULT_MAX_RETRIES,
+      maxRetries: requestedRetries = 0,
       skipRetry = false,
       silent = false,
       ...fetchOptions
     } = options;
 
-    const method = fetchOptions.method || 'GET';
+    const method = (fetchOptions.method || 'GET').toUpperCase();
+    // Reads may opt into retry. Mutations are never automatically retried.
+    const maxRetries = method === 'GET' || method === 'HEAD' ? Math.max(0, requestedRetries) : 0;
     const fullUrl = `${API_BASE}${endpoint}`;
 
     // Circuit breaker check - fail fast if backend is known to be down

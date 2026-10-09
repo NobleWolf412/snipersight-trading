@@ -1,6 +1,4 @@
-const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE
-  ? (import.meta as any).env.VITE_API_BASE
-  : '/api';
+import { API_BASE as BASE } from './apiBase';
 
 export interface JournalTrade {
   trade_id: string;

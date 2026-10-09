@@ -1,3 +1,3 @@
-export const api = {
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
-};
+import { API_BASE } from './apiBase';
+/** Compatibility adapter for archived telemetry callers. */
+export const api = { baseURL: API_BASE };

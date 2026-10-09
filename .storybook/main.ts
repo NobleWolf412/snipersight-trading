@@ -1,8 +1,8 @@
 import type { StorybookConfig } from '@storybook/react-vite';
 
-import { dirname } from "path"
+import { dirname } from "path";
 
-import { fileURLToPath } from "url"
+import { fileURLToPath } from "url";
 
 /**
 * This function is used to resolve the absolute path of a package.
@@ -13,8 +13,10 @@ function getAbsolutePath(value: string): any {
 }
 const config: StorybookConfig = {
   "stories": [
-    "../src/**/*.mdx",
-    "../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"
+    "../src/stories/**/*.mdx",
+    "../src/stories/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+    "../src/pages/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+    "../src/components/**/*.stories.@(js|jsx|mjs|ts|tsx)"
   ],
   "addons": [
     getAbsolutePath('@chromatic-com/storybook'),

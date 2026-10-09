@@ -1,7 +1,5 @@
-import type { AccountBalance, AccountingStatus, ExecutionReportState, ExecutionHistoryStatus, ExecutionOutcomeSnapshot } from './accounting';
-const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE
-  ? (import.meta as any).env.VITE_API_BASE
-  : '/api';
+import type { AccountBalance,AccountingStatus,ExecutionHistoryStatus,ExecutionOutcomeSnapshot,ExecutionReportState } from './accounting';
+import { API_BASE as BASE } from './apiBase';
 
 export interface LiveTradingConfigRequest {
   selection_mode?: 'fixed';
