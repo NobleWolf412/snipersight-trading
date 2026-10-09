@@ -86,7 +86,7 @@ Status: **implemented** = working end to end; **partial** = works with known gap
 | `/` | Landing (brand register). Explain the tool, open the scanner | Implemented; static examples must be labeled as examples |
 | `/scanner` | Choose a mode, run a scan, review setups and rejections | Implemented |
 | `/bot` | Route to the current session owner | Implemented |
-| `/bot/setup` | Review risk and start a live or testnet session | Implemented; hard-gated live copy |
+| `/bot/setup` | Review risk and start a live session | Implemented; explicit LIVE preflight. Testnet is supported by the service, not selectable on this screen |
 | `/bot/status` | Monitor and control the running session | Implemented |
 | `/training/range` | Configure and run a paper session | Implemented |
 | `/journal` | Review completed execution records; filter and export | Implemented; research controls live in /training/drills |
