@@ -78,3 +78,30 @@ def test_failed_close_time_validation_cannot_pass_a_partial_candle(monkeypatch):
     monkeypatch.setattr('backend.data.ingestion_pipeline.time.time',lambda:float('nan'))
     with pytest.raises(ValueError,match='Cannot establish candle closure'):
         pipeline.normalize_and_validate(candles(['2026-10-08T09:00:00Z']),'BTC/USDT','1h')
+
+
+@pytest.mark.parametrize('source_tz', [None, 'UTC', 'America/New_York'])
+@pytest.mark.parametrize('timeframe,hours', [('4h', 4), ('1d', 24), ('1w', 168)])
+def test_exchange_timestamps_reach_regime_as_the_same_utc_instants(monkeypatch, source_tz, timeframe, hours):
+    from backend.analysis.regime_inputs import validate_regime_candles
+    from types import SimpleNamespace
+
+    now = pd.Timestamp('2026-10-09T14:00:00Z')
+    last_close = {'4h': now.floor('4h'), '1d': now.floor('D'),
+                  '1w': pd.Timestamp('2026-10-05T00:00:00Z')}[timeframe]
+    opens = pd.date_range(end=last_close - pd.Timedelta(hours=hours), periods=120,
+                          freq=pd.Timedelta(hours=hours))
+    source_times = opens.tz_localize(None) if source_tz is None else opens.tz_convert(source_tz)
+    raw = pd.DataFrame(dict(timestamp=source_times, open=100., high=101., low=99., close=100.5, volume=10.))
+    original = raw.copy(deep=True)
+    adapter = SimpleNamespace(fetch_ohlcv=lambda *args, **kwargs: raw)
+    monkeypatch.setattr('backend.data.ingestion_pipeline.time.time', lambda: now.timestamp())
+    pipeline = IngestionPipeline(adapter, use_cache=False)
+
+    frame = pipeline.fetch_multi_timeframe('BTC/USDT', [timeframe]).timeframes[timeframe]
+
+    assert validate_regime_candles(frame, hours, now.to_pydatetime()) == last_close.isoformat()
+    assert str(frame.index.tz) == 'UTC'
+    assert list(frame.index) == list(opens)
+    assert list(frame.timestamp) == list(opens)
+    pd.testing.assert_frame_equal(raw, original)

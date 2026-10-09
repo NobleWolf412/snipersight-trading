@@ -11,6 +11,12 @@ a deployed release. Source hashes and inspection boundaries are in the
 [coverage ledger](audits/SYSTEM_DISCOVERY_2026-10-07_coverage.json).
 The initial discovery commit and earlier checkpoints remain historical evidence.
 
+Restart follow-up (2026-10-09): the [UTC handoff correction](../backend/diagnostics/decisions/2026-10-09__utc-candle-handoff.md)
+normalizes exchange timestamps before ingestion gap filling and publication.
+The first real restart exposed a naive/aware boundary missed by earlier synthetic
+fixtures. The dominance provider also now requires an API key; unavailable mode
+advice remains an explicit runtime limitation until that source is configured.
+
 The offline review and bounded repair pass are complete. This is a navigation
 map of the product's critical paths, not a claim that every inventoried file,
 strategy branch, exchange protocol or historical trade has been certified.

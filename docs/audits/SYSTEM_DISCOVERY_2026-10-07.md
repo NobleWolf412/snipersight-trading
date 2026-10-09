@@ -1387,3 +1387,20 @@ fixture and cap are preserved. Raw LONG fixed/adaptive settlement and accepted-p
 LONG/SHORT settlement were verified separately. No live execution, deployed
 restart or forward profitability is claimed. Forward paper comparison and
 regime/threshold calibration remain required before proposing live adaptive use.
+# Restart follow-up: UTC candle handoff (2026-10-09)
+
+After publishing `eb2b420`, the authorized restart exposed timezone-naive Phemex
+candles failing the new strict regime validator. The [bounded correction](../../backend/diagnostics/decisions/2026-10-09__utc-candle-handoff.md)
+normalizes copied timestamps before deduplication and gap filling. Nine adapter
+boundary regressions reproduce the missed case; independent source review found
+no blocker. This corrects the earlier offline evidence without replacing it.
+
+The paper session was stopped cleanly with no positions or pending orders; live
+trading was idle. API/UI and private Tailscale health checks passed, and the browser
+rendered the dashboard. The external dominance endpoint returns HTTP 401 requiring
+an API key, while its saved cache is expired. Mode advice remains unavailable;
+no trading session was restarted and no real orders were placed.
+
+[Restart verification](RESTART_UTC_HANDOFF_2026-10-09.json): all 2,448 selected
+guarded backend tests passed in one run after the correction. The contract check
+retains the same six documented JSONL drifts; no baseline was overwritten.

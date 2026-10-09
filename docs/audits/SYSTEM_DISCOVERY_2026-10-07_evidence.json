@@ -11771,5 +11771,14 @@
       "Runtime protected hashes were captured for the final verification phase, not at batch start; external running processes may write runtime data.",
       "The legacy composite regime score retains a neutral derivatives contribution because no verified derivatives feed exists. The UI marks derivatives unavailable and new mode routing uses measured trend/volatility/participation dimensions rather than this composite score."
     ]
+  },
+  "restart_utc_handoff_2026_10_09": {
+    "audit": "docs/audits/RESTART_UTC_HANDOFF_2026-10-09.json",
+    "selected_backend_passed": 2448,
+    "source_hashes": {
+      "backend/data/ingestion_pipeline.py": "0d911a6e8c8e85f55597ce9ba470bcc373e6b33c858c7cb05226f191e54a90d9",
+      "backend/tests/unit/test_candle_timing_contract.py": "d5fc9e4005eba00c743cb87fa263f3564fbdd859aca5aa28cd84f78bce9898f5"
+    },
+    "runtime_limit": "CryptoCompare top/mktcapfull returns HTTP 401, API key required. Existing dominance cache expired. Regime advice remains unavailable; no fallback or credential changes made."
   }
 }

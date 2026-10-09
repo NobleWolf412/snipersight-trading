@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-09",
+  "base_commit": "eb2b4203a4f3131d3833fbb26b413d2a2e610ae5",
+  "scope": "Authorized commit, push and app restart; bounded UTC handoff fix found during runtime verification.",
+  "decision": "backend/diagnostics/decisions/2026-10-09__utc-candle-handoff.md",
+  "before": {
+    "runtime_regime_status": 503,
+    "reason": "1d timestamps must be ordered unique timezone-aware instants",
+    "regression": "6 failed, 3 passed"
+  },
+  "verification": {
+    "focused_guarded_backend": "87 passed, 2361 deselected",
+    "full_selected_guarded_backend": "2448 passed, 415 warnings in 370.50s",
+    "backend_command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py backend",
+    "guard_denial_checks": 7,
+    "contract_command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py contracts",
+    "contracts": "Exit 1: six previously documented strategy-provenance JSONL drifts; API, telemetry and pipeline inventories clean. Baselines not rewritten.",
+    "typescript_before_initial_commit": "tsc --noEmit exit 0; correction changes no TypeScript",
+    "runtime_health": "HTTP 200 direct API, UI proxy and private Tailscale UI/API",
+    "browser": "Dashboard and scanner render; Tailscale scanner shows Recommendation unavailable and PHEMEX IDLE"
+  },
+  "independent_review": "regime_design_review: no blocker by source inspection; checked cache, SMC, replay, sessions, VWAP and timestamp UI consumers; no runtime tests by reviewer.",
+  "restart": {
+    "paper_session": "68215413 stopped cleanly with zero positions/pending orders",
+    "after": "paper/live idle; zero positions/pending orders; no trading session resumed"
+  },
+  "remaining_runtime_limitation": "CryptoCompare top/mktcapfull returns HTTP 401, API key required. Existing dominance cache expired. Regime advice remains unavailable; no fallback or credential changes made.",
+  "limits": [
+    "Selected manifest, not all repository tests or profitability validation.",
+    "Runtime public-data reads and normal app startup are separate from isolated verification.",
+    "No real orders or historical record edits."
+  ],
+  "source_hashes": {
+    "backend/data/ingestion_pipeline.py": "0d911a6e8c8e85f55597ce9ba470bcc373e6b33c858c7cb05226f191e54a90d9",
+    "backend/tests/unit/test_candle_timing_contract.py": "d5fc9e4005eba00c743cb87fa263f3564fbdd859aca5aa28cd84f78bce9898f5"
+  }
+}

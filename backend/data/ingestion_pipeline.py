@@ -417,6 +417,11 @@ class IngestionPipeline:
             df["timestamp"] = df.index
             df = df.reset_index(drop=True)
 
+        # Exchange-naive datetimes already mean UTC in closure/cache checks.
+        # Preserve that interpretation in the published frame, and normalize
+        # aware feeds before gap filling so DST cannot shift the candle grid.
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="raise")
+
         # Check for duplicate timestamps
         duplicates = df["timestamp"].duplicated()
         if duplicates.any():
