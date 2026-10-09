@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { paperTradingService, type PaperTradingStatus } from '@/services/paperTradingService';
 /**
  * TrainingGround — Phase 3d sub-step 1 (Drills extracted to /training/drills)
  *
@@ -49,11 +51,11 @@ const MODULES: Module[] = [
     tag: 'Live-fire paper trader',
     color: '#22d3ee',
     body:
-      "Ghost — autonomous bot armed on simulated capital. Same engine as the live bot, no real funds. Generates the trade data the ML model trains on.",
+      "Configure and monitor an autonomous paper session using simulated capital. Review completed trades in the journal.",
     stat: [
-      { k: 'Status', v: '● ARMED', vc: '#4ade80' },
-      { k: 'Sim Equity', v: '$5,842' },
-      { k: 'Win', v: '61%' },
+      { k: 'Status', v: 'Unavailable' },
+      { k: 'Sim Equity', v: '—' },
+      { k: 'Win', v: '—' },
     ],
     cta: 'ENTER RANGE',
     href: '/training/range',
@@ -64,7 +66,7 @@ const MODULES: Module[] = [
     tag: 'ML model training',
     color: '#c084fc',
     body:
-      "Train the bot on Ghost's closed paper trades. Promote new params to the live bot when the model beats baseline — or reset the model to factory defaults.",
+      "Experimental model tools. No validated model promotion workflow is available; machine learning is outside the current trading review.",
     stat: [
       { k: 'Model', v: '—', vc: '#c084fc' },
       { k: 'vs Baseline', v: '—', vc: '#c084fc' },
@@ -79,7 +81,7 @@ const MODULES: Module[] = [
     tag: 'Historical setup walkthrough',
     color: '#fbbf24',
     body:
-      'Step through real past trades candle-by-candle. See the entry trigger, stop placement, and exit logic exactly as the bot saw it.',
+      'Explore historical candles and available analysis. Historical macro and configuration evidence is not yet sufficient to reproduce bot decisions.',
     stat: [
       { k: 'Library', v: '—' },
       { k: 'Last', v: '—' },
@@ -128,8 +130,8 @@ function ModCard({ m }: { m: Module }) {
     if (m.disabled) e.preventDefault();
   };
   return (
-    <a
-      href={m.href}
+    <Link
+      to={m.href}
       onClick={onClick}
       className="tg-card"
       style={{
@@ -206,18 +208,24 @@ function ModCard({ m }: { m: Module }) {
           />
         </svg>
       </div>
-    </a>
+    </Link>
   );
 }
 
 // ─── Drills card baseline — live UI lives at /training/drills
 
-const BASELINE_PCT = 55; // placeholder — see src/pages/training/Drills.tsx for the live panel.
 
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export function TrainingGround() {
   const [status, setStatus] = useState<MLStatus | null>(null);
+  const [paper, setPaper] = useState<PaperTradingStatus | null>(null);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => paperTradingService.getStatus().then(value => { if (active) setPaper(value); }).catch(() => { if (active) setPaper(null); });
+    void refresh(); const timer = setInterval(refresh, 15000);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
   const readyRef = useRef(false);
 
   useEffect(() => {
@@ -245,23 +253,26 @@ export function TrainingGround() {
   // Inject DRILLS module stat values once status loads.
   const modules = useMemo(() => {
     return MODULES.map((m) => {
+      if (m.id === 'range' && paper) return { ...m, stat: [
+        { k: 'Status', v: paper.recovery_required ? 'Recovery required' : paper.status },
+        { k: 'Session equity', v: typeof paper.balance?.equity === 'number' ? `$${paper.balance.equity.toFixed(2)}` : '—' },
+        { k: 'Win', v: paper.statistics?.total_trades ? `${paper.statistics.win_rate.toFixed(1)}%` : '—' },
+      ] };
       if (m.id !== 'drills' || !status) return m;
-      const versus = (status.accuracy * 100 - BASELINE_PCT).toFixed(1);
-      const above = status.accuracy * 100 > BASELINE_PCT;
       return {
         ...m,
         stat: [
           { k: 'Model', v: status.model_type, vc: '#c084fc' },
           {
             k: 'vs Baseline',
-            v: `${above ? '+' : ''}${versus}%`,
-            vc: above ? '#4ade80' : '#f87171',
+            v: 'Not validated',
+            vc: 'var(--fg-3)',
           },
           { k: 'Samples', v: status.n_samples.toLocaleString() },
         ],
       };
     });
-  }, [status]);
+  }, [status, paper]);
 
   const modelChip = status ? `MODEL · ${status.model_type}` : 'MODEL · —';
 
@@ -297,11 +308,11 @@ export function TrainingGround() {
           </svg>
         }
         title="Training Ground"
-        subtitle="Hub · Range · Drills · Replay · Quizzes · Lessons — practice the system, train the model"
+        subtitle="Hub · Range · Drills · Replay · Quizzes · Lessons — paper trading, historical exploration and lessons"
         badges={
           <>
             <Chip kind="cyan">● 5 MODULES</Chip>
-            <Chip kind="green">GHOST · ARMED</Chip>
+            <Chip kind="amber">PAPER · {paper?.recovery_required ? 'RECOVERY REQUIRED' : paper?.status.toUpperCase() ?? 'UNAVAILABLE'}</Chip>
             <Chip kind="purple">{modelChip}</Chip>
           </>
         }
@@ -343,7 +354,7 @@ export function TrainingGround() {
         ))}
       </div>
 
-      <FooterStatus latency={36} />
+      <FooterStatus />
 
       <style>{`
         .tg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}

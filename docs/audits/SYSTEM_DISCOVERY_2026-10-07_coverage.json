@@ -22251,5 +22251,16 @@
       "backend/tests/unit/test_candle_timing_contract.py": "d5fc9e4005eba00c743cb87fa263f3564fbdd859aca5aa28cd84f78bce9898f5"
     },
     "runtime_limit": "CryptoCompare top/mktcapfull returns HTTP 401, API key required. Existing dominance cache expired. Regime advice remains unavailable; no fallback or credential changes made."
+  },
+  "workflow_integration_2026_10_09": {
+    "status": "verified_working_tree_running_locally_not_committed_or_pushed",
+    "evidence": "docs/audits/WORKFLOW_PASS_2026-10-09.json",
+    "report": "docs/audits/WORKFLOW_PASS_2026-10-09.md",
+    "backend_full_checkpoint_passed": 2477,
+    "backend_final_affected_passed": 357,
+    "frontend_passed": 114,
+    "runtime_scan_id": "1223f77d-84bf-49cb-a7e4-ebb8bb04782a",
+    "runtime_scan_result": "20 processed,0 setups,20 recorded rejections; browser navigation/reload verified",
+    "supersedes_availability_note": "restart_utc_handoff_2026_10_09.runtime_limit; named CoinGecko global feed active, calibration unproven"
   }
 }

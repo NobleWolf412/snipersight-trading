@@ -7,7 +7,10 @@ import time
 
 from backend.analysis.regime_inputs import validate_regime_candles
 
-from backend.analysis.dominance_service import get_dominance_for_macro
+from backend.analysis.dominance_service import (
+    CACHE_TTL_SECONDS, DOMINANCE_SOURCE, DOMINANCE_VERSION,
+    dominance_values, get_current_dominance,
+)
 from backend.analysis.mode_recommendation import recommend_mode, unavailable_recommendation
 from backend.analysis.regime_detector import RegimeDetector
 from backend.data.ingestion_pipeline import IngestionPipeline
@@ -70,8 +73,9 @@ class MarketRegimeService:
             indicators = context.indicators.compute(data)
             if not indicators.by_timeframe:
                 raise MarketRegimeUnavailable("Market indicators unavailable")
-            dominance = get_dominance_for_macro()
-            regime = context.detector.detect_global_regime(data, indicators, dominance=dominance, confirmed=False)
+            dominance = get_current_dominance()
+            values = dominance_values(dominance)
+            regime = context.detector.detect_global_regime(data, indicators, dominance=values, confirmed=False)
             if regime is None:
                 raise MarketRegimeUnavailable("Market regime unavailable")
             return data, regime, dominance, source_times
@@ -84,7 +88,8 @@ class MarketRegimeService:
     def _read_global(self):
         if self._cached_display is not None and time.monotonic() < self._display_expires:
             return deepcopy(self._cached_display)
-        data, regime, (btc, alt, stable), source_times = self._inputs(self._display)
+        data, regime, dominance, source_times = self._inputs(self._display)
+        btc, alt, stable = dominance_values(dominance)
         matrix = {}
         for tf in source_times:
             trend, score, description = self._display.detector.analyze_timeframe_trend(data.timeframes[tf], tf)
@@ -93,7 +98,9 @@ class MarketRegimeService:
         now = datetime.now(timezone.utc)
         deadline = min(datetime.fromisoformat(source_times[tf]) + timedelta(hours=hours, minutes=5)
                        for tf, hours in (("1d", 24), ("4h", 4), ("1w", 168)) if tf in source_times)
-        expires = min(now + timedelta(seconds=120), deadline)
+        dominance_observed = datetime.fromtimestamp(dominance.timestamp, timezone.utc)
+        dominance_expires = dominance_observed + timedelta(seconds=CACHE_TTL_SECONDS)
+        expires = min(now + timedelta(seconds=120), deadline, dominance_expires)
         if expires <= now:
             raise MarketRegimeUnavailable("Market evidence expired during analysis")
         result = {
@@ -107,7 +114,10 @@ class MarketRegimeService:
             "liquidity_score": regime.liquidity_score, "risk_score": regime.risk_score,
             "derivatives_score": regime.derivatives_score, "derivatives_available": False,
             "dominance": {"btc_d": round(btc, 2), "alt_d": round(alt, 2), "stable_d": round(stable, 2)},
-            "dominance_source": "Top-100 market-cap basket plus tracked stablecoins; shares, not measured capital flows",
+            "dominance_source": DOMINANCE_SOURCE,
+            "dominance_version": DOMINANCE_VERSION,
+            "dominance_observed_at": dominance_observed.isoformat(),
+            "dominance_expires_at": dominance_expires.isoformat(),
             "reference_timeframe": "1d", "source_times": source_times, "matrix": matrix,
             "timestamp": now.isoformat(), "expires_at": expires.isoformat(),
             "calibration": "uncalibrated", "regime_version": "daily-regime-v2",
@@ -121,6 +131,8 @@ class MarketRegimeService:
             snapshot = self._read_global()
             result = recommend_mode(snapshot)
             result["dominance"] = snapshot["dominance"]
+            for key in ("dominance_source", "dominance_version", "dominance_observed_at", "dominance_expires_at"):
+                result[key] = snapshot[key]
             return result
         except Exception:
             logger.exception("Failed to generate regime recommendation")

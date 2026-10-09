@@ -211,7 +211,8 @@ def test_mode_regime_expiry_during_construction_is_unavailable(monkeypatch):
     regime = MarketRegime(RegimeDimensions('up', 'normal', 'healthy', 'balanced', 'balanced'),
                          'up_normal', 70., now, 70., 70., 70., 70., 50.)
     service._inputs = Mock(return_value=(S(timeframes={'1d': candles('1d'), '4h': candles()}), regime,
-        (54., 38., 8.), {'1d': (now-timedelta(days=2)).isoformat(), '4h': now.isoformat()}))
+        S(btc_dom=54., alt_dom=38., stable_dom=8., timestamp=now.timestamp()),
+        {'1d': (now-timedelta(days=2)).isoformat(), '4h': now.isoformat()}))
     assert service._read_recommendation()['status'] == 'unavailable'
     assert service._cached_display is None
 

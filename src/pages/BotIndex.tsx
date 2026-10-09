@@ -37,7 +37,7 @@ export function BotIndex() {
     fetchActiveSession()
       .then((session) => {
         if (cancelled) return;
-        if (session.status?.status === 'running' || (!session.isPaper && liveSessionNeedsAttention(session.status))) {
+        if ((session.isPaper && !!session.status?.session_id) || session.status?.status === 'running' || (!session.isPaper && liveSessionNeedsAttention(session.status))) {
           navigate('/bot/status', { replace: true });
         } else {
           navigate('/bot/setup', { replace: true });

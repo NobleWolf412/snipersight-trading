@@ -1,3 +1,4 @@
+import { useBrowserPreferences } from '@/services/browserPreferences';
 // App shell — Phase 2e wiring + Phase 6 sub-step 1 archive + Phase 7 sub-step 2 sonner eject.
 // Replaced the legacy <TopBar /> with the new HUD <Topbar />, which renders
 // the persistent <PhemexStatusPill /> in its right rail. The legacy
@@ -17,7 +18,7 @@
 // when a real consumer exists; no point mounting a no-op toast layer.
 
 import { Suspense, lazy } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
 import { Topbar, TacticalBgDom, PhemexStatusPill, ActiveModeBadge } from '@/components/hud';
 import { ActiveScanBeacon } from '@/components/ActiveScanBeacon/ActiveScanBeacon';
@@ -68,10 +69,11 @@ function LoadingFallback() {
 }
 
 function App() {
+  const preferences = useBrowserPreferences();
   return (
     <>
-      <TacticalBgDom />
-      <SniperReticle />
+      {preferences.tacticalBackground && <TacticalBgDom />}
+      {preferences.reticle && <SniperReticle />}
       <div className="shell">
         <Topbar modeSlot={<ActiveModeBadge />} rightSlot={<PhemexStatusPill />} />
         <main>
@@ -90,6 +92,10 @@ function App() {
               <Route path="/intel" element={<Intel />} />
               <Route path="/journal" element={<TradeJournal />} />
               <Route path="/settings" element={<Settings />} />
+              {['/scan', '/results', '/scanner/setup', '/scanner/status'].map(path =>
+                <Route key={path} path={path} element={<Navigate to="/scanner" replace />} />)}
+              {['/market', '/htf'].map(path => <Route key={path} path={path} element={<Navigate to="/intel" replace />} />)}
+              <Route path="*" element={<div className="page"><h1>Page not found</h1><Link to="/">Return home</Link> · <Link to="/scanner">Open scanner</Link></div>} />
             </Routes>
           </Suspense>
         </main>

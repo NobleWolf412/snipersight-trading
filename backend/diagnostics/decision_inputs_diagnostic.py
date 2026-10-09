@@ -9,6 +9,8 @@ from __future__ import annotations
 import ast
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
+from dataclasses import asdict
+from pathlib import Path
 import inspect
 import json
 from types import SimpleNamespace
@@ -66,12 +68,16 @@ def inspect_inputs() -> dict:
         seen['missing_dominance'] = dict(values=values, label=label, score=score,
                                          value_error=value_error, classification_error=classification_error)
 
-        # The read API returns arbitrarily stale cached evidence after fetch failure.
-        service = object.__new__(dominance.DominanceService)
-        service._load_cache = lambda: dict(timestamp=1., btc_dom=54., alt_dom=42., stable_dom=4.)
-        service._fetch_market_caps = lambda **kwargs: None
-        stale = service.get_dominance()
-        seen['dominance_stale_fallback'] = dict(timestamp=stale.timestamp, btc_dom=stale.btc_dom)
+        # A failed fetch must not revive an expired source-specific observation.
+        # The guarded runner's working directory is an isolated fixture directory.
+        service = dominance.DominanceService(cache_dir=Path('dominance-input-probe'))
+        old = dominance.DominanceSnapshot(timestamp=1., btc_dom=54., alt_dom=42., stable_dom=4.,
+            total_market_cap=100., btc_market_cap=54., alt_market_cap=42., stable_market_cap=4.)
+        service.cache_file.write_text(json.dumps(asdict(old)), encoding='utf-8')
+        with patch.object(service, '_fetch_global', side_effect=ValueError('fixture feed unavailable')):
+            stale = service.get_dominance()
+        assert stale is None, 'expired dominance must remain unavailable'
+        seen['dominance_stale_fallback'] = dict(available=False, stale_rejected=True, reason=service.last_error)
 
         # A replay step changes solely because the present-day dominance fixture changes.
         replay = ReplayEngine(object())._build_orchestrator(get_mode('stealth'))
@@ -139,26 +145,13 @@ def inspect_remaining_semantics() -> dict:
     from backend.analysis.regime_detector import RegimeDetector
     from backend.engine import decision
 
-    tree = ast.parse(inspect.getsource(confluence_service))
-    bonus = next(n for n in ast.walk(tree) if isinstance(n, ast.If)
-                 and ast.unparse(n.test) == 'global_regime and symbol_regime')
-    compiled = compile(ast.fix_missing_locations(ast.Module(body=[bonus], type_ignores=[])),
-                       'production-htf-bonus', 'exec')
-    aligned = []
+    # This historical AST probe targeted a removed free HTF score bonus. Current
+    # family-budget behavior is covered by test_score_policy_balance; do not
+    # silently claim this obsolete fixture exercised the replacement policy.
+    aligned = {'status': 'retired_probe', 'reason': 'standalone global/local HTF bonus removed',
+               'current_evidence': 'backend/tests/unit/test_score_policy_balance.py'}
     sizes = []
-    for direction, trend in (('LONG', 'up'), ('SHORT', 'down')):
-        global_regime = MarketRegime(
-            RegimeDimensions(trend, 'normal', 'healthy', 'risk_on', 'balanced'),
-            f'strong_{trend}_normal', 75., datetime(2001, 1, 1), 75., 75., 75., 75., 50.)
-        local = SymbolRegime('BTC/USDT', trend, 'normal', 75.)
-        context = SimpleNamespace(symbol='BTC/USDT', metadata={})
-        chosen = SimpleNamespace(total_score=70.)
-        exec(compiled, dict(confluence_service.__dict__, global_regime=global_regime,
-                            symbol_regime=local, context=context, chosen=chosen,
-                            chosen_direction=direction))
-        aligned.append(dict(direction=direction, actual_global_trend=trend,
-                            evaluated_bonus=context.metadata.get('htf_alignment_bonus'),
-                            resulting_score=chosen.total_score))
+    for trend in ('up', 'down'):
         service = object.__new__(PaperTradingService)
         service._current_regime_policy = get_regime_policy('stealth')
         service._current_regime_composite = f'strong_{trend}_normal'

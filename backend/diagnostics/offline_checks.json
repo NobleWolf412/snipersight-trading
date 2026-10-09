@@ -1,6 +1,8 @@
 {
   "scope": "Selected offline audit regressions, not all repository tests",
   "tests": [
+    "backend/tests/unit/test_workflow_repairs.py",
+    "backend/tests/unit/test_dominance_workflow.py",
     "backend/tests/unit/test_mode_regime_policy.py",
     "backend/tests/unit/test_score_policy_balance.py",
     "backend/tests/unit/test_evidence_accounting.py",

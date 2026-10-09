@@ -118,6 +118,10 @@ export interface PaperTradingStatus {
   active_mode?: string;
   active_profile?: string;
   mode_recommendation?: { status: string; mode: string | null; reason: string } | null;
+  recovery_required?: boolean;
+  recovery_reason?: string;
+  reset_allowed?: boolean;
+  lifecycle_busy?: boolean;
   status: 'idle' | 'running' | 'stopped' | 'paused' | 'error';
   session_id: string | null;
   started_at: string | null;
@@ -255,3 +259,8 @@ class PaperTradingService {
 }
 
 export const paperTradingService = new PaperTradingService();
+
+export function paperSessionNeedsAttention(status: PaperTradingStatus | null | undefined): boolean {
+  return !!status && (status.status === 'running' || !!status.recovery_required || !!status.lifecycle_busy
+    || !!status.positions?.length || !!status.pending_orders?.length);
+}

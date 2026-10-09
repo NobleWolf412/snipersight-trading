@@ -687,7 +687,7 @@ export function Drills() {
         </div>
       </section>
 
-      <FooterStatus latency={36} />
+      <FooterStatus />
     </div>
   );
 }

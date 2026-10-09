@@ -112,7 +112,7 @@ export function ChapterShell({
         </section>
       </div>
 
-      <FooterStatus latency={36} />
+      <FooterStatus />
 
       <style>{`
         @media (max-width: 900px) {

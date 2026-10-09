@@ -1,3 +1,4 @@
+import { paperSessionNeedsAttention } from '@/services/paperTradingService';
 import { BotStrategySettings } from '@/components/hud/BotStrategySettings';
 import { accountingLabel, accountingColor, formatAccountMoney, executionReportNotice } from '../../services/accounting';
 /**
@@ -659,17 +660,20 @@ function SetupTab({
   working,
   armErr,
   decisionMode,
+  cfg, setCfg,
 }: {
   sniperMode: string;
   onArm: (cfg: PaperConfig) => void;
   working: boolean;
   armErr: string | null;
   decisionMode?: string;
+  cfg: PaperConfig;
+  setCfg: React.Dispatch<React.SetStateAction<PaperConfig>>;
 }) {
   // Heart-change: in thesis mode the structure thesis decides direction and the confluence score
   // is DEMOTED (no longer a go/no-go gate). Reflect that so the setup controls don't mislead.
   const thesis = decisionMode === 'thesis';
-  const [cfg, setCfg] = useState<PaperConfig>(DEFAULT_SETUP);
+
   const set = useCallback(<K extends keyof PaperConfig>(key: K, val: PaperConfig[K]) => {
     setCfg((prev) => ({ ...prev, [key]: val }));
   }, []);
@@ -919,6 +923,7 @@ function StatusTab({
           ⚠ {connErr}
         </div>
       )}
+      {status?.recovery_required && <p role="alert">{status.recovery_reason} Use Retry shutdown.</p>}
       {actionErr && (
         <div style={{ margin: '0 0 14px', padding: '12px 14px', border: '1px solid var(--red)', borderRadius: 10, background: 'rgba(239,68,68,.08)', color: 'var(--red)', fontSize: 12 }}>
           ⚠ {actionErr}
@@ -994,16 +999,16 @@ function StatusTab({
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {isRunning ? (
+              {paperSessionNeedsAttention(status) ? (
                 <button type="button" className="btn btn-red" onClick={onStop} disabled={working} style={{ fontSize: 11 }}>
-                  {working ? '↻ STOPPING' : '■ STOP'}
+                  {working ? '↻ STOPPING' : isRunning ? '■ STOP' : 'RETRY SHUTDOWN'}
                 </button>
               ) : (
                 <span className="mono" style={{ fontSize: 11, color: 'var(--fg-4)', alignSelf: 'center', letterSpacing: '.1em' }}>
                   {status?.status?.toUpperCase() ?? 'IDLE'}
                 </span>
               )}
-              <button type="button" className="btn" onClick={onReset} disabled={working || isRunning} title={isRunning ? 'stop the bot before resetting' : 'clear history + reset balance'} style={{ fontSize: 11, opacity: isRunning ? 0.4 : 1 }}>
+              <button type="button" className="btn" onClick={onReset} disabled={working || !status || status.reset_allowed === false || paperSessionNeedsAttention(status)} title={isRunning ? 'stop the bot before resetting' : 'clear history + reset balance'} style={{ fontSize: 11, opacity: isRunning ? 0.4 : 1 }}>
                 ↺ RESET
               </button>
             </div>
@@ -1189,6 +1194,7 @@ function StatusTab({
 
 // ─── Main component ────────────────────────────────────────────────────
 export function RangeBot() {
+  const [draft, setDraft] = useState<PaperConfig>(DEFAULT_SETUP);
   const { botConfig, setBotConfig } = useScanner();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1219,7 +1225,7 @@ export function RangeBot() {
   // Compute active tab from hash; default to setup when idle, status when running
   const isRunning = status?.status === 'running';
   const hashTab = location.hash === '#status' ? 'status' : location.hash === '#setup' ? 'setup' : null;
-  const activeTab = hashTab ?? (isRunning ? 'status' : 'setup');
+  const activeTab = hashTab ?? (paperSessionNeedsAttention(status) ? 'status' : 'setup');
 
   // Snapshot-ready handshake
   useEffect(() => {
@@ -1433,7 +1439,7 @@ export function RangeBot() {
       {activeTab === 'setup' && <BotStrategySettings config={botConfig} onChange={setBotConfig} paper />}
       {/* Tab content */}
       {activeTab === 'setup' ? (
-        <SetupTab
+        <SetupTab cfg={draft} setCfg={setDraft}
           sniperMode={botConfig.selectionMode === 'adaptive' ? 'adaptive' : botConfig.sniperMode ?? 'stealth'}
           onArm={handleArm}
           working={working}

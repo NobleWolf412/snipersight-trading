@@ -750,9 +750,7 @@ class PaperTradingService:
         if self.status == PaperBotStatus.RUNNING:
             raise ValueError("Paper trading already running")
 
-        if isinstance(self.executor, PaperExecutor) and (
-                self.executor.get_open_orders() or any(self.executor.positions.values())
-                or (self.position_manager and self.position_manager.positions)):
+        if self._paper_unsettled():
             raise ValueError('PAPER_RECOVERY_REQUIRED: stop and publish the previous session first')
 
         # Guard replacement before overwriting the previous session's metadata.
@@ -1007,9 +1005,7 @@ class PaperTradingService:
         if self.status != PaperBotStatus.RUNNING:
             if isinstance(self.executor, PaperExecutor):
                 await self._close_all_positions('session_stopped')
-                self.status = PaperBotStatus.ERROR if (
-                    self.executor.get_open_orders() or any(self.executor.positions.values())
-                    or (self.position_manager and self.position_manager.positions)) else PaperBotStatus.STOPPED
+                self.status = PaperBotStatus.ERROR if self._paper_unsettled() else PaperBotStatus.STOPPED
                 return self.get_status()
             if self.executor and hasattr(self.executor, "recovery_snapshot"):
                 if getattr(self.executor, '_accounting', None):
@@ -1020,6 +1016,13 @@ class PaperTradingService:
                     except asyncio.CancelledError:
                         pass
                     self._fee_recovery_task = None
+                try:
+                    await asyncio.to_thread(self._release_testnet_owner)
+                except Exception as exc:
+                    status = self.get_status()
+                    status["recovery_required"] = True
+                    status["recovery_reason"] = str(exc)
+                    return status
                 return self.get_status()
             return {"status": self.status.value, "message": "Not running"}
 
@@ -1052,9 +1055,7 @@ class PaperTradingService:
 
         # Close all open positions
         await self._close_all_positions("session_stopped")
-        if isinstance(self.executor, PaperExecutor) and (
-                self.executor.get_open_orders() or any(self.executor.positions.values())
-                or (self.position_manager and self.position_manager.positions)):
+        if self._paper_unsettled():
             self.status = PaperBotStatus.ERROR
             self._log_activity("paper_stop_incomplete", {"reason": "Execution or journal publication requires stop retry"})
         if self._fee_recovery_task:
@@ -1133,6 +1134,12 @@ class PaperTradingService:
             status["report_path"] = str(report_path)
         return status
 
+    def _paper_unsettled(self) -> bool:
+        """Shared residual execution/publication check for start, reset and recovery."""
+        return bool(isinstance(self.executor, PaperExecutor) and (
+            self.executor.get_open_orders() or any(self.executor.positions.values())
+            or (self.position_manager and self.position_manager.positions)))
+
     def reset(self) -> Dict[str, Any]:
         """
         Reset paper trading to fresh state.
@@ -1144,9 +1151,7 @@ class PaperTradingService:
             raise ValueError("Execution lifecycle transition in progress")
         if self.status == PaperBotStatus.RUNNING:
             raise ValueError("Cannot reset while running. Stop first.")
-        if isinstance(self.executor, PaperExecutor) and (
-                self.executor.get_open_orders() or any(self.executor.positions.values())
-                or (self.position_manager and self.position_manager.positions)):
+        if self._paper_unsettled():
             raise ValueError('PAPER_RECOVERY_REQUIRED: stop and publish before reset')
         if self.executor and hasattr(self.executor, "recovery_snapshot"):
             self._release_testnet_owner()
@@ -1357,6 +1362,13 @@ class PaperTradingService:
             if result["recovery_required"]:
                 result["recovery_reason"] = (snap.get("storage_error") or
                     "Testnet execution requires reconciliation before Start/Reset; durable records are retained")
+        busy = bool(getattr(self, "_execution_lifecycle_busy", False))
+        if self.status != PaperBotStatus.RUNNING and self._paper_unsettled():
+            result["recovery_required"] = True
+            result["recovery_reason"] = "Execution or journal publication is unfinished. Retry shutdown before starting or resetting."
+        result.setdefault("recovery_required", False)
+        result["reset_allowed"] = not (busy or self.status == PaperBotStatus.RUNNING or result["recovery_required"])
+        result["lifecycle_busy"] = busy
         return result
 
     def get_positions(self) -> List[Dict[str, Any]]:

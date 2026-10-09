@@ -59,6 +59,7 @@ def transform_trade_plans_to_signals(
             "stop_loss": plan.stop_loss.level,
             "targets": [{"level": tp.level, "percentage": tp.percentage} for tp in plan.targets],
             "primary_timeframe": mode.timeframes[-1] if mode.timeframes else "",
+            "timeframe": getattr(plan, "timeframe", None),
             "current_price": plan.entry_zone.near_entry,
             "analysis": {
                 "order_blocks": len(ob_list),
@@ -246,17 +247,18 @@ def _sanitize_for_json(obj: Any) -> Any:
     Recursively convert numpy types to native Python types for JSON serialization.
     """
     import numpy as np
+    import math
 
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
+    elif isinstance(obj, (list, tuple)):
         return [_sanitize_for_json(v) for v in obj]
+    elif isinstance(obj, (np.bool_, bool)):
+        return bool(obj)
     elif isinstance(obj, (np.integer, int)):
         return int(obj)
     elif isinstance(obj, (np.floating, float)):
-        return float(obj)
-    elif isinstance(obj, (np.bool_, bool)):
-        return bool(obj)
+        return float(obj) if math.isfinite(obj) else None
     elif isinstance(obj, np.ndarray):
         return _sanitize_for_json(obj.tolist())
     else:

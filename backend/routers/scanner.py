@@ -515,6 +515,7 @@ async def create_scan_run(
     macro_overlay: bool = Query(default=False),
     market_type: Optional[str] = Query(default="swap"),
     target_symbol: Optional[str] = Query(default=None),
+    request_id: Optional[str] = Query(default=None, pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
 ):
     """Start a background scan job and return immediately with run_id."""
     service = get_scanner_service()
@@ -527,19 +528,23 @@ async def create_scan_run(
     if not service:
         raise HTTPException(status_code=500, detail="Scanner service not initialized")
 
-    job = await service.create_scan(
-        limit=limit,
-        min_score=min_score,
-        sniper_mode=sniper_mode,
-        majors=majors,
-        altcoins=altcoins,
-        meme_mode=meme_mode,
-        exchange=exchange,
-        leverage=leverage,
-        macro_overlay=macro_overlay,
-        market_type=market_type,
-        target_symbol=target_symbol,
-    )
+    try:
+        job = await service.create_scan(
+            limit=limit,
+            min_score=min_score,
+            sniper_mode=sniper_mode,
+            majors=majors,
+            altcoins=altcoins,
+            meme_mode=meme_mode,
+            exchange=exchange,
+            leverage=leverage,
+            macro_overlay=macro_overlay,
+            market_type=market_type,
+            target_symbol=target_symbol,
+            request_id=request_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return {"run_id": job.run_id, "status": job.status, "created_at": job.created_at.isoformat()}
 

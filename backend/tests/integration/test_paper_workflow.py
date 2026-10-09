@@ -364,6 +364,8 @@ def test_paper_workflow_stop_retries_partial_exit_and_retains_failures(workflow,
     monkeypatch.setattr(ex, 'execute_market_order', Mock(return_value=None))
     status = asyncio.run(w.svc.stop())
     assert status['status'] == 'error'
+    assert status['recovery_required']
+    assert not w.svc.get_status()['reset_allowed']
     assert pos.remaining_quantity > 0 and not w.journal.query()
     with pytest.raises(ValueError, match='PAPER_RECOVERY_REQUIRED'):
         w.svc.reset()
@@ -372,6 +374,8 @@ def test_paper_workflow_stop_retries_partial_exit_and_retains_failures(workflow,
     monkeypatch.setattr(ex, 'execute_market_order', original)
     status = asyncio.run(w.svc.stop())
     assert status['status'] == 'stopped'
+    assert not w.svc.get_status()['recovery_required']
+    assert w.svc.get_status()['reset_allowed']
     assert_published(w)
     assert len([o for o in ex.orders.values() if o.order_type == OrderType.MARKET]) == 1
 

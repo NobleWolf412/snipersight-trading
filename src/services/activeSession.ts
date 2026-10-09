@@ -31,6 +31,7 @@ import {
 } from './liveTradingService';
 import {
   paperTradingService,
+  paperSessionNeedsAttention,
   type PaperTradingStatus,
 } from './paperTradingService';
 
@@ -67,7 +68,7 @@ export interface ActiveSession {
  * the successful one is used. This keeps the HUD operational when one
  * backend service is temporarily unreachable.
  */
-export async function fetchActiveSession(): Promise<ActiveSession> {
+export async function fetchActiveSession(preferred?: 'live' | 'paper'): Promise<ActiveSession> {
   const [liveResult, paperResult] = await Promise.allSettled([
     liveTradingService.getStatus(),
     paperTradingService.getStatus(),
@@ -89,7 +90,9 @@ export async function fetchActiveSession(): Promise<ActiveSession> {
   }
 
   const liveRunning = liveSessionNeedsAttention(live);
-  const paperRunning = paper?.status === 'running';
+  const paperRunning = paperSessionNeedsAttention(paper);
+  if (preferred === 'paper' && !paper && !liveRunning) throw new Error('Paper session unavailable; its owner has been retained.');
+  if (preferred === 'live' && !live && !paperRunning) throw new Error('Live session unavailable; its owner has been retained.');
 
   // Live startup/recovery must remain visible even after scanning stops.
   if (liveRunning) {
@@ -105,7 +108,7 @@ export async function fetchActiveSession(): Promise<ActiveSession> {
     };
   }
 
-  if (paperRunning) {
+  if (paperRunning || (paper && (preferred === 'paper' || (!preferred && !!paper.session_id && !live?.session_id)))) {
     return {
       mode: 'paper',
       status: paper!,

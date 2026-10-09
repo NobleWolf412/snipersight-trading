@@ -79,24 +79,25 @@ export interface ScanHistoryEntry {
 const STORAGE_KEY = 'scan-history';
 const MAX_HISTORY_ENTRIES = 50; // Keep last 50 scans
 
-class ScanHistoryService {
+export class ScanHistoryService {
+  private memory: ScanHistoryEntry[] = [];
   /**
    * Save a new scan to history
    */
-  saveScan(entry: Omit<ScanHistoryEntry, 'id' | 'timestamp'>): ScanHistoryEntry {
+  saveScan(entry: Omit<ScanHistoryEntry, 'id' | 'timestamp'> & Partial<Pick<ScanHistoryEntry, 'id' | 'timestamp'>>): ScanHistoryEntry {
     const newEntry: ScanHistoryEntry = {
       ...entry,
-      id: `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
+      id: entry.id ?? `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: entry.timestamp ?? new Date().toISOString(),
     };
 
-    const history = this.getAllScans();
+    const history = this.getAllScans().filter(item => item.id !== newEntry.id);
     history.unshift(newEntry); // Add to beginning
 
     // Trim to max entries
-    const trimmed = history.slice(0, MAX_HISTORY_ENTRIES);
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    const trimmed = history.sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, MAX_HISTORY_ENTRIES);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed)); this.memory = []; }
+    catch (error) { this.memory = trimmed; throw error; }
     return newEntry;
   }
 
@@ -106,10 +107,14 @@ class ScanHistoryService {
   getAllScans(): ScanHistoryEntry[] {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const stored = data ? JSON.parse(data) : [];
+      const entries = new Map<string, ScanHistoryEntry>();
+      for (const item of [...(Array.isArray(stored) ? stored : []), ...this.memory])
+        if (item && typeof item.id === 'string' && Array.isArray(item.results)) entries.set(item.id, item);
+      return [...entries.values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
     } catch (e) {
-      console.error('Failed to parse scan history:', e);
-      return [];
+      console.warn('Browser scan history unavailable:', e);
+      return this.memory;
     }
   }
 
@@ -156,6 +161,7 @@ class ScanHistoryService {
 
     const deletedCount = all.length - remaining.length;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining));
+    this.memory = remaining;
     return deletedCount;
   }
 
@@ -174,6 +180,7 @@ class ScanHistoryService {
     const all = this.getAllScans();
     const count = all.length;
     localStorage.removeItem(STORAGE_KEY);
+    this.memory = [];
     return count;
   }
 

@@ -22,6 +22,29 @@ map of the product's critical paths, not a claim that every inventoried file,
 strategy branch, exchange protocol or historical trade has been certified.
 Start with the [current findings and next work](audits/SYSTEM_DISCOVERY_2026-10-07.md#current-disposition-and-follow-up-plan).
 
+## Workflow integration follow-up — 2026-10-09
+
+The [workflow pass](audits/WORKFLOW_PASS_2026-10-09.md) supersedes the earlier
+CryptoCompare availability limitation above. CoinGecko now owns a versioned global
+BTC/USDT+USDC/remainder snapshot, with source-specific cache/history and provider
+expiry. The changed denominator is not a calibration claim.
+
+Browser [scan ownership](../src/services/scanRunService.ts) persists identity,
+acknowledgment and stop intent across routes/reload; [ScannerService](../backend/services/scanner_service.py)
+reuses retained identities and publishes JSON-safe complete responses. Results/history
+use completion time and actual plan provenance. Backend jobs remain memory/retention
+bounded. [Replay ownership](../src/services/replaySessionController.ts) serializes
+cursor moves and generation-fences replacement/cleanup. Historical signals remain
+unavailable without historical macro/configuration inputs.
+
+[FreshFeed](../src/services/freshFeed.ts) owns per-feed display expiry and retry;
+Settings owns implemented browser appearance only and links to scanner/session
+configuration. Paper shutdown recovery remains visible and cannot be reset away.
+The journal supports filtered pagination and complete heterogeneous CSV export.
+Recorded result summaries replace demo counts, charts, connections and performance.
+See the [verification record](audits/WORKFLOW_PASS_2026-10-09.json) for tests and
+runtime boundaries, including the browser-discovered NumPy serialization failure.
+
 ## Entry points and state owners
 
 | Area | Implementation / key symbols | Responsibility and boundary |

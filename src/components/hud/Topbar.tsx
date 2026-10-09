@@ -33,7 +33,7 @@ const LINKS: NavLink[] = [
   { id: 'scanner', label: 'Scanner', to: '/scanner', matchPrefixes: ['/scanner'] },
   { id: 'bot', label: 'Bot', to: '/bot', matchPrefixes: ['/bot'] },
   { id: 'training', label: 'Training', to: '/training' },
-  { id: 'settings', label: 'Risk', to: '/settings' },
+  { id: 'settings', label: 'Settings', to: '/settings' },
   { id: 'journal', label: 'Journal', to: '/journal' },
 ];
 

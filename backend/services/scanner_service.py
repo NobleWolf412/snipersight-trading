@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from backend.shared.config.scanner_modes import get_mode
 from backend.analysis.pair_selection import select_symbols
 from backend.data.ingestion_pipeline import IngestionPipeline
+from backend.shared.utils.signal_transform import _sanitize_for_json
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,9 @@ class ScanJob:
             elif self.status == "failed":
                 response["error"] = self.error
 
-        return response
+        # Rejection metadata contains NumPy scalars as well as transformed signals.
+        # Sanitize the complete publication boundary, not just successful plans.
+        return _sanitize_for_json(response)
 
 
 class ScannerService:
@@ -165,13 +168,14 @@ class ScannerService:
         macro_overlay: bool = False,
         market_type: Optional[str] = None,
         target_symbol: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> ScanJob:
         """
         Create and start a new background scan job.
 
         Returns the created ScanJob immediately. The scan runs in background.
         """
-        run_id = str(uuid.uuid4())
+        run_id = str(uuid.UUID(request_id)) if request_id else str(uuid.uuid4())
         params = {
             "limit": limit,
             "min_score": min_score,
@@ -189,6 +193,11 @@ class ScannerService:
         job = ScanJob(run_id=run_id, params=params)
 
         with self._jobs_lock:
+            existing = self._jobs.get(run_id)
+            if existing is not None:
+                if existing.params != params:
+                    raise ValueError("Scan request identity already belongs to different parameters")
+                return existing
             self._jobs[run_id] = job
 
         # Start background task

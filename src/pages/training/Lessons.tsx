@@ -78,7 +78,7 @@ export function Lessons() {
         </div>
       </div>
 
-      <FooterStatus latency={36} />
+      <FooterStatus />
     </div>
   );
 }

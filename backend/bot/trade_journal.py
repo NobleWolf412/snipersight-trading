@@ -16,7 +16,7 @@ import tempfile
 from contextlib import contextmanager
 
 from .exit_classification import enrich
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -201,7 +201,7 @@ class TradeJournalService:
         session_id: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 200,
+        limit: Optional[int] = 200,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """Return trades matching the given filters, newest-first."""
@@ -215,13 +215,30 @@ class TradeJournalService:
             trades = [t for t in trades if t.get("exit_reason") == exit_reason]
         if session_id:
             trades = [t for t in trades if t.get("session_id") == session_id]
-        if start_date:
-            trades = [t for t in trades if (t.get("exit_time") or t.get("entry_time") or "") >= start_date]
-        if end_date:
-            trades = [t for t in trades if (t.get("exit_time") or t.get("entry_time") or "") <= end_date]
+        def timestamp(value):
+            if not value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+            except (ValueError, TypeError):
+                return None
 
-        trades.sort(key=lambda t: t.get("exit_time") or t.get("entry_time") or "", reverse=True)
-        return trades[offset : offset + limit]
+        start = timestamp(start_date)
+        end = timestamp(end_date)
+        if start_date and start is None or end_date and end is None:
+            raise ValueError("Dates must be ISO dates or timestamps")
+        end_day = bool(end_date and len(end_date) == 10)
+        if end_day:
+            end += timedelta(days=1)
+        if start or end:
+            def in_range(trade):
+                observed = timestamp(trade.get("exit_time") or trade.get("entry_time"))
+                return observed is not None and (start is None or observed >= start) and (
+                    end is None or (observed < end if end_day else observed <= end))
+            trades = [trade for trade in trades if in_range(trade)]
+        trades.sort(key=lambda t: timestamp(t.get("exit_time") or t.get("entry_time")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        return trades[offset:] if limit is None else trades[offset:offset + limit]
 
     def aggregate(self) -> Dict[str, Any]:
         """Compute summary stats over the entire journal.
@@ -332,17 +349,18 @@ class TradeJournalService:
 
     def export_csv(self, **filters) -> str:
         """Return journal as a CSV string."""
-        trades = self.query(**filters, limit=10_000)
+        trades = self.query(**{k: v for k, v in filters.items() if k not in ("limit", "offset")}, limit=None)
         if not trades:
             return ""
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=list(trades[0].keys()))
+        writer = csv.DictWriter(output, fieldnames=list(dict.fromkeys(key for trade in trades for key in trade)))
         writer.writeheader()
-        writer.writerows(trades)
+        writer.writerows({key: json.dumps(value, sort_keys=True, default=str) if isinstance(value, (dict, list)) else value
+                          for key, value in trade.items()} for trade in trades)
         return output.getvalue()
 
-    def count(self) -> int:
-        return len(self._load_all())
+    def count(self, **filters) -> int:
+        return len(self.query(**filters, limit=None))
 
     # ------------------------------------------------------------------
     # Internal

@@ -11,7 +11,7 @@ export interface ScanResult {
   confidenceScore?: number; // Omitted when the producer supplied no valid score.
   riskScore: number;
   riskReward?: number; // Actual R:R ratio from trade plan
-  classification: 'SWING' | 'INTRADAY' | 'SCALP';
+  classification: 'SWING' | 'INTRADAY' | 'SCALP' | 'UNKNOWN';
   entryZone: { low: number; high: number };
   stopLoss: number;
   stopLossRationale?: string;
@@ -126,8 +126,7 @@ export function convertSignalToScanResult(signal: any): ScanResult {
   } else if (signal.setup_type === 'scalp') {
     classification = 'SCALP';
   } else {
-    // Fallback: infer from timeframe if no setup_type provided
-    classification = ['5m', '15m', '30m'].includes(signal.timeframe) ? 'SCALP' : 'SWING';
+    classification = 'UNKNOWN';
   }
 
 
@@ -148,7 +147,7 @@ export function convertSignalToScanResult(signal: any): ScanResult {
   return {
     id: `signal-${signal.symbol}-${Date.now()}`,
     // Clean symbol: strip any :USDT suffix (exchange swap notation), then format as pair
-    pair: signal.symbol.replace(':USDT', '').replace('USDT', '/USDT'),
+    pair: String(signal.symbol ?? '').split(':')[0].replace(/\/?USDT$/, '/USDT'),
     sniper_mode: signal.sniper_mode || signal.mode || undefined,
     trendBias,
     confidenceScore: confidence,
@@ -157,9 +156,9 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     classification,
     entryZone: { low: signal.entry_far, high: signal.entry_near },
     // Handle stop_loss as object (from backend) or number (legacy/fallback)
-    stopLoss: typeof signal.stop_loss === 'object' ? signal.stop_loss.level : signal.stop_loss,
-    stopLossRationale: typeof signal.stop_loss === 'object' ? signal.stop_loss.rationale : undefined,
-    takeProfits: signal.targets.map((t: any) => t.level),
+    stopLoss: signal.stop_loss && typeof signal.stop_loss === 'object' ? signal.stop_loss.level : signal.stop_loss,
+    stopLossRationale: signal.stop_loss && typeof signal.stop_loss === 'object' ? signal.stop_loss.rationale : undefined,
+    takeProfits: (signal.targets ?? []).map((t: any) => t.level),
     orderBlocks: signal.smc_geometry?.order_blocks
       ? signal.smc_geometry.order_blocks.map((ob: any) => ({
         type: ob.type as 'bullish' | 'bearish',
@@ -177,7 +176,9 @@ export function convertSignalToScanResult(signal: any): ScanResult {
         timeframe: fvg.timeframe,
       }))
       : [],
-    timestamp: new Date().toISOString(),
+    timestamp: signal.timestamp ?? signal.created_at ?? '',
+    timeframe: signal.timeframe,
+    metadata: signal.metadata,
 
     liqPrice: signal.liquidation?.approx_liq_price,
     liqCushionPct: signal.liquidation?.cushion_pct,

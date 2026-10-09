@@ -26,7 +26,7 @@
  * body[data-snapshot-ready="true"] is set after first successful load so
  * the visual capture framework knows when to capture.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Chip,
@@ -119,7 +119,7 @@ function EquityCurve({
     const eqPts = equityCurve.map((p, i) => {
       const y = initial + p.value;
       peak = Math.max(peak, y);
-      return { x: i + 1, y, dd: peak > 0 ? -((peak - y) / peak) * 100 : 0 };
+      return { x: i + 1, y, dd: y - peak };
     });
     eqPts.unshift({ x: 0, y: initial, dd: 0 });
     return { eqPts };
@@ -218,7 +218,7 @@ function EquityCurve({
         textAnchor="end"
         fontWeight={700}
       >
-        {minDD.toFixed(2)}%
+        {fmtMoney(minDD)}
       </text>
     </svg>
   );
@@ -800,7 +800,7 @@ function MLPanel() {
 type SortKey = 'exit_time' | 'symbol' | 'pnl' | 'trade_type' | 'exit_reason';
 type SortDir = 'asc' | 'desc';
 
-const INITIAL_EQUITY = 5000;
+const INITIAL_EQUITY = 0; // This chart is realized P/L, not account equity.
 
 export function TradeJournal() {
   const navigate = useNavigate();
@@ -829,23 +829,27 @@ export function TradeJournal() {
   // Trade detail modal — set when the operator clicks a row in the log.
   const [selectedTrade, setSelectedTrade] = useState<JournalTrade | null>(null);
 
+  const requestVersion = useRef(0);
   const load = async (f: JournalFilters) => {
+    const version = ++requestVersion.current;
     setLoading(true);
     setError(null);
     try {
       const data = await tradeJournalService.getJournal(f);
+      if (version !== requestVersion.current) return;
       setTrades(data.trades);
       setAggregate(data.aggregate);
       setTotal(data.total);
     } catch {
+      if (version !== requestVersion.current) return;
       // 3b.2: explicit copy distinguishing backend-offline from
       // backend-online-but-no-trades. The empty-state branch below
       // covers the latter (no error, sorted.length === 0). This
       // catch branch fires when the fetch itself fails — service
       // unreachable, network error, malformed response.
-      setError('no trades yet · backend offline · is the server reachable?');
+      setError('Journal could not be loaded. Retry to reconnect; prior records remain on disk.');
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   };
 
@@ -1109,7 +1113,7 @@ export function TradeJournal() {
                   marginBottom: 10,
                 }}
               >
-                // EQUITY · DRAWDOWN
+                // CUMULATIVE REALIZED P/L · DRAWDOWN ($) · ALL SESSIONS
               </div>
               {aggregate.equity_curve.length > 1 ? (
                 <EquityCurve
@@ -1121,7 +1125,7 @@ export function TradeJournal() {
                   className="mono"
                   style={{ fontSize: 11, color: 'var(--fg-4)' }}
                 >
-                  // not enough closed trades for equity curve
+                  // not enough closed trades for realized P/L curve
                 </div>
               )}
             </div>
@@ -1245,6 +1249,16 @@ export function TradeJournal() {
               >
                 RESET
               </button>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12 }}>
+              <button className="btn" disabled={loading || !(filters.offset ?? 0)} onClick={() => {
+                const f = { ...filters, offset: Math.max(0, (filters.offset ?? 0) - 200) }; setFilters(f); void load(f);
+              }}>Previous</button>
+              <span>{total ? (filters.offset ?? 0) + 1 : 0}–{Math.min((filters.offset ?? 0) + trades.length, total)} of {total} matching trades · sorting and calendar cover this page</span>
+              <button className="btn" disabled={loading || (filters.offset ?? 0) + trades.length >= total} onClick={() => {
+                const f = { ...filters, offset: (filters.offset ?? 0) + 200 }; setFilters(f); void load(f);
+              }}>Next</button>
+              <button className="btn" disabled={loading} onClick={() => void load(filters)}>Refresh</button>
             </div>
             <div style={{ maxHeight: 520, overflowY: 'auto' }}>
               <div
@@ -1468,7 +1482,7 @@ export function TradeJournal() {
         </div>
       </div>
 
-      <FooterStatus latency={36} />
+      <FooterStatus />
 
       {/* Closed-trade post-mortem chart. Renders when a Trade Log row is
           clicked. Shows the trade's symbol on a TF inferred from

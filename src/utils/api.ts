@@ -31,6 +31,7 @@ const CIRCUIT_BREAKER_RESET_MS = 30000; // Try again after 30 seconds
 interface ApiResponse<T> {
   data?: T;
   error?: string;
+  httpStatus?: number;
 }
 
 interface RequestOptions extends RequestInit {
@@ -472,15 +473,15 @@ class ApiClient {
               }
             }
             if (!silent) debugLogger.error(`API Error: ${errMsg}`, 'api');
-            return { error: errMsg };
+            return { error: errMsg, httpStatus: response.status };
           } catch {
             try {
               const errText = await response.text();
               if (!silent) debugLogger.error(`API Error: ${errText || response.statusText}`, 'api');
-              return { error: errText || `${response.status} ${response.statusText}` };
+              return { error: errText || `${response.status} ${response.statusText}`, httpStatus: response.status };
             } catch {
               if (!silent) debugLogger.error(`API Error: ${response.status} ${response.statusText}`, 'api');
-              return { error: `${response.status} ${response.statusText}` };
+              return { error: `${response.status} ${response.statusText}`, httpStatus: response.status };
             }
           }
         }
@@ -712,6 +713,7 @@ class ApiClient {
       bar_timestamps: string[];
     }>('/replay/sessions', {
       method: 'POST',
+      skipRetry: true,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -733,6 +735,7 @@ class ApiClient {
       `/replay/sessions/${encodeURIComponent(sessionId)}/step`,
       {
         method: 'POST',
+      skipRetry: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ n }),
       }
@@ -746,6 +749,7 @@ class ApiClient {
       step: ReplayStepResponse | null;
     }>(`/replay/sessions/${encodeURIComponent(sessionId)}/jump-to-next-signal`, {
       method: 'POST',
+      skipRetry: true,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ max_lookahead: maxLookahead }),
     });
@@ -910,6 +914,7 @@ class ApiClient {
 
   // Background scan jobs
   async createScanRun(params: {
+    request_id?: string;
     limit?: number;
     min_score?: number;
     sniper_mode?: string;
@@ -923,6 +928,7 @@ class ApiClient {
     target_symbol?: string;
   }) {
     const queryParams: Record<string, string> = {};
+    if (params.request_id) queryParams.request_id = params.request_id;
     if (params.limit !== undefined) queryParams.limit = params.limit.toString();
     if (params.min_score !== undefined) queryParams.min_score = params.min_score.toString();
     if (params.sniper_mode) queryParams.sniper_mode = params.sniper_mode;
@@ -1046,7 +1052,7 @@ class ApiClient {
    */
   async getSignalTrace(id: string) {
     return this.request<TraceEnvelope>(
-      `/api/signals/${encodeURIComponent(id)}/trace`,
+      `/signals/${encodeURIComponent(id)}/trace`,
       { silent: true },
     );
   }
@@ -1068,7 +1074,7 @@ class ApiClient {
   ) {
     const qs = new URLSearchParams({ n: String(n), direction }).toString();
     return this.request<ConfluenceDistributionEnvelope>(
-      `/api/signals/confluence/distribution?${qs}`,
+      `/signals/confluence/distribution?${qs}`,
       { silent: true },
     );
   }
@@ -1133,7 +1139,7 @@ class ApiClient {
    */
   async getActiveCooldowns() {
     return this.request<ActiveCooldownsResponse>(
-      `/api/cooldowns`,
+      `/cooldowns`,
       { silent: true },
     );
   }
@@ -1148,7 +1154,7 @@ class ApiClient {
    */
   async getKillZoneStatus() {
     return this.request<KillZoneStatus>(
-      `/api/sessions/kill-zone`,
+      `/sessions/kill-zone`,
       { silent: true },
     );
   }

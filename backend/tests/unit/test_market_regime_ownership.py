@@ -26,8 +26,9 @@ def reader(monkeypatch):
     fetch = Mock(side_effect=lambda *a: observe(data))
     pipeline = S(fetch_multi_timeframe=fetch)
     monkeypatch.setattr(module, "IngestionPipeline", lambda supplied: observe(pipeline) if supplied is adapter else None)
-    dominance = Mock(side_effect=lambda: observe((54., 42.5, 3.5)))
-    monkeypatch.setattr(module, "get_dominance_for_macro", dominance)
+    dominance = Mock(side_effect=lambda: observe(S(btc_dom=54., alt_dom=42.5, stable_dom=3.5,
+                                                   timestamp=datetime.now(timezone.utc).timestamp())))
+    monkeypatch.setattr(module, "get_current_dominance", dominance)
     regime = MarketRegime(RegimeDimensions("up", "normal", "healthy", "risk_on", "balanced"),
                           "bullish_risk_on", 75., datetime(2026, 9, 1, tzinfo=timezone.utc),
                           70., 75., 70., 80., 50.)

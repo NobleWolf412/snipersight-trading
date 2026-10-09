@@ -1,3 +1,4 @@
+import { paperTradingService, paperSessionNeedsAttention } from '@/services/paperTradingService';
 import { accountingLabel, accountingColor, formatAccountMoney, executionReportNotice } from '../services/accounting';
 /**
  * BotStatus — Phase 3g.i.b (HUD rewrite, default tab)
@@ -96,7 +97,7 @@ import {
   type LiveTradingStatus,
 } from '@/services/liveTradingService';
 import { liveTradingService, liveSessionNeedsAttention, liveShutdownMessage } from '@/services/liveTradingService';
-import { paperTradingService } from '@/services/paperTradingService';
+
 import {
   fetchActiveSession,
   type ActiveMode,
@@ -585,9 +586,23 @@ export function BotStatus() {
     };
   }, []);
 
+  const ownerRef = useRef<'live' | 'paper' | undefined>(undefined);
+  const mountedRef = useRef(true);
+  const statusGeneration = useRef(0);
+  const historyGeneration = useRef(0);
+  const lifetimeGeneration = useRef(0);
   const loadStatus = useCallback(async () => {
+    const generation = ++statusGeneration.current;
     try {
-      const next = await fetchActiveSession();
+      const next = await fetchActiveSession(ownerRef.current);
+      if (!mountedRef.current || generation !== statusGeneration.current) return;
+      if (activeServiceRef.current !== next.service) {
+        historyGeneration.current++;
+        setTrades([]);
+        setTradesError(null);
+      }
+      ownerRef.current = next.isPaper ? 'paper' : 'live';
+      activeServiceRef.current = next.service;
       setSession(next);
       // Fast-poll when there are open positions or a scan is in flight.
       // The `current_scan` field only exists on LiveTradingStatus; paper
@@ -600,15 +615,17 @@ export function BotStatus() {
       fetchFailCount.current = 0;
       if (connectionErrorRef.current) setConnectionError(null);
     } catch (e) {
+      if (!mountedRef.current || generation !== statusGeneration.current) return;
       fetchFailCount.current += 1;
       const detail = e instanceof Error ? e.message : 'Unknown error';
       setConnectionError(`Backend unreachable: ${detail}`);
     } finally {
-      setLoading(false);
+      if (mountedRef.current && generation === statusGeneration.current) setLoading(false);
     }
   }, []);
 
   const loadTrades = useCallback(async () => {
+    const generation = ++historyGeneration.current;
     // Dispatch against the active service via the ref (kept in sync below).
     // Reading session from useCallback deps would re-create loadTrades on
     // every poll, which would in turn re-schedule the polling useEffect and
@@ -617,6 +634,7 @@ export function BotStatus() {
     const svc = activeServiceRef.current;
     try {
       const data = await svc.getHistory(50);
+      if (!mountedRef.current || generation !== historyGeneration.current || activeServiceRef.current !== svc) return;
       if (data && Array.isArray(data.trades)) {
         setTrades(data.trades as CompletedLiveTrade[]);
         setTradesError(null);
@@ -624,15 +642,18 @@ export function BotStatus() {
         setTradesError('Trade history response missing trades array');
       }
     } catch (e) {
+      if (!mountedRef.current || generation !== historyGeneration.current || activeServiceRef.current !== svc) return;
       setTradesError(e instanceof Error ? e.message : 'Could not load trade history');
     }
   }, []);
 
   const loadLifetime = useCallback(async () => {
+    const generation = ++lifetimeGeneration.current;
     try {
       // limit=1 keeps the trades payload tiny — the aggregate envelope is
       // always computed over the full journal regardless of limit.
       const data = await tradeJournalService.getJournal({ limit: 1 });
+      if (!mountedRef.current || generation !== lifetimeGeneration.current) return;
       if (data && data.aggregate) {
         setLifetime(data.aggregate);
         setLifetimeError(null);
@@ -640,25 +661,22 @@ export function BotStatus() {
         setLifetimeError('Journal aggregate missing');
       }
     } catch (e) {
+      if (!mountedRef.current || generation !== lifetimeGeneration.current) return;
       setLifetimeError(e instanceof Error ? e.message : 'Could not load lifetime totals');
     }
   }, []);
 
   useEffect(() => {
-    loadStatus();
-    loadTrades();
-    loadLifetime();
-    const schedule = () => {
-      const delay = fastPollRef.current ? 2000 : 10000;
-      pollTimerRef.current = setTimeout(async () => {
-        await Promise.all([loadStatus(), loadTrades(), loadLifetime()]);
-        schedule();
-      }, delay);
+    let disposed = false;
+    mountedRef.current = true;
+    const poll = async () => {
+      await loadStatus();
+      if (disposed) return;
+      if (ownerRef.current) await Promise.all([loadTrades(), loadLifetime()]);
+      if (!disposed) pollTimerRef.current = setTimeout(poll, fastPollRef.current ? 2000 : 10000);
     };
-    schedule();
-    return () => {
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-    };
+    void poll();
+    return () => { disposed = true; mountedRef.current = false; statusGeneration.current++; historyGeneration.current++; lifetimeGeneration.current++; if (pollTimerRef.current) clearTimeout(pollTimerRef.current); };
   }, [loadStatus, loadTrades, loadLifetime]);
 
   const handleStop = async () => {
@@ -694,8 +712,9 @@ export function BotStatus() {
   const handleReset = async () => {
     setResetting(true);
     try {
-      await activeServiceRef.current.reset();
-      navigate('/bot/setup');
+      const owner = activeServiceRef.current;
+      await owner.reset();
+      navigate(owner === paperTradingService ? '/training/range#setup' : '/bot/setup');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -726,7 +745,7 @@ export function BotStatus() {
   const isRunning = status?.status === 'running' && !isStarting;
   const isKilled = status?.status === 'kill_switched';
   const liveServiceSelected = session?.service === liveTradingService;
-  const needsRecovery = liveServiceSelected && liveSessionNeedsAttention(status) && !isRunning && !isStarting;
+  const needsRecovery = (liveServiceSelected ? liveSessionNeedsAttention(status) : paperSessionNeedsAttention(status as any)) && !isRunning && !isStarting;
   const tradingMode: ActiveMode = session?.mode ?? 'idle';
   const isLive = session?.isLive ?? false;
   const isPaper = session?.isPaper ?? false;
@@ -995,7 +1014,7 @@ export function BotStatus() {
                     <button
                       type="button"
                       className="btn btn-green"
-                      onClick={() => navigate('/bot/setup')}
+                      onClick={() => navigate(session?.isPaper ? '/training/range#setup' : '/bot/setup')}
                       style={{ fontSize: 11 }}
                       aria-label="Reconfigure bot — return to setup page"
                       disabled={!!needsRecovery || isStarting}
@@ -1008,7 +1027,7 @@ export function BotStatus() {
                       onClick={handleReset}
                       style={{ fontSize: 11 }}
                       aria-label="Reset bot session"
-                      disabled={resetting || (liveServiceSelected && !lifecycle?.reset_allowed)}
+                      disabled={resetting || !!needsRecovery || (liveServiceSelected ? !lifecycle?.reset_allowed : (status && 'reset_allowed' in status && status.reset_allowed === false))}
                     >
                       {resetting ? 'VERIFYING ACCOUNT' : '↺ RESET'}
                     </button>
@@ -1622,7 +1641,7 @@ export function BotStatus() {
         </div>
       )}
 
-      <FooterStatus build={`${now.toISOString().slice(0, 10)}`} />
+      <FooterStatus />
 
       {/* PipelineTracer drawer — Phase 3g.ii.c. Renders only when a
           signal id is selected via Gauntlet detail row click. */}

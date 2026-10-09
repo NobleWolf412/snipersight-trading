@@ -62,7 +62,7 @@ export function CooldownsTile() {
         } else if (res.data) {
           setData(res.data);
           setError(null);
-        }
+        } else setError('Cooldown response unavailable');
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : 'fetch failed');

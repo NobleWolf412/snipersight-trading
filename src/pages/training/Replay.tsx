@@ -1,3 +1,4 @@
+import { ReplaySessionController } from '@/services/replaySessionController';
 /**
  * Replay — historical candle-by-candle playback of the SniperSight pipeline.
  *
@@ -20,6 +21,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import type { CSSProperties } from 'react';
 import { Chip, FooterStatus, PageHead, SectionHead } from '@/components/hud';
@@ -471,6 +473,9 @@ function ScorePanel({
   }
 
   const conf = step.confluence;
+  if (!conf || typeof conf.total_score !== 'number' || !Number.isFinite(conf.total_score)) {
+    return <div className="panel" style={{ padding: 16 }}><SectionHead title="CONFLUENCE" /><p>Score and confirmation gates unavailable for this historical bar.</p></div>;
+  }
   const score = conf?.total_score ?? 0;
   const direction = conf?.direction ?? 'UNKNOWN';
   const factors: ReplayConfluenceFactor[] = (conf?.factors ?? []).slice().sort(
@@ -814,8 +819,8 @@ function Transport({
       <button
         className="btn btn-green"
         onClick={onJump}
-        title="Jump to next signal (J)"
-        disabled={currentIndex >= totalBars - 1}
+        title="Signal replay requires historical macro and configuration inputs, which are unavailable"
+        disabled
       >
         → SIGNAL (J)
       </button>
@@ -1049,9 +1054,12 @@ function SetupPanel({
   const [mode, setMode] = useState<ReplayMode>(defaultMode);
   const [endDate, setEndDate] = useState(isoDateInputValue(todayMinus5));
   const [days, setDays] = useState(defaultDays);
+  const [inputError, setInputError] = useState<string | null>(null);
 
   const handleLoad = () => {
     const end = new Date(`${endDate}T23:59:00Z`);
+    if (!symbol.trim() || !Number.isFinite(end.getTime()) || !Number.isFinite(days) || days < 1 || days > MAX_WINDOW_DAYS) { setInputError('Enter a symbol, valid end date and 1–30 days.'); return; }
+    setInputError(null);
     if (end.getTime() > todayMinus5.getTime()) {
       end.setTime(todayMinus5.getTime()); // clamp to slightly-before-now
     }
@@ -1070,6 +1078,7 @@ function SetupPanel({
         flexWrap: 'wrap',
       }}
     >
+      {inputError && <p role="alert">{inputError}</p>}
       <Field label="SYMBOL">
         <input
           value={symbol}
@@ -1162,18 +1171,17 @@ const inputStyle: CSSProperties = {
 
 export function Replay() {
   const readyRef = useRef(false);
-  const [playState, setPlayState] = useState<PlayState>('idle');
-  const [session, setSession] = useState<SessionMeta | null>(null);
-  const [step, setStep] = useState<ReplayStepResponse | null>(null);
+  const [controller] = useState(() => new ReplaySessionController());
+  const { playState, session, step, errorMsg, moveTarget, scoreHistory, signalIndices } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const setPlayState = controller.setPlayState;
   const [speed, setSpeed] = useState(1);
   const [showBriefing, setShowBriefing] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const [helpClickHint, setHelpClickHint] = useState(true);
 
   // Score history for spectrogram (bar_index → score)
-  const [scoreHistory, setScoreHistory] = useState<Map<number, number>>(new Map());
-  const [signalIndices, setSignalIndices] = useState<Set<number>>(new Set());
+
 
   // Snapshot framework hook
   useEffect(() => {
@@ -1186,16 +1194,7 @@ export function Replay() {
     };
   }, []);
 
-  // Cleanup session on unmount
-  useEffect(() => {
-    return () => {
-      if (session) {
-        api.deleteReplaySession(session.session_id).catch(() => {});
-      }
-    };
-    // session ref captured at unmount time — intentional
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => () => { void controller.close(); }, [controller]);
 
   // Briefing flag — fires for 1500ms after load
   useEffect(() => {
@@ -1205,157 +1204,15 @@ export function Replay() {
     }
   }, [showBriefing]);
 
-  // ---- Session lifecycle ----
-  const handleLoad = useCallback(
-    async (symbol: string, mode: ReplayMode, windowStartIso: string, windowEndIso: string) => {
-      try {
-        setPlayState('loading');
-        setErrorMsg(null);
-        // If a prior session exists, end it first (idempotent)
-        if (session) {
-          api.deleteReplaySession(session.session_id).catch(() => {});
-        }
-        // api.request returns ApiResponse<T> = { data?: T, error?: string }
-        // — must unwrap. Treating the wrapper as the data was the .toUpperCase /
-        // .slice runtime-fault root cause (2026-05-26 calibration).
-        const resp = await api.createReplaySession({
-          symbol,
-          mode,
-          window_start: windowStartIso,
-          window_end: windowEndIso,
-        });
-        if (resp.error) throw new Error(resp.error);
-        if (!resp.data) throw new Error('No data in response');
-        const newSession = resp.data as SessionMeta;
-        setSession(newSession);
-        setStep(null);
-        setScoreHistory(new Map());
-        setSignalIndices(new Set());
-        setShowBriefing(true);
-        setPlayState('ready');
-        setHelpClickHint(true);
-
-        // Auto-step to bar 0 so the chart isn't a TradingView-watermark-on-black
-        // canvas at first paint. Without this the operator clicks LOAD, the
-        // briefing flashes, and they see an empty chart wondering whether
-        // anything happened. Calling the API directly (not doStep, which
-        // captures the OLD session via closure) lets us seed the first frame
-        // even before the briefing clears.
-        try {
-          const first = await api.stepReplay(newSession.session_id, 1);
-          if (first.data) {
-            const r = first.data as ReplayStepResponse;
-            setStep(r);
-            if (r.confluence?.total_score != null) {
-              setScoreHistory((prev) => {
-                const next = new Map(prev);
-                next.set(r.index, r.confluence!.total_score);
-                return next;
-              });
-            }
-            if (r.signal_fired) {
-              setSignalIndices((prev) => {
-                const next = new Set(prev);
-                next.add(r.index);
-                return next;
-              });
-            }
-          }
-        } catch {
-          // First-step failures are non-fatal — operator can manually step
-        }
-      } catch (e: any) {
-        setErrorMsg(e?.message ?? 'Failed to load session');
-        setPlayState('idle');
-      }
-    },
-    [session],
-  );
-
-  // ---- Step execution ----
-  const doStep = useCallback(
-    async (n: number) => {
-      if (!session) return;
-      try {
-        const result = await api.stepReplay(session.session_id, n);
-        if (result.error) throw new Error(result.error);
-        if (!result.data) return;
-        const r = result.data as ReplayStepResponse;
-        setStep(r);
-        // Update score history + signal indices
-        if (r.confluence?.total_score != null) {
-          setScoreHistory((prev) => {
-            const next = new Map(prev);
-            next.set(r.index, r.confluence!.total_score);
-            return next;
-          });
-        }
-        if (r.signal_fired) {
-          setSignalIndices((prev) => {
-            if (prev.has(r.index)) return prev;
-            const next = new Set(prev);
-            next.add(r.index);
-            return next;
-          });
-        }
-        if (r.index >= session.total_bars - 1) {
-          setPlayState('ended');
-        }
-      } catch (e: any) {
-        setErrorMsg(e?.message ?? 'Step failed');
-      }
-    },
-    [session],
-  );
-
-  // ---- Scrub: absolute index. Computes delta and calls step. ----
-  const doScrub = useCallback(
-    async (targetIndex: number) => {
-      if (!session) return;
-      const current = step?.index ?? -1;
-      const delta = targetIndex - current;
-      if (delta === 0) return;
-      await doStep(delta);
-    },
-    [session, step, doStep],
-  );
-
-  // ---- Jump to next signal ----
-  const doJump = useCallback(async () => {
-    if (!session) return;
-    try {
-      const result = await api.jumpToNextSignal(session.session_id, 100);
-      if (result.error) throw new Error(result.error);
-      if (!result.data) return;
-      const r = result.data as { found: boolean; bars_advanced: number; step: ReplayStepResponse | null };
-      if (r.step) {
-        setStep(r.step);
-        if (r.step.confluence?.total_score != null) {
-          setScoreHistory((prev) => {
-            const next = new Map(prev);
-            next.set(r.step!.index, r.step!.confluence!.total_score);
-            return next;
-          });
-        }
-        if (r.step.signal_fired) {
-          setSignalIndices((prev) => {
-            const next = new Set(prev);
-            next.add(r.step!.index);
-            return next;
-          });
-        }
-      }
-    } catch (e: any) {
-      setErrorMsg(e?.message ?? 'Jump failed');
-    }
-  }, [session]);
-
-  // ---- Reset to first bar ----
-  const doReset = useCallback(() => {
-    if (!session || !step) return;
-    const back = -(step.index + 1);
-    if (back !== 0) doStep(back);
-  }, [session, step, doStep]);
+  const handleLoad = useCallback(async (symbol: string, mode: ReplayMode, windowStartIso: string, windowEndIso: string) => {
+    await controller.load({ symbol, mode, window_start: windowStartIso, window_end: windowEndIso });
+    if (controller.getSnapshot().session) { setShowBriefing(true); setHelpClickHint(true); }
+  }, [controller]);
+  const doStep = controller.stepBy;
+  const doScrub = controller.seek;
+  const doReset = controller.reset;
+  // Signal replay is unavailable without historical macro/configuration inputs.
+  const doJump = () => {};
 
   // ---- Play loop ----
   useEffect(() => {
@@ -1364,7 +1221,7 @@ export function Replay() {
     let cancelled = false;
     const tick = async () => {
       if (cancelled) return;
-      await doStep(1);
+      await doStep(1, true);
       if (!cancelled && step && step.index < session.total_bars - 1) {
         timeoutId = window.setTimeout(tick, intervalMs);
       }
@@ -1377,9 +1234,8 @@ export function Replay() {
   }, [playState, speed, session, doStep, step]);
 
   const togglePlay = useCallback(() => {
-    if (playState === 'ready' || playState === 'paused') setPlayState('playing');
-    else if (playState === 'playing') setPlayState('paused');
-  }, [playState]);
+    controller.togglePlay();
+  }, [controller]);
 
   // ---- Hotkeys ----
   useHotkey((e) => {
@@ -1438,16 +1294,7 @@ export function Replay() {
     else if (e.key === '2') setSpeed(2);
     else if (e.key === '5') setSpeed(5);
     else if (e.key === '0') setSpeed(10);
-    else if (e.key === 'Escape') {
-      if (session) {
-        api.deleteReplaySession(session.session_id).catch(() => {});
-        setSession(null);
-        setStep(null);
-        setScoreHistory(new Map());
-        setSignalIndices(new Set());
-        setPlayState('idle');
-      }
-    }
+    else if (e.key === 'Escape') { void controller.close(); }
   });
 
   // ---- Computed: candles for the playback TF only (chart uses tf_step) ----
@@ -1514,6 +1361,13 @@ export function Replay() {
         loading={playState === 'loading'}
         onLoad={handleLoad}
       />
+
+      {moveTarget !== null && (
+        <div className="panel" role="status" style={{ padding: 10, marginTop: 10 }}>
+          Moving to bar {moveTarget + 1} of {session?.total_bars}. Each candle is checked in order.
+          <button className="btn" style={{ marginLeft: 12 }} onClick={controller.cancelMove}>Stop moving</button>
+        </div>
+      )}
 
       {errorMsg && (
         <div
@@ -1582,7 +1436,7 @@ export function Replay() {
       )}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
 
-      <FooterStatus latency={36} />
+      <FooterStatus />
     </div>
   );
 }

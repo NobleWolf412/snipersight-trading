@@ -1,16 +1,6 @@
 // HUD FooterStatus — bottom status strip.
-// Port of prototype/shared.jsx FooterStatus.
-// In the real app this binds to backend health / build hash from the env.
-import { Chip } from './Chip';
-
-interface FooterStatusProps {
-  /** Latency to backend, ms. */
-  latency?: number;
-  /** Build identifier (e.g. "1.0.0+abc1234"). */
-  build?: string;
-}
-
-export function FooterStatus({ latency, build }: FooterStatusProps) {
+// Connection and source status are shown by their owning feed/session panels.
+export function FooterStatus() {
   const now = Date.now();
   const ts = new Date(now).toISOString().slice(0, 19).replace('T', ' ') + 'Z';
   return (
@@ -29,10 +19,7 @@ export function FooterStatus({ latency, build }: FooterStatusProps) {
       }}
     >
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <Chip kind="green">● BINANCE WS</Chip>
-        <Chip kind="green">● PHEMEX REST</Chip>
-        <Chip kind="green">● TELEGRAM</Chip>
-        <Chip>● BACKEND {latency ?? 41}ms</Chip>
+        Feed and session status appear in their panels.
       </div>
       <div
         className="mono"
@@ -43,7 +30,7 @@ export function FooterStatus({ latency, build }: FooterStatusProps) {
           textTransform: 'uppercase',
         }}
       >
-        build {build ?? '1.0.0'} · {ts}
+        Rendered {ts}
       </div>
     </div>
   );

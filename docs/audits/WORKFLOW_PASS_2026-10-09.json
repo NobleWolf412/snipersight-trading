@@ -1,0 +1,210 @@
+{
+  "date": "2026-10-09",
+  "baseline": "44cf732879c39e4a7081ffa1cfc9d42d1fc5c4ae",
+  "status": "verified_working_tree_running_locally_not_committed_or_pushed",
+  "scope": "Workflow dead ends and recovery: scanner, market context, session navigation, journal, settings and replay; ML implementation/training excluded",
+  "report": "docs/audits/WORKFLOW_PASS_2026-10-09.md",
+  "checks": {
+    "backend_full": {
+      "command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py backend",
+      "passed": 2477,
+      "warnings": 415,
+      "seconds": 427.6,
+      "checkpoint": "before browser serialization correction and diagnostics fixture correction"
+    },
+    "backend_final_affected": {
+      "command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py backend -k 'workflow or scanner or signal_transform or market_regime_ownership or scoring_confidence or score_policy_balance'",
+      "passed": 357,
+      "deselected": 2121,
+      "warnings": 275,
+      "seconds": 196.9,
+      "includes_new_encoder_regression": true
+    },
+    "frontend": {
+      "command": "node_modules/.bin/vitest.cmd run --exclude '**/.claude/**' src/services/workflowOwnership.test.ts src/services/scanHistoryService.test.ts src/services/liveLifecycle.test.ts src/pages/Scanner.score.test.tsx src/context/ScannerContext.test.ts src/components/hud/ScannerModePicker.policy.test.tsx src/components/hud/rejectionEvidence.test.ts src/components/hud/marketInputRejections.test.ts",
+      "passed": 114,
+      "files": 8,
+      "seconds": 1.19
+    },
+    "typescript": {
+      "command": "node_modules/.bin/tsc.cmd --noEmit",
+      "exit": 0
+    },
+    "build": {
+      "command": "node_modules/.bin/vite.cmd build",
+      "exit": 0,
+      "seconds": 7.64
+    },
+    "inputs": {
+      "command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py inputs",
+      "exit": 0,
+      "retired_htf_probe_explicit": true
+    },
+    "contracts": {
+      "exit": 1,
+      "api": "clean",
+      "telemetry": "clean",
+      "pipeline": "clean",
+      "db": "six unchanged historical JSONL drift items",
+      "baseline_changed": false
+    },
+    "smoke": {
+      "exit": 1,
+      "result": "five previously documented mode-policy drift items",
+      "baseline_changed": false
+    },
+    "offline_guards": "seven denial probes per run; external transports and child processes denied; fixture writes only",
+    "checkpoints_not_additive": "backend focused results overlap full manifest; no unique-count sum claimed",
+    "frontend_before_replay_timeout_fix": {
+      "command": "node_modules/.bin/vitest.cmd run --exclude '**/.claude/**' src/services/workflowOwnership.test.ts src/services/scanHistoryService.test.ts src/services/liveLifecycle.test.ts src/pages/Scanner.score.test.tsx src/context/ScannerContext.test.ts src/components/hud/ScannerModePicker.policy.test.tsx src/components/hud/rejectionEvidence.test.ts src/components/hud/marketInputRejections.test.ts",
+      "passed": 111,
+      "files": 8,
+      "seconds": 1.13
+    },
+    "build_before_replay_timeout_fix": {
+      "command": "node_modules/.bin/vite.cmd build",
+      "exit": 0,
+      "seconds": 10.35
+    }
+  },
+  "runtime": {
+    "url": "https://noblewolf.tailb37fc7.ts.net:8446/scanner",
+    "api_pid": 14640,
+    "ui_pid": 24428,
+    "scan": {
+      "run_id": "1223f77d-84bf-49cb-a7e4-ebb8bb04782a",
+      "status": "completed",
+      "progress": 20,
+      "total": 20,
+      "signals": 0,
+      "rejected": 20,
+      "completed_at": "2026-10-09T12:36:21.572812-04:00",
+      "browser_navigation_and_reload": true
+    },
+    "initial_browser_defect": {
+      "run_id": "8ab47b42-6cbb-4357-a768-0fce40911a7c",
+      "result": "completed but GET500 NumPy boolean in rejection metadata; fixed and repeated"
+    },
+    "observed_pages": [
+      "Settings preferences/configuration links/status",
+      "Scanner mode advice and actual critical TF/RR DTO",
+      "Intel source/time/expiry and partial provider failure",
+      "Journal first200 and second184 rows out of384",
+      "Training entry links",
+      "Replay load, incremental ten-bar advance, reset and exit; historical signal analysis explicitly unavailable"
+    ],
+    "bots": {
+      "paper": "idle",
+      "live": "idle",
+      "positions": 0,
+      "recovery_required": false,
+      "started_for_verification": false
+    },
+    "external_calls": "Public market data and existing service status only; no orders or credential configuration. Service imports use normal runtime environment separately from offline verification.",
+    "replay": {
+      "session_prefix": "ae98aa",
+      "total_bars": 167,
+      "mode": "stealth",
+      "symbol": "BTC/USDT",
+      "browser_verified": [
+        "first frame BAR1/167",
+        "ten-bar advance showed intermediate BAR6/167 then BAR11/167 without error",
+        "RESET returned BAR1/167",
+        "Escape returned READY TO LOAD"
+      ],
+      "initial_timeout_session_prefix": "a140e4",
+      "initial_timeout": "ten-bar POST exceeded30s; server later completed; final implementation advances incrementally"
+    }
+  },
+  "independent_review": {
+    "reviewers": [
+      "mode_consistency_review",
+      "regime_design_review",
+      "api_ownership_design",
+      "api_backend_integrity"
+    ],
+    "method": "source-only read-only review; findings and resolutions retained in markdown report",
+    "last_cancellation_fix": "start clears restoredCancellation, regression passed",
+    "replay_timeout_followup": "mode_consistency_review: restart-after-cancel race fixed; no further normal-navigation ownership blocker; exceptional backend prefix rebuild latency remains a limitation"
+  },
+  "limitations": [
+    "CoinGecko global denominator changes strategy inputs; existing thresholds remain uncalibrated; optional Demo key may be required for ongoing access.",
+    "Job idempotency is process-local and retention-bounded; browser ownership is per browser application, not multi-device durable coordination.",
+    "No testnet/live orders or forward profitability validation; paper/testnet failure paths use isolated fixtures.",
+    "Historical signal backtesting lacks historical macro/configuration inputs; existing ML surfaces remain outside implementation scope.",
+    "Browser walkthrough used desktop in-app browser plus private Tailscale address; physical phone interaction not tested.",
+    "Green contract inventories do not cover all private payload/config/state semantics.",
+    "Legacy journals are preserved; this pass does not validate all historical rows.",
+    "Replay Stop moving prevents subsequent requests, not the active server computation; exceptional backend prefix reconstruction can still exceed a request timeout."
+  ],
+  "source_hashes_sha256": {
+    "backend/analysis/dominance_service.py": "79192a5c07148a81e6d57d60674485ce5678d2f1ad32f9e2d4ca11c7eca86b63",
+    "backend/analysis/sentiment_evidence.py": "118da83e89d8cbe0017f1d1b85f9bfb28206a9fd288f5be61d82ad162ee4add6",
+    "backend/api_server.py": "5522bf7d778e80076f3bffa9921d8c2795f283f0f05b2939eadae1d6d39ccf21",
+    "backend/bot/paper_trading_service.py": "78d8753a3bc7d37c23278177bb61266d020ba0f547d093dd5f1e685a92f93093",
+    "backend/bot/trade_journal.py": "a47330f68ca5d7414a16af1064eca83bf32ede4143d9c6d7a35d77fcc6f3a6ea",
+    "backend/diagnostics/decision_inputs_diagnostic.py": "bf2ce8355badce64b134e58c6e2fff95300a8eb18d52233b72373aad8a156f72",
+    "backend/diagnostics/offline_checks.json": "f84e0a11d3581c778415a9501c420a9d0888b364bd97a3209e21bd805eaa1eb3",
+    "backend/routers/scanner.py": "b368fe860572100e3c7bb1598b91c0345436252ae157ce62c6ad89057d168e89",
+    "backend/services/market_regime_service.py": "44cb5b3018a1e6259fa95860772a96bed96f8ab02f0187d5efecae88b35d8398",
+    "backend/services/scanner_service.py": "125015699abe07defd79106e2de4cddc03ce95e9d406eb12869bd6c554004d62",
+    "backend/shared/config/scanner_modes.py": "196bf7d81c3934d77b04f6cb9ace685f6a939be415dc8a9251a3a6b71d12d600",
+    "backend/shared/utils/signal_transform.py": "d371b1ef40460a6d359ad3be79ef121f1299e214b038f8dc08eb22e339788044",
+    "backend/tests/integration/test_paper_workflow.py": "f036c633c9e0939915393c04ba24ea2750740320384613b75f984d396c12b2c0",
+    "backend/tests/unit/test_dominance_workflow.py": "15483dffb6248241245d074948997da19ce7b8d20f4d95b78f997dc0ac3fb80b",
+    "backend/tests/unit/test_market_regime_ownership.py": "b5a2f8370fc9abfdcbef191afc5933f81730adbd03743cffef4b349ce311210e",
+    "backend/tests/unit/test_mode_regime_policy.py": "2a820dd92a45e2b37fb00d322eff5c83e9fabf1cc3f7eef1d983198e2b26e4d4",
+    "backend/tests/unit/test_workflow_repairs.py": "67e574261eb5126b1378c6dc50c01fe1548669863d3131eb1587af0b7f013084",
+    "src/App.tsx": "e32b252041e1ce9f6eeae79a909e024c7dfa5197856698599ee509438dbda1b2",
+    "src/components/hud/CooldownsTile.tsx": "32ed36c1545046013a26245ed462f20bd3d5d776a62491d088e9959d11865a00",
+    "src/components/hud/FooterStatus.tsx": "c0971cf33504e35dbc43ad76e3ab57abd68e67f19944d017e808a11c7d6b0251",
+    "src/components/hud/MacroScoreTile.tsx": "3105c22381f6ea15554497820964c1549c72e1c754d1421c89dca905b4687b32",
+    "src/components/hud/PhemexStatusPill/index.tsx": "38069eb61bb1e6a33668db596a37659c5a7c15cfd6a04c4e5ede877cfa6c191d",
+    "src/components/hud/ScanController.tsx": "2cb0ff78d2d00be2807337c53e0acedeae21a2f21edc0b8a86948baead47762a",
+    "src/components/hud/ScannerInputs.tsx": "eb20bb44493a3cf0ce0157e71fd7f4cd94fd214f382caeb1bbd2a21ccf99c0f9",
+    "src/components/hud/Topbar.tsx": "5a7c95b846c7b0b14e1e404f70bcc0ddaf952fe002ca3e6b0299f7ccad6fcb3e",
+    "src/components/lessons/primitives/ChapterShell.tsx": "7283d26c38d4d766d5395c95800bdcc2ac0f8509b713ca5404c3a07360a719b2",
+    "src/context/ScannerContext.tsx": "21f02c0cf00236758827b6557bb45465d0ada27214a24e706bde7c7e53ca0bbc",
+    "src/hooks/useFreshFeed.ts": "aaf497f006a1a0941e89e83d8880a52a8e48072435f5d0a797c79ee9ef70a742",
+    "src/hooks/useMarketRegime.ts": "fe20573f00bde8a52a85aa232431c516fd863d69193d10ef7fa6911debfeb24c",
+    "src/pages/BotIndex.tsx": "1d6218e3ca2d34516cead7598e568ed4dde044c354c6c8ccbc653ab5e4352d58",
+    "src/pages/BotSetup.tsx": "4e0f0f4ce479062cbfefeb49133f15a557be1cd88c573fb21bbccb7c1b93baa5",
+    "src/pages/BotStatus.tsx": "e1fb5fc008229431b24455ea4cf696f7e8061f3a5c0d4955e548b444a557351f",
+    "src/pages/Intel.tsx": "212ae2f0f455099a523814158cff3678ddaec3ccf22e4941cb83685dc7e7b3bf",
+    "src/pages/Scanner.tsx": "9249f289a4f186af83ddebfd3e37522e802b722f7b7aba4466a128ba589b125e",
+    "src/pages/Settings.tsx": "1947c73f03d049ac011d79318a81c9f89146e79596f4c1ed50af4f3ef52c63da",
+    "src/pages/TradeJournal.tsx": "5230ff25bdb5992702a0801e72f5ea72f458d1fcc26916c26d597e6817cd8bab",
+    "src/pages/TrainingGround.tsx": "877452dee91579f815db7401df9cb0aae0ab889b4be83110a94ac44b7b04a6c5",
+    "src/pages/training/Drills.tsx": "c8ea32aa3745e9bcb980c30f831c1bc9350d6af556cdaf08083cf4ecc68f0cfb",
+    "src/pages/training/Lessons.tsx": "3238eab73153c0adeaf1941fd6fe29ffd9025e5d853e686b6ce0a0dd80ec2d8d",
+    "src/pages/training/RangeBot.tsx": "e3d90d7a4c3701f825216eb1a74e214d4c1541cfbdbbc2fc89a201f70d2f2b9d",
+    "src/pages/training/Replay.tsx": "a44610edd587e8b2f83d52f01a37707cd301b08fdcbd97a7e7da1d71cdb84af9",
+    "src/services/activeSession.ts": "16a4b63ef8a68f05efe4f86913c5f05a10ab7e33a8ae6e9601b896fd4cc72491",
+    "src/services/browserPreferences.ts": "fdab99c162726ef89de9a2ae51d63f5a251d055d3f25be4fbce2f5ad2495c669",
+    "src/services/freshFeed.ts": "ef3d1096ec2f8624c994446023ef2de1891a8c5987f41c2995ddf5bc9cd73bab",
+    "src/services/paperTradingService.ts": "66b198e9017355bf6b106740630228611dd524351ee7009c30b4da389da78494",
+    "src/services/replaySessionController.ts": "55539253c02d57d17bbc57fb9a3d675f88cbe15d33365b13d4d67578f6035dd0",
+    "src/services/scanHistoryService.ts": "c69bbdfa26d5411669d181bc62c897d107e31eec69f3e0ba5d00c6c940a4968b",
+    "src/services/scanRunService.ts": "99ce33d06bd61e2c933cf1996e8884d79992efb155f0c532e0ba5ae8395c8902",
+    "src/services/workflowOwnership.test.ts": "145c36b08951631811d5848888f1a814cb3034826171a7ff8732eebd7c4cba0a",
+    "src/utils/api.ts": "ce6286de982a5e02b15dd470933cdbbc7cfb336c97d8556025f87283ae585dd6",
+    "src/utils/configDraft.ts": "142824a0b6ffcafd018520c7ca73f4bb2413e58e4d323a221a8978e877ad530e",
+    "src/utils/mockData.ts": "8f5ee7881a08d27d05dd55be949dedbce72debef2491a5f7a44c7f5cc20d69a1"
+  },
+  "offline_manifest_sha256": "f84e0a11d3581c778415a9501c420a9d0888b364bd97a3209e21bd805eaa1eb3",
+  "verification_log_directory": "C:\\Users\\macca\\AppData\\Local\\SniperSight\\audits\\20261009-workflow",
+  "verification_log_sha256": {
+    "backend-final.txt": "39103dcb900fa1c0f4fc3807511348b4c01a38b3af7986521fc7ed3f6763cfca",
+    "backend-focused.txt": "eac7611eb018dea42cf46373c669edcc073206badc882c8457cbfd247bf7a405",
+    "backend-full.txt": "9b51e46453ac6183216ceb4ee35c0fdb0dea8d0f4c988ed3d7a5797c0bae5280",
+    "build.txt": "6c0665d1332630440362e6bbd582e97c35f2e7ba724d7db06a0e8705bf3b8d95",
+    "contracts.txt": "71fc0a65dd98410469149f7a68db909affde7850d35ffd4063fdb0908a9c537f",
+    "frontend-final.txt": "ec33338a1f1dfbfa33c091d56bed956d3626cdcdbb6db3994af8857c4ff0bf10",
+    "inputs.txt": "5561e8dcb178a019f0e3a7979de8ee04c4a6b522c389cd88bb083f2c8b659b3f",
+    "smoke.txt": "370bf2f993c491a4c8cf1d748754765f81fe03b244c1eaea8b65165c73555871",
+    "frontend-replay.txt": "efa4d7b752f6105a4fd198b1633b5c00d85ff80f5a8ca6b00e028d921ab3c012",
+    "build-replay.txt": "65d9d3ef7d65110d84dd10437814fb75aa85d9586983473fcdf40678a1ddf521",
+    "contracts-final.txt": "715a2d390e15eaa87b044e0de5d3516362f9144541c592b5cec511fcdf9adbab"
+  },
+  "completion": "Workflow repair pass verified within recorded limits; app running locally; changes not committed or pushed."
+}

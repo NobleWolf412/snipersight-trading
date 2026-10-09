@@ -1,51 +1,12 @@
-/**
- * Scanner — Phase 3f sub-step 1
- *
- * NEW page. Port of `prototype/scanner.jsx` adapted to TSX + the project's
- * HUD primitives. Lives at `/scanner` alongside the legacy `/scanner/setup`
- * and `/scanner/status` routes (those archive in Phase 6 per the
- * peppy-sniffing-owl plan).
- *
- * Data wiring:
- *   - `useScanner()` provides `selectedMode` (drives min-score badge, mode
- *     name, profile description, timeframe roster). Mode picker itself is
- *     deferred to sub-step 2 — current-mode is read-only here.
- *   - `scanHistoryService.getAllScans()` provides the latest scan's results.
- *     If there are no scans yet, the grid renders an empty-state — no fake
- *     signals are ever displayed as real.
- *
- * Synthetic-but-disclosed (each tagged with the amber `◌` chip pattern
- * established by Intel.tsx):
- *   - Mini-chart candles per card — deterministic Math.sin from id/entry,
- *     not real OHLC. Tagged `◌` on the panel header.
- *   - Radar dot positions — synthetic placement around a circular grid.
- *   - Setup-bias bars — fixed counts; not bound to backend setup-tag stats.
- *   - Console log feed — empty when no scans; placeholder line otherwise.
- *
- * Deferred (with inline `◌ deferred` placeholders):
- *   - **Trade-type chips** (plan §3d P1) — backend has no `trade_type` per
- *     plan; show `—` placeholder when the tag would render.
- *   - **Convergence/conflict mini-bar** (plan §3d P1) — needs per-card
- *     confluence breakdown, not in current scan-history shape.
- *   - **SignalDetail modal** — opens on card click in prototype; deferred
- *     so the `default` snapshot state stays direction-agnostic.
- *
- * Determinism for snapshots:
- *   - No `setInterval` (no ticking clock; Topbar already drives UTC).
- *   - No `Math.random` (all chart candles are Math.sin/Math.cos seeded by
- *     stable card ids).
- *   - Static `now` captured once at mount via useState initializer.
- *
- * Snapshot-ready handshake:
- *   StrictMode-safe pattern from Intel.tsx — each mount sets the body
- *   attribute, each cleanup unsets it; no ref-gate so the dev-mode
- *   double-invoke leaves the final state set.
+import { ScannerInputs } from '@/components/hud/ScannerInputs';
+/** Manual scanner: application-owned runs, recorded history and explicit evidence.
+ * Price diagrams show plan levels; radar placement is decorative, not market data.
+ * The selected history receipt owns result counts, timestamps and setup summaries.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Chip,
   CooldownsTile,
-  CycleAuditStrip,
   FooterStatus,
   MacroScoreTile,
   PageHead,
@@ -60,18 +21,10 @@ import { readScore, readDirection, validScore, passesAdmission, admissionLabel, 
 import { useScanner } from '@/context/ScannerContext';
 import { scanHistoryService, type ScanHistoryEntry } from '@/services/scanHistoryService';
 
-// ─── Synthetic seed — labelled in the UI as such ─────────────────────────
-//
-// These constants stand in for the per-signal categorical tags the backend
-// scorer does not yet emit in the scan-history shape (setup categorisation,
-// regime per signal, multi-factor bias scores). Every panel that consumes
-// them sets the amber `◌` chip on its SectionHead so the operator never
-// mistakes the rendering for live signal output. Replace seed lookups with
-// real fields when scoring exposes them — no UI restructure required.
-
-const SETUPS = ['OB+FVG', 'BOS', 'CHoCH', 'LIQ-SWEEP', 'OB-RETEST', 'FVG-FILL', 'BREAKER'] as const;
-const TFS = ['1m', '5m', '15m', '1h', '4h', '1D'] as const;
-const REGIMES = ['TREND', 'RANGE', 'CHOP'] as const;
+// Categories contain only producer evidence; unavailable is selectable.
+const SETUPS = ['OB+FVG', 'BOS', 'CHoCH', 'LIQ-SWEEP', 'OB-RETEST', 'FVG-FILL', 'BREAKER', 'SMC', 'UNKNOWN'] as const;
+const TFS = ['1m', '5m', '15m', '1h', '4h', '1D', '1W', 'UNKNOWN'] as const;
+const REGIMES = ['TREND', 'RANGE', 'CHOP', 'UNKNOWN'] as const;
 
 type Setup = (typeof SETUPS)[number];
 type Tf = (typeof TFS)[number];
@@ -102,7 +55,8 @@ interface CardSignal {
   tp2: number;
   rr: number;
   age: number;
-  bias: [number, number, number, number];
+  rationale?: string;
+  raw?: unknown;
   // tradeType: backend-emitted scale classification (SWING/INTRADAY/SCALP).
   // Sourced from the scan-history result's `classification` (already produced
   // by convertSignalToScanResult), with `trade_type` and `setup_type` accepted
@@ -129,144 +83,19 @@ function normalizeTradeType(raw: unknown): TradeType | undefined {
   return undefined;
 }
 
-// Deterministic synthesizer: when scan history exists but lacks the
-// categorical fields the prototype expects, derive a stable Setup/TF/Regime
-// from the symbol so the same card always renders identically.
-function synthFromSymbol(sym: string, idx: number): {
-  setup: Setup;
-  tf: Tf;
-  regime: Regime;
-  bias: [number, number, number, number];
-} {
-  const seed = sym.split('').reduce((s, c) => s + c.charCodeAt(0), 0) + idx;
-  const setup = SETUPS[seed % SETUPS.length];
-  const tf = TFS[seed % TFS.length];
-  const regime = REGIMES[seed % REGIMES.length];
-  const b = (n: number) => 5 + ((seed >> n) % 5);
-  return { setup, tf, regime, bias: [b(0), b(2), b(4), b(6)] };
-}
-
-// ─── Mini chart (per card) ───────────────────────────────────────────────
-
-interface CandleD {
-  open: number;
-  close: number;
-  hi: number;
-  lo: number;
-}
-
+// Geometry supplied by the plan, not a simulated price chart.
 function MiniChart({ sig }: { sig: CardSignal }) {
-  const N = 30;
-  const candles = useMemo<CandleD[]>(() => {
-    const arr: CandleD[] = [];
-    let p = sig.entry * (sig.dir === 'LONG' ? 0.99 : 1.01);
-    const idSeed = sig.id.charCodeAt(Math.min(1, sig.id.length - 1)) || 1;
-    for (let i = 0; i < N; i++) {
-      const drift = sig.dir === 'LONG' ? 0.0008 : -0.0008;
-      // Deterministic "noise" — no Math.random.
-      const vol = Math.sin(i * 1.7 + idSeed) * 0.005;
-      const open = p,
-        close = p * (1 + drift + vol);
-      arr.push({
-        open,
-        close,
-        hi: Math.max(open, close) * 1.003,
-        lo: Math.min(open, close) * 0.997,
-      });
-      p = close;
-    }
-    const f = sig.mark / arr[arr.length - 1].close;
-    arr.forEach((c) => {
-      c.open *= f;
-      c.close *= f;
-      c.hi *= f;
-      c.lo *= f;
-    });
-    return arr;
-  }, [sig]);
-  const allP = [...candles.flatMap((c) => [c.hi, c.lo]), sig.entry, sig.sl, sig.tp1];
-  const yMin = Math.min(...allP) * 0.998,
-    yMax = Math.max(...allP) * 1.002,
-    yR = yMax - yMin || 1;
-  const W = 240,
-    H = 70,
-    pad = 3;
-  const cw = (W - 2 * pad) / candles.length;
-  const yOf = (p: number) => pad + ((yMax - p) / yR) * (H - 2 * pad);
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      style={{
-        width: '100%',
-        height: 70,
-        background: 'rgba(0,0,0,.35)',
-        borderRadius: 4,
-      }}
-    >
-      <line
-        x1={pad}
-        x2={W - pad}
-        y1={yOf(sig.entry)}
-        y2={yOf(sig.entry)}
-        stroke="#60a5fa"
-        strokeWidth=".5"
-        strokeDasharray="2 3"
-        opacity=".7"
-      />
-      <line
-        x1={pad}
-        x2={W - pad}
-        y1={yOf(sig.sl)}
-        y2={yOf(sig.sl)}
-        stroke="#f87171"
-        strokeWidth=".5"
-        strokeDasharray="2 3"
-        opacity=".7"
-      />
-      <line
-        x1={pad}
-        x2={W - pad}
-        y1={yOf(sig.tp1)}
-        y2={yOf(sig.tp1)}
-        stroke="#22c55e"
-        strokeWidth=".5"
-        strokeDasharray="2 3"
-        opacity=".7"
-      />
-      {candles.map((c, i) => {
-        const x = pad + i * cw + cw * 0.15,
-          w = cw * 0.7;
-        const yO = yOf(c.open),
-          yC = yOf(c.close),
-          yH = yOf(c.hi),
-          yL = yOf(c.lo);
-        const up = c.close >= c.open,
-          color = up ? '#22c55e' : '#f87171';
-        return (
-          <g key={i}>
-            <line
-              x1={x + w / 2}
-              x2={x + w / 2}
-              y1={yH}
-              y2={yL}
-              stroke={color}
-              strokeWidth=".5"
-              opacity=".6"
-            />
-            <rect
-              x={x}
-              y={Math.min(yO, yC)}
-              width={w}
-              height={Math.max(0.8, Math.abs(yC - yO))}
-              fill={color}
-              opacity=".85"
-            />
-          </g>
-        );
-      })}
-      <circle cx={W - pad - 2} cy={yOf(sig.mark)} r="2" fill="#fbbf24" />
-    </svg>
-  );
+  const levels = [['Stop', sig.sl], ['Entry', sig.entry], ['TP1', sig.tp1], ['TP2', sig.tp2]] as const;
+  const valid = levels.filter(([, value]) => Number.isFinite(value) && value > 0);
+  if (valid.length < 2) return <p>Plan geometry unavailable</p>;
+  const low = Math.min(...valid.map(([, v]) => v));
+  const range = Math.max(...valid.map(([, v]) => v)) - low || 1;
+  return <svg viewBox="0 0 260 76" role="img" aria-label="Plan price levels">
+    {valid.map(([label, value], i) => <g key={label}>
+      <line x1={20 + (value - low) / range * 210} x2={20 + (value - low) / range * 210} y1="6" y2="44" stroke={label === 'Stop' ? 'var(--red-2)' : 'var(--accent)'} />
+      <text x="8" y={55 + (i % 2) * 13} dx={Math.floor(i / 2) * 130} fill="var(--fg-3)" fontSize="9">{label}: {fmtPrice(value)}</text>
+    </g>)}
+  </svg>;
 }
 
 // ─── Convergence/Conflict Mini-Bar (plan §3d P1) ─────────────────────────
@@ -336,6 +165,7 @@ function ConvergenceConflictBar({
 // ─── Signal Card ─────────────────────────────────────────────────────────
 
 export function SignalCard({ sig }: { sig: CardSignal }) {
+  const [expanded, setExpanded] = useState(false);
   const isLong = sig.dir === 'LONG';
   const confCol = 'var(--fg-2)';
   const setupKind: 'blue' | 'purple' | 'amber' | undefined = sig.setup.includes('FVG')
@@ -349,7 +179,7 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
     <div className="pos brackets">
       <div className="corner-tag tl">// {sig.id.toUpperCase()}</div>
       <div className="corner-tag tr">
-        {sig.tf} · {sig.age}m AGO
+        {sig.tf} · {Number.isFinite(sig.age) ? `${sig.age}m ago at page load` : 'time unavailable'}
       </div>
       <div
         style={{
@@ -416,25 +246,25 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
         <div className="metric-tile">
           <div className="metric-label">Entry</div>
           <div className="metric-value" style={{ fontSize: 12 }}>
-            {fmtPrice(sig.entry)}
+            {Number.isFinite(sig.entry) ? fmtPrice(sig.entry) : '—'}
           </div>
         </div>
         <div className="metric-tile">
           <div className="metric-label">Stop</div>
           <div className="metric-value" style={{ fontSize: 12, color: 'var(--red-2)' }}>
-            {fmtPrice(sig.sl)}
+            {Number.isFinite(sig.sl) ? fmtPrice(sig.sl) : '—'}
           </div>
         </div>
         <div className="metric-tile">
           <div className="metric-label">TP1</div>
           <div className="metric-value" style={{ fontSize: 12, color: 'var(--green-soft)' }}>
-            {fmtPrice(sig.tp1)}
+            {Number.isFinite(sig.tp1) ? fmtPrice(sig.tp1) : '—'}
           </div>
         </div>
         <div className="metric-tile">
           <div className="metric-label">R:R</div>
           <div className="metric-value" style={{ fontSize: 12, color: 'var(--accent)' }}>
-            {sig.rr.toFixed(1)}:1
+            {Number.isFinite(sig.rr) ? `${sig.rr.toFixed(1)}:1` : '—'}
           </div>
         </div>
       </div>
@@ -445,8 +275,6 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
         >
           {sig.regime}
         </Chip>
-        {sig.bias[0] >= 7 && <Chip style={{ fontSize: 9 }}>HTF ✓</Chip>}
-        {sig.bias[1] >= 7 && <Chip style={{ fontSize: 9 }}>VOL ✓</Chip>}
         {/* Trade-type chip — sourced from scan-history `classification`
             (or `trade_type`/`setup_type` fallback). Color maps to scale:
             SWING=blue (multi-day), INTRADAY=cyan (mid-tempo), SCALP=amber
@@ -471,10 +299,15 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
           </Chip>
         )}
         <span style={{ flex: 1 }} />
-        <button className="btn btn-green" style={{ padding: '4px 10px', fontSize: 10 }} disabled>
-          ▶ TAKE
+        <button className="btn btn-green" style={{ padding: '4px 10px', fontSize: 10 }} aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>
+          REVIEW SETUP
         </button>
       </div>
+      {expanded && <div style={{ marginTop: 16, overflowWrap: 'anywhere' }}>
+        <p>Scan snapshot for manual review. Check current market prices before trading.</p>
+        <p>{sig.rationale || 'No rationale was supplied with this result.'}</p>
+        <details><summary>Recorded evidence</summary><pre style={{ whiteSpace: 'pre-wrap', fontSize: 11 }}>{JSON.stringify(sig.raw, null, 2)}</pre></details>
+      </div>}
     </div>
   );
 }
@@ -630,7 +463,7 @@ function FilterRail({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
           {TFS.map((tf) => {
             const active = filters.tfs.includes(tf);
-            const inMode = modeTfSet.size === 0 || modeTfSet.has(tf);
+            const inMode = tf === 'UNKNOWN' || modeTfSet.size === 0 || modeTfSet.has(tf.toUpperCase());
             return (
               <button
                 key={tf}
@@ -856,20 +689,22 @@ function ScannerRadar({ signals }: { signals: CardSignal[] }) {
 export function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
   const latest = history[0];
   if (!latest || !Array.isArray(latest.results) || latest.results.length === 0) return [];
-  return latest.results.slice(0, 8).map((r: any, i: number): CardSignal | null => {
+  return latest.results.map((r: any, i: number): CardSignal | null => {
     const sym: string = r.pair ?? r.symbol ?? r.sym ?? 'UNKNOWN/USDT';
     const dir = readDirection(r);
     if (!dir) return null; // No directional evidence: do not invent a LONG.
-    const synth = synthFromSymbol(sym, i);
-    const entry: number = Number(r.entryZone?.high ?? r.entry ?? r.entry_price ?? r.price ?? 0) || 1;
-    const sl: number = Number(r.stopLoss ?? r.stop ?? r.stop_loss?.level ?? r.stop_loss ?? r.sl ?? entry * (dir === 'LONG' ? 0.98 : 1.02));
-    const tp1: number = Number(r.takeProfits?.[0] ?? r.targets?.[0]?.level ?? r.tp1 ?? r.take_profit ?? r.tp ?? entry * (dir === 'LONG' ? 1.015 : 0.985));
-    const tp2: number = Number(r.takeProfits?.[1] ?? r.targets?.[1]?.level ?? r.tp2 ?? entry * (dir === 'LONG' ? 1.03 : 0.97));
+    const category = <T extends string>(value: unknown, choices: readonly T[]): T =>
+      choices.find(choice => choice.toUpperCase() === String(value ?? '').toUpperCase()) ?? ('UNKNOWN' as T);
+    const price = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : NaN;
+    const entry: number = price(r.entryZone?.high ?? r.entry ?? r.entry_price);
+    const sl: number = price(r.stopLoss ?? r.stop_loss?.level ?? r.stop_loss ?? r.sl);
+    const tp1: number = price(r.takeProfits?.[0] ?? r.targets?.[0]?.level ?? r.tp1);
+    const tp2: number = price(r.takeProfits?.[1] ?? r.targets?.[1]?.level ?? r.tp2);
     const score = readScore(r);
     const scoreMetadata = r.confluence_breakdown?.metadata ?? r.metadata ?? {};
     const scoreGate = validScore(scoreMetadata.score_gate ?? latest.effectiveMinScore);
     const scoreGatePassed = scoreMetadata.score_gate_passed;
-    const rr: number = Number(r.riskReward ?? r.rr ?? r.risk_reward ?? Math.abs((tp1 - entry) / Math.max(0.0001, entry - sl))) || 1.5;
+    const rr: number = price(r.riskReward ?? r.rr ?? r.risk_reward);
     const mark: number = Number(r.mark ?? r.mark_price ?? entry);
     const id: string = String(r.id ?? `card_${i}`);
     // Trade-type: prefer the convertSignalToScanResult-emitted `classification`
@@ -886,7 +721,7 @@ export function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
       id,
       sym,
       dir,
-      setup: synth.setup,
+      setup: category(r.setup_pattern ?? r.plan_type, SETUPS),
       score,
       scoreGate,
       scoreGatePassed: typeof scoreGatePassed === 'boolean' ? scoreGatePassed : undefined,
@@ -896,16 +731,16 @@ export function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
         ? scoreMetadata.evidence_missing.filter((reason: unknown): reason is string => typeof reason === 'string') : undefined,
       scoreModelVersion: typeof scoreMetadata.score_model_version === 'string' ? scoreMetadata.score_model_version : undefined,
       scorePolicyVersion: typeof scoreMetadata.score_policy_version === 'string' ? scoreMetadata.score_policy_version : undefined,
-      tf: synth.tf,
-      regime: synth.regime,
+      tf: category(r.timeframe, TFS),
+      regime: category(r.regime?.symbol_regime?.trend === 'up' || r.regime?.symbol_regime?.trend === 'down' ? 'TREND' : r.regime?.symbol_regime?.trend === 'sideways' ? 'RANGE' : r.regime_label, REGIMES),
       mark,
       entry,
       sl,
       tp1,
       tp2,
       rr,
-      age: i * 5 + 7, // synthetic — backend doesn't expose card age in history
-      bias: synth.bias,
+      age: Math.max(0, Math.floor((Date.now() - Date.parse(r.timestamp || latest.timestamp)) / 60000)),
+      rationale: r.rationale, raw: r,
       tradeType,
       synergyBonus,
       conflictPenalty,
@@ -934,6 +769,7 @@ export function Scanner() {
   // pre-ScanController) so the controller can call `refreshCardSignals`
   // each time a fresh scan completes. Initial read still happens
   // synchronously to keep the snapshot capture deterministic.
+  const [history, setHistory] = useState(() => scanHistoryService.getAllScans());
   const [cardSignals, setCardSignals] = useState<CardSignal[]>(() => {
     try {
       return buildCardSignals(scanHistoryService.getAllScans());
@@ -956,6 +792,7 @@ export function Scanner() {
   const refreshCardSignals = useCallback(() => {
     try {
       const all = scanHistoryService.getAllScans();
+      setHistory(all);
       setCardSignals(buildCardSignals(all));
       setLatestHistoryEntry(all.length > 0 ? all[0] : null);
     } catch (e) {
@@ -1023,21 +860,18 @@ export function Scanner() {
       />
 
       {/* Mode picker — drives ScannerContext.setSelectedMode ─────── */}
-      {/* CycleHeartbeat removed from Scanner: the new ScanController in
-          the SCAN-CONTROL panel below owns scan-progress display now.
-          CycleHeartbeat polls /api/cycles/last which only populates when
-          the bot's scan loop is running; for the standalone Scanner page
-          it permanently rendered AWAITING. Heartbeat stays on Bot Status
-          where the bot's loop is the actual cycle source.
-          3a': CycleAuditStrip below adds audit-flavored cycle info to
-          this page — bottleneck_stage, wall vs prior-5 median, OK /
-          DEGRADED status from /api/cycles/last?include_audit=true. Same
-          AWAITING-when-orchestrator-idle limitation applies but the
-          strip surfaces that state explicitly. */}
+      {/* Scanner progress and diagnostics belong to the selected scan job. */}
       <ScannerModePicker />
-      <div style={{ marginBottom: 14 }}>
-        <CycleAuditStrip />
-      </div>
+      <ScannerInputs />
+      <label style={{ display: 'block', margin: '16px 0' }}>Scan history{' '}
+        <select value={latestHistoryEntry?.id ?? ''} onChange={e => {
+          const entry = history.find(item => item.id === e.target.value);
+          if (entry) { setLatestHistoryEntry(entry); setCardSignals(buildCardSignals([entry])); }
+        }}>
+          {!history.length && <option value="">No completed scans</option>}
+          {history.map(entry => <option key={entry.id} value={entry.id}>{new Date(entry.timestamp).toLocaleString()} · {entry.mode} · {entry.signalsGenerated} setups</option>)}
+        </select>
+      </label>
 
       {/* Top SCAN-CONTROL strip ───────────────────────────────────── */}
       <section className="panel panel-accent" style={{ marginBottom: 18 }}>
@@ -1130,18 +964,21 @@ export function Scanner() {
             filters={filters}
             setFilters={setFilters}
             counts={{ passing: filtered.length, total: cardSignals.length }}
-            modeTfs={selectedMode?.timeframes ?? []}
+            modeTfs={latestHistoryEntry?.timeframes ?? selectedMode?.timeframes ?? []}
           />
         </section>
 
         {/* Center grid */}
         <section className="panel">
           <SectionHead
-            title={`Live Signals · ${filtered.length}`}
+            title={`Scan results · ${filtered.length}`}
             right={
               <>
                 <Chip kind="green">SORT · SCORE ↓</Chip>
-                <Chip kind="amber">◌ EXPORT</Chip>
+                <button className="btn" disabled={!latestHistoryEntry} onClick={() => {
+                  const url = URL.createObjectURL(new Blob([JSON.stringify(latestHistoryEntry, null, 2)], { type: 'application/json' }));
+                  const link = document.createElement('a'); link.href = url; link.download = `scan-${latestHistoryEntry?.id}.json`; link.click(); URL.revokeObjectURL(url);
+                }}>EXPORT</button>
               </>
             }
           />
@@ -1167,11 +1004,11 @@ export function Scanner() {
                 }}
               >
                 {cardSignals.length === 0
-                  ? '// no scans yet — press ▶ run scan above'
+                  ? latestHistoryEntry ? '// this scan produced no setups — review rejections above' : '// no scans yet — press ▶ run scan above'
                   : '// no signals match filters'}
               </div>
             )}
-            {filtered.map((s) => (
+            {[...filtered].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).map((s) => (
               <SignalCard key={s.id} sig={s} />
             ))}
           </div>
@@ -1193,9 +1030,9 @@ export function Scanner() {
 
           <section className="panel">
             <SectionHead
-              title="Console"
+              title="Result summary"
               right={
-                <Chip kind="amber">◌ LIVE</Chip>
+                <Chip>RECORDED</Chip>
               }
             />
             <div
@@ -1210,14 +1047,14 @@ export function Scanner() {
                 className="term"
                 style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 8, opacity: 0.85 }}
               >
-                {`> tail -f scanner.log`}
+                Selected scan receipt
               </div>
               {cardSignals.length === 0 ? (
                 <div
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--fg-4)', padding: '8px 4px' }}
                 >
-                  // no console output until a scan runs
+                  // no recorded setups in this scan
                 </div>
               ) : (
                 cardSignals.slice(0, 8).map((c, i) => (
@@ -1227,9 +1064,7 @@ export function Scanner() {
                     style={{ gridTemplateColumns: '46px 36px 1fr 32px' }}
                   >
                     <span className="t">
-                      {String(14 - Math.floor(i / 4)).padStart(2, '0')}:
-                      {String(42 - i * 2).padStart(2, '0')}:
-                      {String((i * 7) % 60).padStart(2, '0')}
+                      {latestHistoryEntry ? new Date(latestHistoryEntry.timestamp).toLocaleTimeString() : '—'}
                     </span>
                     <span className={passesAdmission(c) ? 'pass' : 'rej'}>
                       {c.score === undefined ? 'N/A' : 'SCORE'}
@@ -1259,7 +1094,7 @@ export function Scanner() {
 
           <section className="panel">
             <SectionHead
-              title="Setup Bias"
+              title="Recorded setup counts"
               right={
                 <Chip kind="amber">◌</Chip>
               }
@@ -1267,13 +1102,8 @@ export function Scanner() {
             <div
               style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}
             >
-              {[
-                { k: 'OB+FVG', c: 'var(--cyan)', v: 42 },
-                { k: 'BOS', c: 'var(--purple)', v: 28 },
-                { k: 'CHoCH', c: 'var(--purple)', v: 18 },
-                { k: 'LIQ-SWEEP', c: 'var(--amber)', v: 25 },
-                { k: 'BREAKER', c: 'var(--red-2)', v: 14 },
-              ].map((x) => (
+              {!cardSignals.length && <p>No recorded setups.</p>}
+              {Object.entries(cardSignals.reduce<Record<string, number>>((counts, signal) => { counts[signal.setup] = (counts[signal.setup] ?? 0) + 1; return counts; }, {})).map(([k, v]) => ({ k, v, c: 'var(--cyan)' })).map((x) => (
                 <div key={x.k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', width: 80 }}>
                     {x.k}
@@ -1291,7 +1121,7 @@ export function Scanner() {
                     <div
                       style={{
                         height: '100%',
-                        width: Math.min(100, x.v * 2) + '%',
+                        width: (cardSignals.length ? x.v / cardSignals.length * 100 : 0) + '%',
                         background: x.c,
                         boxShadow: `0 0 6px ${x.c}`,
                       }}
@@ -1316,7 +1146,7 @@ export function Scanner() {
         </div>
       </div>
 
-      <FooterStatus latency={42} />
+      <FooterStatus />
 
       <style>{`
         .layout-grid{display:grid;gap:18px}

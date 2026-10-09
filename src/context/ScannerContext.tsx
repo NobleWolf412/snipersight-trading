@@ -1,8 +1,9 @@
 /* @refresh skip */
-import { createContext, useContext, ReactNode, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { SniperMode } from '@/types/sniperMode';
+import { scanRunService, scanIsBusy } from '@/services/scanRunService';
 import { api } from '@/utils/api';
 import type { ScannerMode } from '@/utils/api';
 import { liveTradingService, liveSessionNeedsAttention } from '@/services/liveTradingService';
@@ -84,7 +85,7 @@ export interface ConsoleLog {
   type?: 'info' | 'success' | 'warning' | 'error' | 'config';
 }
 
-const defaultScanConfig: ScanConfig = {
+export const defaultScanConfig: ScanConfig = {
   exchange: 'phemex',
   topPairs: 20,
   customPairs: [],
@@ -170,7 +171,7 @@ const fallbackModes: ScannerMode[] = [
     entry_timeframes: ['1h', '15m', '5m'],
     structure_timeframes: ['1d', '4h', '1h'],
     atr_multiplier: 2.5,
-    min_rr_ratio: 1.8,
+    min_rr_ratio: 1.5,
   },
 ];
 
@@ -268,7 +269,19 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const [scannerModes, setScannerModes] = useState<ScannerMode[]>(fallbackModes);
-  const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
+  const [selectedMode, updateSelectedMode] = useState<ScannerMode | null>(null);
+  const desiredModeRef = useRef(scanConfig.sniperMode);
+  const setSelectedMode = useCallback((mode: ScannerMode | null) => {
+    if (mode) desiredModeRef.current = mode.name as SniperMode;
+    updateSelectedMode(mode);
+    if (mode) setScanConfig(prev => ({ ...prev, sniperMode: mode.name as SniperMode }));
+  }, [setScanConfig]);
+  useEffect(() => {
+    const sync = () => setIsScanning(scanIsBusy(scanRunService.getSnapshot().status));
+    const unsubscribe = scanRunService.subscribe(sync);
+    scanRunService.resume(); sync();
+    return unsubscribe;
+  }, [setIsScanning]);
   // Console logs should be ephemeral per session; do NOT persist in localStorage
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([]);
   const [htfOpportunities, setHtfOpportunities] = useState<ScannerContextType['htfOpportunities']>([]);
@@ -322,25 +335,15 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
       console.error('[ScannerContext] Failed to fetch modes:', error);
       console.warn('[ScannerContext] Using fallback modes');
       setScannerModes(fallbackModes);
+      updateSelectedMode(fallbackModes.find(m => m.name === desiredModeRef.current) ?? fallbackModes[0]);
       return;
     }
     console.log('[ScannerContext] Raw modes response:', data);
-    const modes = (data?.modes || []).map(m => ({
-      name: m.name,
-      description: m.description,
-      timeframes: m.timeframes,
-      min_confluence_score: m.min_confluence_score,
-      profile: m.profile,
-      structure_timeframes: m.structure_timeframes,
-      entry_timeframes: m.entry_timeframes,
-      zone_timeframes: m.zone_timeframes,
-      target_timeframes: m.target_timeframes,
-      stop_timeframes: m.stop_timeframes,
-    }));
+    const modes = data?.modes ?? [];
     console.log('[ScannerContext] Processed modes:', modes);
     setScannerModes(modes.length ? modes : fallbackModes);
     // Ensure selectedMode aligned with scanConfig
-    const desired = (scanConfig?.sniperMode as string) || 'stealth';
+    const desired = desiredModeRef.current || 'stealth';
     const match = modes.find(m => m.name === desired) || modes.find(m => m.name === 'stealth') || modes[0] || fallbackModes[0];
     setSelectedMode(match);
     console.log('[ScannerContext] Modes loaded. Total:', modes.length, 'Active:', match?.name);

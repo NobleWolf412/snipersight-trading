@@ -1,52 +1,43 @@
+"""Fresh source-identified global market shares; no stale or synthetic fallback.
+
+The stable bucket tracks USDT and USDC, not every stablecoin. The remaining
+bucket is the rest of the global market. Legacy CryptoCompare basket histories
+are retained separately and never spliced into this provider's observations.
 """
-Dominance Service - Real-time crypto dominance metrics from CryptoCompare.
-
-Fetches market cap data to calculate:
-- BTC.D (Bitcoin Dominance)
-- Stable.D (Stablecoin Dominance: USDT + USDC)
-- Alt.D (Altcoin Dominance: everything else)
-
-Uses local file cache (24h TTL) to respect API rate limits.
-"""
-
 from __future__ import annotations
 
 import json
 import logging
 import math
+import os
+import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import requests
 
 logger = logging.getLogger(__name__)
-
-# CryptoCompare free tier endpoint for market cap
-CRYPTOCOMPARE_API_URL = "https://min-api.cryptocompare.com/data/top/mktcapfull"
-
-# Cache settings
+COINGECKO_API_URL = "https://api.coingecko.com/api/v3/global"
+DOMINANCE_VERSION = "coingecko-global-usdt-usdc-v1"
+DOMINANCE_SOURCE = "CoinGecko global market cap; stable share = USDT + USDC; remaining share includes all other assets"
 CACHE_DIR = Path("backend/cache/dominance")
-CACHE_FILE = CACHE_DIR / "dominance_cache.json"
-CACHE_TTL_SECONDS = 60 * 60  # 1 hour (was 24h)
-
-# Coins to track for stablecoin dominance
-STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "TUSD", "USDP", "FRAX", "GUSD"}
+CACHE_FILE = CACHE_DIR / (DOMINANCE_VERSION + ".json")
+CACHE_TTL_SECONDS = 60 * 60
 
 
 @dataclass
 class DominanceSnapshot:
-    """Single point-in-time dominance reading."""
-
-    timestamp: float  # Unix timestamp
-    btc_dom: float  # 0-100 percentage
-    stable_dom: float  # 0-100 percentage
-    alt_dom: float  # 0-100 percentage
-    total_market_cap: float  # USD
+    timestamp: float  # Provider observation time, never the time an old response was read
+    btc_dom: float
+    stable_dom: float
+    alt_dom: float  # Compatibility name for the remaining global market
+    total_market_cap: float
     btc_market_cap: float
     stable_market_cap: float
     alt_market_cap: float
+    source: str = DOMINANCE_VERSION
 
 
 @dataclass
@@ -83,404 +74,172 @@ class DominanceContext:
 
 
 class DominanceService:
-    """
-    Service for fetching and caching crypto market dominance metrics.
-
-    Uses CryptoCompare's free tier API (250 calls/day for daily data).
-    Implements local file caching to minimize API calls.
-    """
+    """Single-flight public feed with a source-specific cache and bounded retries."""
 
     def __init__(self, api_key: Optional[str] = None, cache_dir: Optional[Path] = None):
-        """
-        Initialize DominanceService.
-
-        Args:
-            api_key: Optional CryptoCompare API key (increases rate limits)
-            cache_dir: Optional custom cache directory
-        """
-        self.api_key = api_key
+        # An optional Demo key is sent only to the fixed CoinGecko API host.
+        self.api_key = api_key or os.getenv("COINGECKO_DEMO_API_KEY")
         self.cache_dir = cache_dir or CACHE_DIR
-        self.cache_file = self.cache_dir / "dominance_cache.json"
-        self._ensure_cache_dir()
-
-    def _ensure_cache_dir(self) -> None:
-        """Create cache directory if it doesn't exist."""
+        self.cache_file = self.cache_dir / (DOMINANCE_VERSION + ".json")
+        self.history_file = self.cache_dir / (DOMINANCE_VERSION + "-history.jsonl")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+        self._retry_after = 0.0
+        self.last_error: Optional[str] = None
 
-    def _load_cache(self) -> Optional[Dict]:
-        """Load cached data from disk."""
-        try:
-            if self.cache_file.exists():
-                with open(self.cache_file, "r") as f:
-                    return json.load(f)
-        except Exception as e:
-            logger.warning("Failed to load dominance cache: %s", e)
-        return None
-
-    def _save_cache(self, data: Dict) -> None:
-        """Save data to disk cache."""
-        try:
-            with open(self.cache_file, "w") as f:
-                json.dump(data, f, indent=2)
-            logger.debug("Dominance cache saved")
-        except Exception as e:
-            logger.warning("Failed to save dominance cache: %s", e)
-
-    def _is_cache_valid(self, cache: Dict) -> bool:
-        """Reject expired, future or invalid observation times."""
+    @staticmethod
+    def _is_cache_valid(cache: Dict) -> bool:
         try:
             age = time.time() - float(cache["timestamp"])
             return math.isfinite(age) and 0 <= age < CACHE_TTL_SECONDS
         except (KeyError, TypeError, ValueError, OverflowError):
             return False
 
-    def _fetch_market_caps(self, limit: int = 100) -> Optional[List[Dict]]:
-        """
-        Fetch top coins by market cap from CryptoCompare.
-
-        Args:
-            limit: Number of top coins to fetch (max 100 per request)
-
-        Returns:
-            List of coin data dicts or None if request fails
-        """
-        headers = {}
-        if self.api_key:
-            headers["authorization"] = f"Apikey {self.api_key}"
-
-        try:
-            # Fetch top 100 coins by market cap
-            params = {"limit": limit, "tsym": "USD", "page": 0}
-
-            response = requests.get(
-                CRYPTOCOMPARE_API_URL, params=params, headers=headers, timeout=10
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            if data.get("Response") == "Error":
-                logger.error("CryptoCompare API error: %s", data.get("Message", "Unknown"))
-                return None
-
-            return data.get("Data", [])
-
-        except requests.Timeout:
-            logger.error("CryptoCompare API timeout")
-            return None
-        except requests.RequestException as e:
-            logger.error("CryptoCompare API request failed: %s", e)
-            return None
-        except Exception as e:
-            logger.error("Unexpected error fetching market caps: %s", e)
-            return None
-
-    def _fetch_stablecoin_market_caps(self) -> float:
-        """
-        Fetch market caps for major stablecoins directly.
-
-        Uses CryptoCompare's pricemultifull endpoint to get individual coin data.
-        This is needed because stablecoins often don't appear in top-100 by volume.
-
-        Returns:
-            Total stablecoin market cap in USD
-        """
-        headers = {}
-        if self.api_key:
-            headers["authorization"] = f"Apikey {self.api_key}"
-
-        # Major stablecoins to track
-        stables = ["USDT", "USDC", "DAI", "BUSD"]
-
-        try:
-            # Use pricemultifull endpoint to get detailed data for specific coins
-            params = {"fsyms": ",".join(stables), "tsyms": "USD"}
-
-            response = requests.get(
-                "https://min-api.cryptocompare.com/data/pricemultifull",
-                params=params,
-                headers=headers,
-                timeout=10,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            if data.get("Response") == "Error":
-                logger.warning(
-                    "CryptoCompare stablecoin API error: %s", data.get("Message", "Unknown")
-                )
-                return 0.0
-
-            total_stable_cap = 0.0
-            raw_data = data.get("RAW", {})
-
-            for symbol in stables:
-                if symbol in raw_data and "USD" in raw_data[symbol]:
-                    mktcap = raw_data[symbol]["USD"].get("MKTCAP", 0)
-                    if mktcap:
-                        total_stable_cap += float(mktcap)
-                        logger.debug(f"{symbol} market cap: ${mktcap:,.0f}")
-
-            logger.info(f"Total stablecoin market cap: ${total_stable_cap:,.0f}")
-            return total_stable_cap
-
-        except requests.Timeout:
-            logger.warning("CryptoCompare stablecoin API timeout")
-            return 0.0
-        except requests.RequestException as e:
-            logger.warning("CryptoCompare stablecoin API request failed: %s", e)
-            return 0.0
-        except Exception as e:
-            logger.warning("Unexpected error fetching stablecoin market caps: %s", e)
-            return 0.0
-
-    def _calculate_dominance(
-        self, coin_data: List[Dict], stablecoin_market_cap: float = 0.0
-    ) -> Optional[DominanceSnapshot]:
-        """
-        Calculate dominance percentages from coin market cap data.
-
-        Args:
-            coin_data: List of coin data from CryptoCompare
-            stablecoin_market_cap: Pre-fetched stablecoin market cap (since they're not in top-100)
-
-        Returns:
-            DominanceSnapshot or None if calculation fails
-        """
-        if not coin_data:
-            return None
-
-        total_market_cap = 0.0
-        btc_market_cap = 0.0
-        stable_market_cap_from_top100 = 0.0
-
-        for coin in coin_data:
-            try:
-                coin_info = coin.get("CoinInfo", {})
-                raw = coin.get("RAW", {}).get("USD", {})
-
-                symbol = coin_info.get("Name", "").upper()
-                mktcap = float(raw.get("MKTCAP", 0) or 0)
-
-                total_market_cap += mktcap
-
-                if symbol == "BTC":
-                    btc_market_cap = mktcap
-                elif symbol in STABLECOINS:
-                    stable_market_cap_from_top100 += mktcap
-
-            except (ValueError, TypeError, KeyError) as e:
-                logger.debug("Skipping coin data: %s", e)
-                continue
-
-        if total_market_cap <= 0:
-            logger.warning("Total market cap is zero or negative")
-            return None
-
-        # Use the separately fetched stablecoin market cap if it's higher
-        # (top-100 might not include all stablecoins)
-        stable_market_cap = max(stablecoin_market_cap, stable_market_cap_from_top100)
-
-        # Add stablecoin market cap to total if it wasn't already counted
-        if stablecoin_market_cap > stable_market_cap_from_top100:
-            total_market_cap += stablecoin_market_cap - stable_market_cap_from_top100
-
-        alt_market_cap = total_market_cap - btc_market_cap - stable_market_cap
-
-        btc_dom = (btc_market_cap / total_market_cap) * 100
-        stable_dom = (stable_market_cap / total_market_cap) * 100
-        alt_dom = (alt_market_cap / total_market_cap) * 100
-
-        return DominanceSnapshot(
-            timestamp=time.time(),
-            btc_dom=round(btc_dom, 2),
-            stable_dom=round(stable_dom, 2),
-            alt_dom=round(alt_dom, 2),
-            total_market_cap=total_market_cap,
-            btc_market_cap=btc_market_cap,
-            stable_market_cap=stable_market_cap,
-            alt_market_cap=alt_market_cap,
-        )
-
-    def get_dominance(self, force_refresh: bool = False) -> Optional[DominanceSnapshot]:
-        """
-        Get current dominance metrics, using cache when valid.
-
-        Args:
-            force_refresh: If True, bypass cache and fetch fresh data
-
-        Returns:
-            DominanceSnapshot or None if fetch fails
-        """
-        # Check cache first
-        if not force_refresh:
-            cache = self._load_cache()
-            if cache and self._is_cache_valid(cache):
-                logger.debug(
-                    "Using cached dominance data (age: %.0f min)",
-                    (time.time() - cache["timestamp"]) / 60,
-                )
-                try:
-                    return DominanceSnapshot(
-                        timestamp=cache["timestamp"],
-                        btc_dom=cache["btc_dom"],
-                        stable_dom=cache["stable_dom"],
-                        alt_dom=cache["alt_dom"],
-                        total_market_cap=cache.get("total_market_cap", 0),
-                        btc_market_cap=cache.get("btc_market_cap", 0),
-                        stable_market_cap=cache.get("stable_market_cap", 0),
-                        alt_market_cap=cache.get("alt_market_cap", 0),
-                    )
-                except Exception as e:
-                    logger.warning("Failed to parse cached data: %s", e)
-
-        # Fetch fresh data
-        logger.info("Fetching fresh dominance data from CryptoCompare")
-        coin_data = self._fetch_market_caps(limit=100)
-        if not coin_data:
-            # Fallback to stale cache if available
-            cache = self._load_cache()
-            if cache:
-                logger.warning("Using stale cache due to API failure")
-                return DominanceSnapshot(
-                    timestamp=cache["timestamp"],
-                    btc_dom=cache["btc_dom"],
-                    stable_dom=cache["stable_dom"],
-                    alt_dom=cache["alt_dom"],
-                    total_market_cap=cache.get("total_market_cap", 0),
-                    btc_market_cap=cache.get("btc_market_cap", 0),
-                    stable_market_cap=cache.get("stable_market_cap", 0),
-                    alt_market_cap=cache.get("alt_market_cap", 0),
-                )
-            return None
-
-        # Fetch stablecoin market caps separately (they're not in top-100)
-        stablecoin_market_cap = self._fetch_stablecoin_market_caps()
-
-        snapshot = self._calculate_dominance(coin_data, stablecoin_market_cap)
-        if snapshot:
-            # Save to cache
-            self._save_cache(
-                {
-                    "timestamp": snapshot.timestamp,
-                    "btc_dom": snapshot.btc_dom,
-                    "stable_dom": snapshot.stable_dom,
-                    "alt_dom": snapshot.alt_dom,
-                    "total_market_cap": snapshot.total_market_cap,
-                    "btc_market_cap": snapshot.btc_market_cap,
-                    "stable_market_cap": snapshot.stable_market_cap,
-                    "alt_market_cap": snapshot.alt_market_cap,
-                }
-            )
-
+    @staticmethod
+    def _decode_snapshot(data: Dict, *, fresh: bool = True) -> DominanceSnapshot:
+        if not isinstance(data, dict) or data.get("source") != DOMINANCE_VERSION:
+            raise ValueError("Market-share source or composition changed")
+        snapshot = DominanceSnapshot(**{key: data[key] for key in DominanceSnapshot.__dataclass_fields__})
+        values = [snapshot.timestamp, snapshot.btc_dom, snapshot.stable_dom, snapshot.alt_dom,
+                  snapshot.total_market_cap, snapshot.btc_market_cap,
+                  snapshot.stable_market_cap, snapshot.alt_market_cap]
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values):
+            raise ValueError("Invalid market-share observation")
+        if snapshot.total_market_cap <= 0 or not 0 < snapshot.btc_dom <= 100:
+            raise ValueError("Missing market capitalization")
+        if not all(0 <= v <= 100 for v in (snapshot.stable_dom, snapshot.alt_dom)):
+            raise ValueError("Invalid market-share percentage")
+        if not math.isclose(snapshot.btc_dom + snapshot.stable_dom + snapshot.alt_dom, 100., abs_tol=.02):
+            raise ValueError("Incomplete market-share partition")
+        for cap, share in ((snapshot.btc_market_cap, snapshot.btc_dom),
+                           (snapshot.stable_market_cap, snapshot.stable_dom),
+                           (snapshot.alt_market_cap, snapshot.alt_dom)):
+            if not math.isclose(cap, snapshot.total_market_cap * share / 100., rel_tol=1e-6, abs_tol=.01):
+                raise ValueError("Inconsistent market-share capitalization")
+        if snapshot.timestamp <= 0 or (fresh and not DominanceService._is_cache_valid(data)):
+            raise ValueError("Market-share observation is stale or future-dated")
         return snapshot
 
-    def get_dominance_context(self, lookback_days: int = 7) -> Optional[DominanceContext]:
-        """
-        Get dominance context with historical data for velocity calculations.
-
-        Note: CryptoCompare free tier only provides current data.
-        Historical data requires premium API or alternative sources.
-        For now, returns context with current snapshot only.
-
-        Args:
-            lookback_days: Days of history to include (not fully implemented)
-
-        Returns:
-            DominanceContext with current snapshot and available history
-        """
-        current = self.get_dominance()
-        if not current:
+    def _load_cache(self) -> Optional[DominanceSnapshot]:
+        try:
+            return self._decode_snapshot(json.loads(self.cache_file.read_text(encoding="utf-8")))
+        except (OSError, ValueError, TypeError, KeyError):
             return None
 
-        # Load historical snapshots from cache history
-        history: List[DominanceSnapshot] = []
+    def _save_cache(self, snapshot: DominanceSnapshot) -> None:
         try:
-            history_file = self.cache_dir / "dominance_history.json"
-            if history_file.exists():
-                with open(history_file, "r") as f:
-                    history_data = json.load(f)
-                    cutoff = time.time() - (lookback_days * 24 * 60 * 60)
-                    for entry in history_data:
-                        if entry.get("timestamp", 0) >= cutoff:
-                            history.append(
-                                DominanceSnapshot(
-                                    timestamp=entry["timestamp"],
-                                    btc_dom=entry["btc_dom"],
-                                    stable_dom=entry["stable_dom"],
-                                    alt_dom=entry["alt_dom"],
-                                    total_market_cap=entry.get("total_market_cap", 0),
-                                    btc_market_cap=entry.get("btc_market_cap", 0),
-                                    stable_market_cap=entry.get("stable_market_cap", 0),
-                                    alt_market_cap=entry.get("alt_market_cap", 0),
-                                )
-                            )
-        except Exception as e:
-            logger.debug("Could not load dominance history: %s", e)
+            temporary = self.cache_file.with_suffix(".tmp")
+            temporary.write_text(json.dumps(asdict(snapshot)), encoding="utf-8")
+            temporary.replace(self.cache_file)
+        except OSError:
+            logger.warning("Could not persist the current dominance cache")
 
-        # Append current to history file for future lookbacks
-        self._append_to_history(current)
+    def _fetch_global(self) -> DominanceSnapshot:
+        headers = {"x-cg-demo-api-key": self.api_key} if self.api_key else {}
+        response = requests.get(COINGECKO_API_URL, headers=headers, timeout=10)
+        # Never include request headers or credential-bearing exception URLs in errors.
+        if response.status_code != 200:
+            raise ValueError(f"CoinGecko market data returned HTTP {response.status_code}; retry later or configure COINGECKO_DEMO_API_KEY")
+        data = response.json()["data"]
+        shares = data["market_cap_percentage"]
+        raw_values = [data["total_market_cap"]["usd"], data["updated_at"], *(shares[key] for key in ("btc", "usdt", "usdc"))]
+        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in raw_values):
+            raise ValueError("Market share feed contains non-numeric values")
+        total = float(data["total_market_cap"]["usd"])
+        btc, usdt, usdc = (float(shares[key]) for key in ("btc", "usdt", "usdc"))
+        if not all(math.isfinite(v) and 0 < v < 100 for v in (btc, usdt, usdc)):
+            raise ValueError("Missing BTC, USDT or USDC market share")
+        stable = usdt + usdc
+        remaining = 100. - btc - stable
+        return self._decode_snapshot(asdict(DominanceSnapshot(
+            timestamp=float(data["updated_at"]), btc_dom=btc, stable_dom=stable,
+            alt_dom=remaining, total_market_cap=total, btc_market_cap=total * btc / 100.,
+            stable_market_cap=total * stable / 100., alt_market_cap=total * remaining / 100.)))
 
-        return DominanceContext(current=current, history=history)
+    def get_dominance(self, force_refresh: bool = False) -> Optional[DominanceSnapshot]:
+        with self._lock:
+            cached = self._load_cache()
+            if cached and not force_refresh:
+                self.last_error = None
+                return cached
+            if time.monotonic() < self._retry_after:
+                return cached
+            try:
+                snapshot = self._fetch_global()
+            except (requests.RequestException, ValueError, KeyError, TypeError, OverflowError) as exc:
+                self.last_error = (str(exc) if isinstance(exc, ValueError) and not isinstance(exc, requests.RequestException)
+                                   else "Market data could not be read; check the connection and retry")
+                self._retry_after = time.monotonic() + 60.
+                logger.warning("Dominance unavailable: %s", self.last_error)
+                return cached
+            self.last_error = None
+            self._retry_after = 0.
+            self._save_cache(snapshot)
+            self._append_to_history(snapshot)
+            return snapshot
 
     def _append_to_history(self, snapshot: DominanceSnapshot) -> None:
-        """Append snapshot to historical data file."""
+        """Append new source observations; never rewrite legacy history."""
         try:
-            history_file = self.cache_dir / "dominance_history.json"
-            history: List[Dict] = []
-
-            if history_file.exists():
-                with open(history_file, "r") as f:
-                    history = json.load(f)
-
-            # Avoid duplicates (same hour)
-            last_ts = history[-1]["timestamp"] if history else 0
-            if snapshot.timestamp - last_ts < 3600:  # 1 hour min between entries
+            previous = None
+            if self.history_file.exists():
+                with self.history_file.open(encoding="utf-8") as history:
+                    for line in history:
+                        try:
+                            previous = json.loads(line)["timestamp"]
+                        except (ValueError, KeyError, TypeError):
+                            continue
+            if previous is not None and snapshot.timestamp - float(previous) < 3600:
                 return
+            with self.history_file.open("a", encoding="utf-8") as history:
+                history.write(json.dumps(asdict(snapshot)) + "\n")
+        except (OSError, ValueError, TypeError):
+            logger.warning("Could not append dominance observation history")
 
-            history.append(
-                {
-                    "timestamp": snapshot.timestamp,
-                    "btc_dom": snapshot.btc_dom,
-                    "stable_dom": snapshot.stable_dom,
-                    "alt_dom": snapshot.alt_dom,
-                    "total_market_cap": snapshot.total_market_cap,
-                    "btc_market_cap": snapshot.btc_market_cap,
-                    "stable_market_cap": snapshot.stable_market_cap,
-                    "alt_market_cap": snapshot.alt_market_cap,
-                }
-            )
-
-            # Keep only last 30 days
-            cutoff = time.time() - (30 * 24 * 60 * 60)
-            history = [h for h in history if h["timestamp"] >= cutoff]
-
-            with open(history_file, "w") as f:
-                json.dump(history, f, indent=2)
-
-        except Exception as e:
-            logger.debug("Failed to append to history: %s", e)
+    def get_dominance_context(self, lookback_days: int = 7) -> Optional[DominanceContext]:
+        with self._lock:
+            current = self.get_dominance()
+            if current is None:
+                return None
+            history = []
+            cutoff = time.time() - max(0, lookback_days) * 86400
+            try:
+                with self.history_file.open(encoding="utf-8") as source:
+                    for line in source:
+                        try:
+                            observation = self._decode_snapshot(json.loads(line), fresh=False)
+                            if cutoff <= observation.timestamp < current.timestamp:
+                                history.append(observation)
+                        except (ValueError, TypeError, KeyError):
+                            continue
+            except OSError:
+                pass
+            return DominanceContext(current=current, history=history)
 
 
-# Module-level singleton for convenience
 _service: Optional[DominanceService] = None
+_service_lock = threading.Lock()
 
 
 def get_dominance_service(api_key: Optional[str] = None) -> DominanceService:
-    """Get or create the singleton DominanceService instance."""
     global _service
-    if _service is None:
-        _service = DominanceService(api_key=api_key)
-    return _service
+    with _service_lock:
+        if _service is None:
+            _service = DominanceService(api_key=api_key)
+        return _service
 
 
 def get_current_dominance() -> Optional[DominanceSnapshot]:
-    """Convenience function to get current dominance metrics."""
     return get_dominance_service().get_dominance()
 
 
 def get_dominance_for_macro() -> Tuple[float, float, float]:
     """Return fresh observed percentages; unavailable evidence is never zero."""
-    snapshot = get_current_dominance()
+    return dominance_values(get_current_dominance())
+
+
+def dominance_values(snapshot) -> Tuple[float, float, float]:
+    """Validate one captured observation so values and expiry share ownership."""
     try:
         if snapshot is None:
             raise ValueError("missing snapshot")

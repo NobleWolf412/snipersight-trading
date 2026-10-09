@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useFreshFeed } from './useFreshFeed';
 import { api } from '@/utils/api';
 
 // Public shape of the regime hook's return value.
@@ -9,6 +10,13 @@ export type Visibility = 'HIGH' | 'MEDIUM' | 'LOW' | 'VERY_LOW';
 export type RegimeColor = 'green' | 'blue' | 'yellow' | 'orange' | 'red';
 
 export interface MarketRegimeLensProps {
+  retry: () => void;
+  loading: boolean;
+  error?: string;
+  observedAt?: string;
+  expiresAt?: string;
+  dominanceSource?: string;
+  dominanceObservedAt?: string;
   regimeLabel: RegimeLabel;
   visibility: Visibility;
   color?: RegimeColor;
@@ -31,36 +39,13 @@ export interface MarketRegimeLensProps {
 }
 
 export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegimeLensProps {
-  const [data, setData] = useState<any | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    let busy = false;
-    let expiry: ReturnType<typeof setTimeout> | undefined;
-    const refresh = async () => {
-      if (busy) return;
-      busy = true;
-      try {
-        const res = await api.getMarketRegime();
-        if (!mounted) return;
-        clearTimeout(expiry);
-        const value = res.data as any;
-        const expires = Date.parse(value?.expires_at ?? '');
-        if (value?.dimensions && Date.now() < expires) {
-          setData(value);
-          expiry = setTimeout(() => setData(null), expires - Date.now());
-        } else setData(null);
-      } catch { if (mounted) setData(null); }
-      finally { busy = false; }
-    };
-    void refresh();
-    const interval = setInterval(() => { void refresh(); }, 60_000);
-    return () => { mounted = false; clearInterval(interval); clearTimeout(expiry); };
-  }, []);
+  const { data, loading, error, retry } = useFreshFeed<any>(() => api.getMarketRegime(), value =>
+    value?.dimensions && Date.parse(value.timestamp ?? '') <= Date.now() ? Date.parse(value.expires_at ?? '') : NaN);
 
   return useMemo<MarketRegimeLensProps>(() => {
     if (!data) {
       return {
+        retry, loading, error,
         regimeLabel: 'UNAVAILABLE',
         visibility: 'VERY_LOW',
         color: 'yellow',
@@ -77,8 +62,7 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
         previousUsdtDominance: undefined,
         previousAltDominance: undefined,
         guidanceLines: [
-          'Awaiting regime signal from backend',
-          'Favor conservative setups until visibility increases',
+          'Required regime evidence is unavailable; no mode advice is issued.',
         ],
         mode,
       };
@@ -93,6 +77,8 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
       : trend === 'down' || trend === 'strong_down' ? 'orange' : 'yellow';
     // Legacy property name retained for consumers; the measure includes all tracked stablecoins.
     return {
+      retry, loading, error, observedAt: data.timestamp, expiresAt: data.expires_at,
+      dominanceSource: data.dominance_source, dominanceObservedAt: data.dominance_observed_at,
       regimeLabel: composite,
       visibility,
       color,
@@ -117,5 +103,5 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
       ],
       mode,
     };
-  }, [data, mode]);
+  }, [data, mode, retry, loading, error]);
 }

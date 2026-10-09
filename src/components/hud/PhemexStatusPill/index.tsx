@@ -63,7 +63,9 @@ export interface PhemexClassifyResult {
 export function classifyPhemexHealth(
   health: PhemexHealth | null,
   isRunning: boolean,
+  error?: string | null,
 ): PhemexClassifyResult {
+  if (error) return { severity: 'amber', reasons: [`health unavailable: ${error}`] };
   if (!isRunning) return { severity: 'idle', reasons: ['session not running'] };
   if (!health) return { severity: 'idle', reasons: ['no data yet'] };
 
@@ -181,13 +183,16 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generationRef = useRef(0);
 
   const load = useCallback(async () => {
+    const generation = ++generationRef.current;
     try {
       const [healthData, statusData] = await Promise.all([
         liveTradingService.getPhemexHealth(),
-        liveTradingService.getStatus().catch(() => null),
+        liveTradingService.getStatus(),
       ]);
+      if (generation !== generationRef.current) return;
       setHealth(healthData as PhemexHealth);
       // LiveTradingStatus uses `status: 'running' | 'idle' | …`; the
       // earlier `is_running` shape was a stale fixture relic. Drive the
@@ -195,26 +200,27 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
       setIsRunning(statusData?.status === 'running');
       setError(null);
     } catch (e) {
+      if (generation !== generationRef.current) return;
       const msg = e instanceof Error ? e.message : 'healthz unreachable';
       setError(msg);
     }
   }, []);
 
   useEffect(() => {
-    load();
-    const tick = () => {
-      timerRef.current = setTimeout(async () => {
-        await load();
-        tick();
-      }, pollIntervalMs);
+    let disposed = false;
+    const tick = async () => {
+      await load();
+      if (!disposed) timerRef.current = setTimeout(tick, pollIntervalMs);
     };
-    tick();
+    void tick();
     return () => {
+      disposed = true;
+      generationRef.current++;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [load, pollIntervalMs]);
 
-  const { severity, reasons } = classifyPhemexHealth(health, isRunning);
+  const { severity, reasons } = classifyPhemexHealth(health, isRunning, error);
   const tooltip = error ? `Healthz error: ${error}` : reasons.join(' · ');
   const dot = severity === 'idle' ? '○' : '●';
 

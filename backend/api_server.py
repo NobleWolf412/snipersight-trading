@@ -1422,7 +1422,7 @@ async def get_trade_journal_endpoint(
             offset=offset,
         )
         aggregate = journal.aggregate()
-        return {"trades": trades, "total": journal.count(), "aggregate": aggregate}
+        return {"trades": trades, "total": journal.count(symbol=symbol, trade_type=trade_type, exit_reason=exit_reason, session_id=session_id, start_date=start_date, end_date=end_date), "aggregate": aggregate}
     except Exception as e:
         logger.error("Failed to fetch trade journal: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -1937,9 +1937,8 @@ async def get_fear_greed_index():
             raise HTTPException(status_code=502, detail="No data from Fear & Greed API")
 
         fng = data["data"][0]
-        value = int(fng.get("value", 50))
-        classification = fng.get("value_classification", "Neutral")
-        timestamp = fng.get("timestamp")
+        from backend.analysis.sentiment_evidence import parse_sentiment_observation
+        value, classification, observed_at = parse_sentiment_observation(fng)
 
         # Map value to bottom line text
         if value <= 24:
@@ -1975,11 +1974,7 @@ async def get_fear_greed_index():
             "sentiment": sentiment,
             "bottom_line": bottom_line,
             "risk_text": risk_text,
-            "timestamp": (
-                datetime.fromtimestamp(int(timestamp), tz=timezone.utc).isoformat()
-                if timestamp
-                else datetime.now(timezone.utc).isoformat()
-            ),
+            "timestamp": observed_at,
             "source": "alternative.me",
         }
 
@@ -1989,17 +1984,7 @@ async def get_fear_greed_index():
 
     except httpx.HTTPError as e:
         logger.error("Fear & Greed API request failed: %s", e)
-        # Return fallback neutral value on API failure
-        return {
-            "value": 50,
-            "classification": "Neutral",
-            "sentiment": "NEUTRAL",
-            "bottom_line": "Sentiment data unavailable. Trade based on price structure.",
-            "risk_text": "unknown market conditions",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "source": "fallback",
-            "error": str(e),
-        }
+        raise HTTPException(status_code=503, detail="Sentiment data unavailable; retry later") from e
     except Exception as e:
         logger.error("Fear & Greed processing failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Fear & Greed error: {str(e)}") from e

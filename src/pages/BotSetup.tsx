@@ -1,3 +1,4 @@
+import { readConfigDraft } from '@/utils/configDraft';
 /**
  * BotSetup — Phase 3g.i.a (HUD rewrite)
  *
@@ -58,7 +59,7 @@
 import { BotStrategySettings } from '@/components/hud/BotStrategySettings';
 import { useScannerRecommendation } from '@/hooks/useScannerRecommendation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Chip,
   FooterStatus,
@@ -377,7 +378,7 @@ export function BotSetup() {
   // and MUST NOT drive bot production behavior. `scannerModes` is read
   // to look up the per-mode min_confluence_score for read-only display.
   const { botConfig, setBotConfig, scannerModes } = useScanner();
-  const [config, setConfig] = useState<LiveConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<LiveConfig>(() => readConfigDraft('sniper.live.draft.v1', DEFAULT_CONFIG));
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -435,8 +436,11 @@ export function BotSetup() {
   const canStart = (preflight?.ok ?? false) && ackChecked;
 
   const handleSave = () => {
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1600);
+    try {
+      localStorage.setItem('sniper.live.draft.v1', JSON.stringify(config));
+      setSavedFlash(true); setError(null);
+      setTimeout(() => setSavedFlash(false), 1600);
+    } catch { setError('Draft could not be saved in this browser.'); }
   };
 
   const handleStart = async () => {
@@ -500,12 +504,6 @@ export function BotSetup() {
   const regimeText = recommendation?.regime?.composite
     ? recommendation.regime.composite.replace(/_/g, ' ')
     : 'market context unavailable';
-
-  // Synthetic backtest stats (90d). Marked synthetic in the panel header.
-  const backtestStats = useMemo(
-    () => ({ pnl: '+34.8%', sharpe: '1.84', win: '62%', maxDd: '-8.4%' }),
-    [],
-  );
 
   return (
     <div className="page">
@@ -1140,51 +1138,10 @@ export function BotSetup() {
             </div>
           </SectionPanel>
 
-          {/* BACKTEST — synthetic placeholder */}
-          <SectionPanel
-            num="05"
-            title="Backtest"
-            desc="90-day historical simulation"
-            right={<Chip kind="amber">◌ SYNTHETIC</Chip>}
-          >
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 10,
-                marginBottom: 10,
-              }}
-            >
-              <div className="metric-tile">
-                <div className="metric-label">PnL</div>
-                <div className="metric-value" style={{ color: 'var(--green-soft)' }}>
-                  {backtestStats.pnl}
-                </div>
-              </div>
-              <div className="metric-tile">
-                <div className="metric-label">Sharpe</div>
-                <div className="metric-value" style={{ color: 'var(--accent)' }}>
-                  {backtestStats.sharpe}
-                </div>
-              </div>
-              <div className="metric-tile">
-                <div className="metric-label">Win Rate</div>
-                <div className="metric-value">{backtestStats.win}</div>
-              </div>
-              <div className="metric-tile">
-                <div className="metric-label">Max DD</div>
-                <div className="metric-value" style={{ color: 'var(--red-2)' }}>
-                  {backtestStats.maxDd}
-                </div>
-              </div>
-            </div>
-            <button
-              className="btn"
-              style={{ width: '100%', padding: '8px', fontSize: 11 }}
-              disabled
-            >
-              ▶ RUN BACKTEST · NOT YET WIRED
-            </button>
+          <SectionPanel num="05" title="Strategy validation" desc="Historical and forward review" right={<Chip>UNVALIDATED</Chip>}>
+            <p>Historical strategy backtests are unavailable because replay lacks the required historical macro inputs. No performance estimate is supplied.</p>
+            <p><Link to="/training/replay">Inspect historical candles in Replay</Link></p>
+            <p><Link to="/training/range#setup">Configure a paper session for forward testing</Link></p>
           </SectionPanel>
         </div>
 
@@ -1432,7 +1389,7 @@ export function BotSetup() {
         </div>
       </div>
 
-      <FooterStatus latency={28} build={`${now.toISOString().slice(0, 10)}`} />
+      <FooterStatus />
     </div>
   );
 }
