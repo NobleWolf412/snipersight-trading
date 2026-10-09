@@ -1,5 +1,3 @@
-import { api } from './api';
-
 const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE
   ? (import.meta as any).env.VITE_API_BASE
   : '/api';

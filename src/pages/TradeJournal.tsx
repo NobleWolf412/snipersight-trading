@@ -1160,8 +1160,8 @@ export function TradeJournal() {
                   borderRadius: 4,
                   fontFamily: 'JetBrains Mono,monospace',
                   fontSize: 10,
-                  outline: 'none',
                 }}
+                aria-label="Symbol"
                 placeholder="// SYMBOL"
                 value={symbolInput}
                 onChange={e => setSymbolInput(e.target.value.toUpperCase())}
@@ -1175,8 +1175,8 @@ export function TradeJournal() {
                   borderRadius: 4,
                   fontFamily: 'JetBrains Mono,monospace',
                   fontSize: 10,
-                  outline: 'none',
                 }}
+                aria-label="Trade type"
                 value={typeFilter}
                 onChange={e => setTypeFilter(e.target.value)}
               >
@@ -1194,8 +1194,8 @@ export function TradeJournal() {
                   borderRadius: 4,
                   fontFamily: 'JetBrains Mono,monospace',
                   fontSize: 10,
-                  outline: 'none',
                 }}
+                aria-label="Exit reason"
                 value={exitFilter}
                 onChange={e => setExitFilter(e.target.value)}
               >
@@ -1215,8 +1215,8 @@ export function TradeJournal() {
                   borderRadius: 4,
                   fontFamily: 'JetBrains Mono,monospace',
                   fontSize: 10,
-                  outline: 'none',
                 }}
+                aria-label="From date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
               />
@@ -1230,8 +1230,8 @@ export function TradeJournal() {
                   borderRadius: 4,
                   fontFamily: 'JetBrains Mono,monospace',
                   fontSize: 10,
-                  outline: 'none',
                 }}
+                aria-label="To date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
               />
@@ -1250,7 +1250,7 @@ export function TradeJournal() {
                 RESET
               </button>
             </div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12 }}>
+            <div className="journal-pagination">
               <button className="btn" disabled={loading || !(filters.offset ?? 0)} onClick={() => {
                 const f = { ...filters, offset: Math.max(0, (filters.offset ?? 0) - 200) }; setFilters(f); void load(f);
               }}>Previous</button>

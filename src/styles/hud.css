@@ -247,30 +247,34 @@ body{min-height:100vh;overflow-x:hidden;position:relative;}
    CSS can target the cluster at mobile widths. */
 .topbar-right{display:flex;align-items:center;gap:10px;}
 
-/* 3z.g: hamburger + drawer — hidden on desktop. */
-.hamburger{display:none;background:transparent;border:1px solid var(--border-soft);border-radius:8px;padding:6px;cursor:pointer;color:var(--fg);transition:background 120ms,border-color 120ms;}
-.hamburger:hover{background:rgba(255,255,255,.04);border-color:var(--accent-border);}
-.hamburger:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-
-.mobile-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:998;opacity:0;pointer-events:none;transition:opacity 180ms ease;}
-.mobile-drawer-backdrop.open{opacity:1;pointer-events:auto;}
-
-.mobile-drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,82vw);background:var(--bg,#0a0a0a);border-left:1px solid var(--border-soft);z-index:999;transform:translateX(100%);transition:transform 220ms ease;display:flex;flex-direction:column;padding:16px 18px 22px;box-shadow:-10px 0 30px rgba(0,0,0,.5);}
-.mobile-drawer.open{transform:translateX(0);}
+/* Navigation uses a native modal dialog so closed links cannot receive focus. */
+.topbar .brand{text-decoration:none;color:inherit;flex-shrink:0;}
+.brand-name,.brand-sub{display:block;}
+.nav a{min-height:44px;display:inline-flex;align-items:center;}
+.hamburger{display:none;align-items:center;justify-content:center;width:44px;height:44px;background:transparent;border:1px solid var(--border-soft);border-radius:8px;cursor:pointer;color:var(--fg);}
+.hamburger:hover{background:var(--card);}
+.mobile-drawer{position:fixed;inset:0 0 0 auto;margin:0;width:min(340px,90vw);height:100dvh;max-height:100dvh;max-width:90vw;background:var(--bg);color:var(--fg);border:1px solid var(--border-soft);padding:20px;overflow-y:auto;}
+.mobile-drawer:not([open]){display:none;}
+.mobile-drawer[open]{display:flex;flex-direction:column;}
+.mobile-drawer::backdrop{background:oklch(0.12 0.008 120 / .8);}
 .mobile-drawer-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--border-soft);margin-bottom:14px;}
-.mobile-drawer-title{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg-3);}
-.mobile-drawer-close{background:transparent;border:none;color:var(--fg-2);font-size:22px;cursor:pointer;line-height:1;padding:0 6px;}
-.mobile-drawer-close:hover{color:var(--fg);}
+.mobile-drawer-title{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--fg-2);}
+.mobile-drawer-close{width:44px;height:44px;background:transparent;border:1px solid var(--border-soft);border-radius:8px;color:var(--fg);font-size:24px;cursor:pointer;}
 .mobile-drawer-nav{display:flex;flex-direction:column;gap:4px;margin-bottom:18px;}
-.mobile-drawer-nav a{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-3);padding:10px 12px;border-radius:8px;text-decoration:none;border:1px solid transparent;}
-.mobile-drawer-nav a:hover{color:var(--fg);background:rgba(255,255,255,.04);}
+.mobile-drawer-nav a{display:flex;align-items:center;min-height:48px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--fg-2);padding:10px 12px;border-radius:8px;text-decoration:none;border:1px solid transparent;}
+.mobile-drawer-nav a:hover{color:var(--fg);background:var(--card);}
 .mobile-drawer-nav a.active{color:var(--accent);border-color:var(--accent-border);background:var(--accent-bg);}
 .mobile-drawer-aux{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:14px;border-top:1px solid var(--border-soft);}
+@media(max-width:1120px){
+  .topbar{flex-wrap:nowrap;padding:10px 0 16px;}
+  .topbar > .nav,.topbar-right{display:none;}
+  .hamburger{display:inline-flex;}
+}
 
 /* Desktop layout — wide tablet wrap point (existing). */
 @media (max-width: 980px){
   .shell{padding:14px 14px 80px;}
-  .topbar{flex-wrap:wrap;}
+  .topbar{flex-wrap:nowrap;}
   .nav{order:3;width:100%;overflow-x:auto;padding-bottom:4px;}
   .nav a{flex-shrink:0;}
   .layout-grid{grid-template-columns:1fr;}

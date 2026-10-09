@@ -1,0 +1,53 @@
+/* Product surfaces share a quiet, readable shell. Landing keeps its brand treatment. */
+.workspace {
+  --fg-3: oklch(0.78 0.012 150);
+  --fg-4: oklch(0.72 0.012 150);
+}
+.workspace .panel {
+  background: var(--bg-2);
+  box-shadow: none;
+}
+.workspace .panel::before,
+.workspace .panel-accent::after { display: none; }
+.workspace .page-title h1,
+.workspace .hud-glow,
+.workspace .hud-glow-amber,
+.workspace .hud-glow-red { text-shadow: none; }
+.workspace .page-title h1 { font-size: 28px; letter-spacing: .08em; }
+.workspace .page-title .sub { font-size: 12px; letter-spacing: .06em; line-height: 1.6; }
+.workspace .sec-title { letter-spacing: .08em; }
+.workspace .sec-title .dot { box-shadow: none; }
+.workspace .btn { min-height: 44px; letter-spacing: .08em; }
+.workspace .btn-icon { min-width: 44px; }
+.workspace .btn-cyan { background: var(--cyan-bg, oklch(0.27 0.025 210)); box-shadow: none; }
+.workspace .btn-cyan:active { transform: none; }
+.workspace a:not(.btn):not(.active):not(.brand) { color: var(--fg-2); }
+.workspace .nav a { letter-spacing: .06em; }
+.workspace .page-head,
+.workspace .page-title { min-width: 0; }
+.workspace main { min-width: 0; }
+.workspace .journal-filter-row :is(input, select) { min-height: 44px; min-width: 0; width: 100%; }
+.journal-pagination { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px; }
+.journal-pagination span { flex-basis: 100%; order: 4; color: var(--fg-2); font-size: 13px; line-height: 1.6; }
+.workspace .page-title > div:last-child { min-width: 0; overflow-wrap: anywhere; }
+
+.skip-link {
+  position: fixed; top: 12px; left: 12px; z-index: 1100;
+  transform: translateY(-200%); padding: 12px 18px;
+  background: var(--bg-2); color: var(--fg); border: 2px solid var(--accent);
+  border-radius: 8px;
+}
+.skip-link:focus { transform: translateY(0); }
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 3px;
+}
+@media (max-width: 700px) {
+  .workspace .page-title h1 { font-size: 24px; }
+  .workspace .sec-head { flex-wrap: wrap; gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace *, .workspace *::before, .workspace *::after,
+  .tactical-bg *, .scope-reticle * {
+    animation: none !important; transition: none !important;
+  }
+}

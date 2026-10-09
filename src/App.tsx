@@ -1,26 +1,12 @@
 import { useBrowserPreferences } from '@/services/browserPreferences';
-// App shell — Phase 2e wiring + Phase 6 sub-step 1 archive + Phase 7 sub-step 2 sonner eject.
-// Replaced the legacy <TopBar /> with the new HUD <Topbar />, which renders
-// the persistent <PhemexStatusPill /> in its right rail. The legacy
-// <TacticalBackground /> is replaced by <TacticalBgDom /> (CSS-driven layers).
-//
-// Phase 6 sub-step 1: legacy routes dropped (`/scanner/setup`, `/scanner/status`,
-// `/scan`, `/results`, `/market`, `/htf`). These pointed to the pre-rewrite
-// pages (ScannerSetup, ScannerStatus, ScanResults, MarketOverview,
-// HTFOpportunities) which are slated for archive in sub-step 2. Their
-// functions are now subsumed by `/scanner` and `/intel` in the HUD-rebuilt
-// page set.
-//
-// Phase 7 sub-step 2: shadcn <Toaster /> removed. Sonner had zero active
-// callers in the post-Phase-6 tree (the only consumer, `use-require-wallet`,
-// was an orphan that got archived alongside use-toast and sonner.tsx).
-// In-app banner notifications will be reintroduced as a HUD `useFlash` hook
-// when a real consumer exists; no point mounting a no-op toast layer.
-
+// Route pages load on demand; shell imports stay explicit.
 import { Suspense, lazy } from 'react';
-import { Routes, Route, Navigate, Link } from 'react-router-dom';
+import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
-import { Topbar, TacticalBgDom, PhemexStatusPill, ActiveModeBadge } from '@/components/hud';
+import { Topbar } from '@/components/hud/Topbar';
+import { TacticalBgDom } from '@/components/hud/TacticalBgDom';
+import { PhemexStatusPill } from '@/components/hud/PhemexStatusPill';
+import { ActiveModeBadge } from '@/components/hud/ActiveModeBadge';
 import { ActiveScanBeacon } from '@/components/ActiveScanBeacon/ActiveScanBeacon';
 
 const Landing = lazy(() => import('@/pages/Landing').then((m) => ({ default: m.Landing })));
@@ -54,7 +40,7 @@ function LoadingFallback() {
     <div
       style={{
         minHeight: '100vh',
-        width: '100vw',
+        width: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -62,7 +48,7 @@ function LoadingFallback() {
       }}
     >
       <div className="hud" style={{ fontSize: 13, color: 'var(--accent)' }}>
-        Loading tactical systems…
+        Loading workspace…
       </div>
     </div>
   );
@@ -70,13 +56,15 @@ function LoadingFallback() {
 
 function App() {
   const preferences = useBrowserPreferences();
+  const { pathname } = useLocation();
   return (
     <>
       {preferences.tacticalBackground && <TacticalBgDom />}
       {preferences.reticle && <SniperReticle />}
-      <div className="shell">
+      <a className="skip-link" href="#workspace-content">Skip to content</a>
+      <div className={pathname === '/' ? 'shell' : 'shell workspace'}>
         <Topbar modeSlot={<ActiveModeBadge />} rightSlot={<PhemexStatusPill />} />
-        <main>
+        <main id="workspace-content" tabIndex={-1}>
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/" element={<Landing />} />

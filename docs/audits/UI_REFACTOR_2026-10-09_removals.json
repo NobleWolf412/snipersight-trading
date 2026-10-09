@@ -1,0 +1,34 @@
+[
+  {
+    "path": "src/hooks/useTelemetry.ts",
+    "sha256": "2abbcfaa54567682c1d9fe863de33f7ab45603c8ad9c30c79c07a406b560b6c7",
+    "bytes": 1727,
+    "lines": 59,
+    "provenance": "8e8f01e initial scaffold; no current code consumers after root provider retirement",
+    "disposition": "delete tracked source; Git retains history"
+  },
+  {
+    "path": "src/utils/notificationPolling.ts",
+    "sha256": "f439a0c590a9f403bf3e7f84934e2d07a7909205cd61f42c9de50486b2de41df",
+    "bytes": 7382,
+    "lines": 272,
+    "provenance": "8e8f01e initial scaffold; no current code consumers after root provider retirement",
+    "disposition": "delete tracked source; Git retains history"
+  },
+  {
+    "path": "src/utils/format.ts",
+    "sha256": "9d4633daba3b861e8bba0f973e4b1d42e7a86726597396c1bf2f1bd2deabf1b8",
+    "bytes": 268,
+    "lines": 7,
+    "provenance": "8e8f01e initial scaffold; no current code consumers after root provider retirement",
+    "disposition": "delete tracked source; Git retains history"
+  },
+  {
+    "path": "src/lib/queryClient.ts",
+    "sha256": "a7c534242ea4a9e14fb5cc39fd3938d515df51739ef445b42cc5abb9c759b378",
+    "bytes": 323,
+    "lines": 12,
+    "provenance": "8e8f01e initial scaffold; no current code consumers after root provider retirement",
+    "disposition": "delete tracked source; Git retains history"
+  }
+]

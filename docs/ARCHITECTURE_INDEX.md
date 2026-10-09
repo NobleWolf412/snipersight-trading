@@ -304,3 +304,28 @@ selection with allowed modes. Each new scan resolves a complete playbook; pendin
 and open trades retain their originating mode. Live/testnet adaptive is disabled.
 The [integration evidence](audits/MODE_REGIME_INTEGRATION_2026-10-09.json) records
 checks, intentional contract drift and forward-paper limitations.
+
+## UI simplification foundation — 2026-10-09
+
+The [UI audit and structure proposal](audits/UI_REFACTOR_2026-10-09.md) records
+screen intent, current owners, a bounded implementation and remaining migrations.
+The [development dashboard](audits/UI_REFACTOR_2026-10-09.html) is an offline
+progress artifact backed by the [evidence ledger](audits/UI_REFACTOR_2026-10-09.json).
+It adds no product polling or trading reward behavior.
+
+[Topbar](../src/components/hud/Topbar.tsx) now owns native-dialog navigation,
+keyboard restoration and active-page semantics. [App](../src/App.tsx) imports
+shell components directly and owns the unique workspace skip target.
+[Workspace styles](../src/styles/workspace.css) supply quiet product surfaces,
+shared focus visibility and touch sizing. Browser appearance defaults are quiet;
+explicit saved preferences remain authoritative. Journal filters have accessible
+names and wrapping pagination; diagnostic links use actual BrowserRouter routes.
+
+Root wallet/query providers were retired after consumer checks. Four orphan
+modules and two direct dependencies were removed with a
+[hashed manifest](audits/UI_REFACTOR_2026-10-09_removals.json). Archive-dependent
+providers, authored lessons, generated contracts and runtime records remain.
+Scanner/session/replay/accounting owners and backend trading configuration did
+not change in this pass. Whole-app accessibility, unused-code elimination and
+proposed screen/feature migrations remain open; the dashboard credits only the
+scoped checkpoints actually verified.

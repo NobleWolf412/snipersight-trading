@@ -480,7 +480,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
             {bottleneck.msg}
           </div>
           <a
-            href={`#${bottleneck.href}`}
+            href={bottleneck.href}
             className="btn"
             style={{
               padding: '5px 12px',
