@@ -1,7 +1,19 @@
 // Offline development artifact; no app imports, API requests or runtime-store access.
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 const base = 'docs/audits/UI_REFACTOR_2026-10-09';
 const ledger = JSON.parse(fs.readFileSync(base + '.json', 'utf8'));
+const outcomeIds = new Set();
+for (const outcome of ledger.progress.outcomes) {
+  const finding = ledger.findings.find(item => item.id === outcome.id);
+  if (outcomeIds.has(outcome.id) || finding?.status !== 'fixed' ||
+      !outcome.verified || !Number.isInteger(outcome.points) || outcome.points !== 10 ||
+      !/^[0-9a-f]{40}$/.test(outcome.commit)) {
+    throw new Error('Invalid or duplicate committed outcome: ' + outcome.id);
+  }
+  execFileSync('git', ['merge-base', '--is-ancestor', outcome.commit, 'HEAD'], { stdio: 'pipe', windowsHide: true });
+  outcomeIds.add(outcome.id);
+}
 const data = JSON.stringify(ledger).replaceAll('<', '\\u003c');
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -13,15 +25,15 @@ const html = `<!doctype html>
 @media(max-width:800px){.layout{grid-template-columns:1fr;gap:28px}.side{border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:24px}.wrap{padding:24px 20px 44px}.score{min-width:120px}h1{font-size:30px}}
 @media(max-width:480px){header{display:block}.score{text-align:left;display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding-top:0}.score .note{grid-column:1/-1}.level button{grid-template-columns:28px minmax(0,1fr);gap:10px}.state{grid-column:2;justify-self:start}.detail{padding-left:38px}.progress-label{flex-wrap:wrap}}
 </style></head>
-<body><div class="wrap"><header><div><div class="eyebrow">SNIPERSIGHT / DEVELOPMENT / 09 OCT 2026</div><h1>Less noise. More purpose.</h1><p class="intro">A refactor trail with evidence at every checkpoint.</p></div><div class="score"><div class="eyebrow">BLOAT REMOVAL SCORE</div><strong id="score"></strong><div class="note">Verified changes only</div></div></header>
+<body><div class="wrap"><header><div><div class="eyebrow">SNIPERSIGHT / DEVELOPMENT / 09 OCT 2026</div><h1>Less noise. More purpose.</h1><p class="intro">A refactor trail with evidence at every checkpoint.</p></div><div class="score"><div class="eyebrow">BLOAT REMOVAL SCORE</div><strong id="score"></strong><div class="note">Verified, committed outcomes only</div></div></header>
 <div class="layout"><main><h2>Levels to clear</h2><div class="progress-label"><span id="progress"></span><span>Next: focus the screens</span></div><div class="track" role="progressbar" aria-label="Cleared refactor levels" aria-valuemin="0" id="bar"><span id="fill"></span></div><div class="toolbar" role="group" aria-label="Filter levels"><button aria-pressed="true" data-filter="all">All levels</button><button aria-pressed="false" data-filter="cleared">Cleared</button><button aria-pressed="false" data-filter="planned">Next work</button></div><div id="levels"></div>
 <details><summary>Audit findings and remaining work</summary><p class="note">Fixed means the named change was verified. Partial means broader work remains.</p><div id="findings"></div></details></main>
-<aside class="side"><section><h2>Evidence, not estimates</h2><dl class="stats" id="stats"></dl><p class="note">Gross removed source is separate from code added for accessibility, tooling and this dashboard.</p></section><section><h2>Clean code milestones</h2><ul class="milestone" id="milestones"></ul></section><section><h2>Score rules</h2><p class="note">10 points per confirmed orphan module. 5 per unused root provider retired. 10 per unused direct dependency removed. No points for moving files, deleting comments or changing trading thresholds.</p></section><section><h2>Open the evidence</h2><div class="actions"><a href="UI_REFACTOR_2026-10-09.md">Audit &amp; structure</a><a href="UI_REFACTOR_2026-10-09.json">Task ledger</a><a href="UI_REFACTOR_2026-10-09_removals.json">Removal manifest</a><a href="UI_REFACTOR_2026-10-09_inventory.json">Import inventory</a></div></section></aside></div>
+<aside class="side"><section><h2>Evidence, not estimates</h2><dl class="stats" id="stats"></dl><p class="note">Gross removed source is separate from code added for accessibility, tooling and this dashboard.</p></section><section><h2>Clean code milestones</h2><ul class="milestone" id="milestones"></ul></section><section><h2>Score rules</h2><p class="note">10 points per distinct verified, committed finding fixed. A01, A02, A03 and A15 count once each. Related modules, providers and dependencies form one cleanup outcome. Line counts and asset sizes earn no points. The original 70-point checkpoint is preserved in the ledger as historical evidence.</p></section><section><h2>Open the evidence</h2><div class="actions"><a href="UI_REFACTOR_2026-10-09.md">Audit &amp; structure</a><a href="UI_REFACTOR_2026-10-09.json">Task ledger</a><a href="UI_REFACTOR_2026-10-09_removals.json">Removal manifest</a><a href="UI_REFACTOR_2026-10-09_inventory.json">Import inventory</a></div></section></aside></div>
 <footer>Saved development checkpoint. Rebuild from the ledger with node scripts/build_refactor_dashboard.mjs. Planned levels are not completed refactors. No runtime connections, trading points or automatic completion awards.</footer></div>
 <script type="application/json" id="ledger">${data}</script><script>
 const ledger=JSON.parse(document.getElementById('ledger').textContent);
 const cleared=ledger.levels.filter(l=>l.status==='cleared').length;
-const score=ledger.removals.files*10+ledger.removals.providers*5+ledger.removals.directDependencies.length*10;
+const score=ledger.progress.outcomes.reduce((total,outcome)=>total+outcome.points,0);
 document.getElementById('score').textContent=score+' pts';
 document.getElementById('progress').textContent=cleared+' of '+ledger.levels.length+' bounded checkpoints cleared';
 const bar=document.getElementById('bar');bar.setAttribute('aria-valuemax',ledger.levels.length);bar.setAttribute('aria-valuenow',cleared);document.getElementById('fill').style.width=(cleared/ledger.levels.length*100)+'%';

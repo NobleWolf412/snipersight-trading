@@ -215,7 +215,8 @@ node scripts/audit_frontend.mjs --output docs/audits/UI_REFACTOR_2026-10-09_inve
 | 06: Verify complete journeys | Responsive/accessibility/regression acceptance | All route states, keyboard, zoom, reduced motion, browser matrix | Planned |
 
 Score = 10 per confirmed orphan module + 5 per unnecessary root provider retired
-+ 10 per unused direct dependency removed. Current score: **70 points**.
++ 10 per unused direct dependency removed. Recorded checkpoint score: **70 points**
+(historical calculation; superseded by the correction below).
 No points for comment deletion, moving code, generated files, test weakening,
 historical records, fabricated measurements or strategy changes. A level only
 clears when its stated gate is met. A new phase can reopen a level if evidence fails.
@@ -223,6 +224,23 @@ clears when its stated gate is met. A new phase can reopen a level if evidence f
 Milestones: “one scanner owner retained,” “keyboard-safe navigation,” “orphan
 batch verified,” “charts load with their routes.” The dashboard reads a saved
 ledger; it is not a real-time CI watcher and does not auto-award completion.
+
+### Scoring correction after the PRODUCT.md refresh
+
+The original 70-point calculation above double-counted related cleanup components.
+The refreshed PRODUCT.md scores a change once and requires committed evidence.
+The dashboard now awards 10 points per distinct verified, committed finding fixed:
+A01 (navigation), A02 (diagnostic route), A03 (Journal accessibility/layout), and
+A15 (the combined orphan/provider/dependency cleanup). **Current score: 40 points.**
+All four fixes and their original evidence are in commit
+`68ea66972457a16ce9586240258523e026e64fe9`. Source-line and asset-size totals remain
+descriptive metrics and earn no points. This correction earns no additional points.
+The three bounded levels retain their original gates; the broader levels remain
+planned. Original review and checkpoint evidence remain historical.
+
+The feature-directory layout earlier in this proposal is optional, not a migration
+requirement. Under PRODUCT.md, split oversized screens in place first; move a
+directory only when a concrete ownership or maintenance problem justifies it.
 
 ## Verification
 

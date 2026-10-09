@@ -329,3 +329,11 @@ Scanner/session/replay/accounting owners and backend trading configuration did
 not change in this pass. Whole-app accessibility, unused-code elimination and
 proposed screen/feature migrations remain open; the dashboard credits only the
 scoped checkpoints actually verified.
+
+Product intent follow-up: [PRODUCT.md](../PRODUCT.md) owns users, tone and design
+principles; this index remains the map of implemented mechanics. The dashboard's
+[scoring correction](audits/UI_REFACTOR_2026-10-09.md#scoring-correction-after-the-productmd-refresh)
+counts four verified fixes from commit `68ea669` once each, for 40 points. The
+original 70-point calculation is retained as historical evidence in the ledger.
+Feature-directory moves are optional and require a concrete maintenance problem;
+split screens in place first. These rules affect development tracking only.

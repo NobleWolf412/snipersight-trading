@@ -1,5 +1,42 @@
 {
   "schemaVersion": 1,
+  "progress": {
+    "policy": "10 points per distinct verified, committed finding fixed. Related module, provider and dependency removals form one cleanup outcome. Metrics do not earn points.",
+    "evidenceCommit": "68ea66972457a16ce9586240258523e026e64fe9",
+    "outcomes": [
+      {
+        "id": "A01",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "A02",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "A03",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "A15",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      }
+    ],
+    "historicalCheckpoint": {
+      "score": 70,
+      "commit": "68ea66972457a16ce9586240258523e026e64fe9",
+      "formula": "4 orphan modules × 10 + 2 providers × 5 + 2 direct dependencies × 10",
+      "status": "Superseded by PRODUCT.md outcome scoring; retained as historical evidence."
+    },
+    "correction": "40 points for four independently verified fixes already committed in 68ea669. No additional award for this documentation or scoring correction."
+  },
   "date": "2026-10-09",
   "scope": "UI audit, refactor proposal and bounded foundation changes. Remaining screen and feature migrations are planned. Existing working-tree edits and runtime records preserved.",
   "removals": {
