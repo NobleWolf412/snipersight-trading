@@ -23,3 +23,11 @@
   .scanner-results-grid { grid-template-columns: minmax(0, 1fr); padding: 12px; }
   .scanner-layout .sec-head { flex-wrap: wrap; gap: 12px; }
 }
+.scanner-run-panel { padding: 18px; margin-bottom: 18px; }
+.scanner-mode-summary { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr); gap: 8px 20px; }
+.scanner-mode-summary p { margin: 6px 0; line-height: 1.5; }
+.scanner-mode-summary > details, .scanner-mode-advice { grid-column: 1 / -1; }
+.scanner-mode-summary label, .scanner-history { display: grid; gap: 6px; }
+.scanner-mode-advice { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.scanner-history { margin: 16px 0; }
+@media (max-width: 600px) { .scanner-mode-summary { grid-template-columns: 1fr; } }

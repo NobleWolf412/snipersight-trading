@@ -71,7 +71,7 @@ export function ScanController({ onComplete }: { onComplete?: () => void }) {
         )}
 
         {/* Auto-scan toggle */}
-        <label
+        <button type="button" role="switch" aria-checked={autoScan} aria-label="Auto-scan" className="btn"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -117,7 +117,7 @@ export function ScanController({ onComplete }: { onComplete?: () => void }) {
           >
             auto-scan {autoScan ? 'on' : 'off'}
           </span>
-        </label>
+        </button>
 
         {/* Status chip — always one visible so the operator can always
             tell what the controller is doing at a glance. */}
