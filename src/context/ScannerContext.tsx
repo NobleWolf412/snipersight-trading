@@ -1,13 +1,13 @@
 /* @refresh skip */
-import { createContext, useContext, ReactNode, useEffect, useState, useCallback, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import type { SniperMode } from '@/types/sniperMode';
-import { scanRunService, scanIsBusy } from '@/services/scanRunService';
-import { api } from '@/utils/api';
-import type { ScannerMode } from '@/utils/api';
-import { liveTradingService, liveSessionNeedsAttention } from '@/services/liveTradingService';
+import { liveSessionNeedsAttention,liveTradingService } from '@/services/liveTradingService';
 import { paperTradingService } from '@/services/paperTradingService';
+import { scanIsBusy,scanRunService } from '@/services/scanRunService';
+import type { SniperMode } from '@/types/sniperMode';
+import type { ScannerMode } from '@/utils/api';
+import { api } from '@/utils/api';
+import { createContext,ReactNode,useCallback,useContext,useEffect,useRef,useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 export interface ScanConfig {
   exchange: string;
@@ -59,6 +59,7 @@ interface ScannerContextType {
   // creating a §11 "background activity" beacon that locked into
   // whatever localStorage said and could not be cleared by the UI.
   isBotActive: boolean;
+  isPaperBotActive: boolean;
   isTrainingActive: boolean;
   scannerModes: ScannerMode[];
   selectedMode: ScannerMode | null;
@@ -370,6 +371,7 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
         // would break the no-stale-state invariant the migration shim
         // restored.
         isBotActive,
+        isPaperBotActive: paperBotRunning,
         isTrainingActive,
         scannerModes,
         selectedMode,
