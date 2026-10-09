@@ -22,22 +22,22 @@
  * the returned window. We detect that case and surface a warning chip so
  * "marker missing" never looks like a render bug.
  */
-import { useEffect, useRef, useState } from 'react';
+import type { JournalTrade } from '@/services/tradeJournalService';
+import { api } from '@/utils/api';
 import {
-  createChart,
-  createSeriesMarkers,
-  CandlestickSeries,
-  ColorType,
-  type IChartApi,
-  type ISeriesApi,
-  type ISeriesMarkersPluginApi,
-  type SeriesMarker,
-  type Time,
+CandlestickSeries,
+ColorType,
+createChart,
+createSeriesMarkers,
+type IChartApi,
+type ISeriesApi,
+type ISeriesMarkersPluginApi,
+type SeriesMarker,
+type Time,
 } from 'lightweight-charts';
+import { useEffect,useRef,useState } from 'react';
 import { Chip } from './Chip';
 import { Modal } from './Modal';
-import { api } from '@/utils/api';
-import type { JournalTrade } from '@/services/tradeJournalService';
 
 interface Props {
   trade: JournalTrade | null;
@@ -140,15 +140,6 @@ export function TradeHistoryDetailModal({ trade, onClose }: Props) {
   // the header tells the operator this isn't a render bug.
   const [outOfWindow, setOutOfWindow] = useState(false);
 
-  // Escape-to-close.
-  useEffect(() => {
-    if (!trade) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [trade, onClose]);
 
   useEffect(() => {
     if (!trade || !chartHostRef.current) return;
@@ -350,7 +341,7 @@ export function TradeHistoryDetailModal({ trade, onClose }: Props) {
   const exitLabel = EXIT_REASON_LABELS[trade.exit_reason] ?? trade.exit_reason.toUpperCase();
 
   return (
-    <Modal onClose={onClose} maxWidth={860}>
+    <Modal label="Completed trade detail" onClose={onClose} maxWidth={860}>
       {/* Header */}
       <div
         style={{

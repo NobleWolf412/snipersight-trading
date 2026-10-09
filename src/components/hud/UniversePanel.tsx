@@ -48,14 +48,14 @@
  *   - Polling loop captures a `cancelled` flag; cleanup clears the
  *     pending timer.
  */
-import { useEffect, useMemo, useState } from 'react';
 import {
-  api,
-  type DroppedPair,
-  type ResponseMetadata,
-  type Universe,
-  type UniversePair,
+api,
+type DroppedPair,
+type ResponseMetadata,
+type Universe,
+type UniversePair,
 } from '@/utils/api';
+import { useEffect,useMemo,useState } from 'react';
 import { Chip } from './Chip';
 import { Modal } from './Modal';
 import { SectionHead } from './SectionHead';
@@ -208,7 +208,7 @@ export function UniversePanel() {
       </section>
 
       {modalOpen && (
-        <Modal onClose={() => setModalOpen(false)} maxWidth={920}>
+        <Modal label="Scanner universe" onClose={() => setModalOpen(false)} maxWidth={920}>
           {renderModalBody(universe, refreshLabel, () => setModalOpen(false))}
         </Modal>
       )}

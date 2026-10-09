@@ -19,7 +19,7 @@ export function FooterStatus() {
       }}
     >
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        Feed and session status appear in their panels.
+        Market category data: <a href="https://www.coingecko.com" target="_blank" rel="noopener noreferrer">CoinGecko</a>
       </div>
       <div
         className="mono"

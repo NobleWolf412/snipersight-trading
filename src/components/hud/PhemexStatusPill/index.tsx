@@ -10,9 +10,9 @@
 //
 // Source contract: GET /api/integrations/phemex/healthz (already exists).
 
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { liveTradingService } from '@/services/liveTradingService';
-import { Chip, type ChipKind } from '../Chip';
+import { useCallback,useEffect,useRef,useState } from 'react';
+import { Chip,type ChipKind } from '../Chip';
 import { Modal } from '../Modal';
 
 export interface PhemexHealth {
@@ -67,7 +67,7 @@ export function classifyPhemexHealth(
 ): PhemexClassifyResult {
   if (error) return { severity: 'amber', reasons: [`health unavailable: ${error}`] };
   if (!isRunning) return { severity: 'idle', reasons: ['session not running'] };
-  if (!health) return { severity: 'idle', reasons: ['no data yet'] };
+  if (!health) return { severity: 'amber', reasons: ['live executor health unavailable'] };
 
   const reasons: string[] = [];
   let severity: PhemexSeverity = 'green';
@@ -76,6 +76,10 @@ export function classifyPhemexHealth(
     else if (s === 'amber' && severity !== 'red') severity = 'amber';
   };
 
+  if (!health.rest || !health.executor || !health.backfill || !health.ws
+    || health.rest.rest_auth_errors_total == null || health.executor.balance_fetch_failures == null) {
+    bump('amber'); reasons.push('live executor health is partial');
+  }
   if (health.ws?.enabled && health.ws?.connected === false) {
     bump('red');
     reasons.push('WS disconnected');
@@ -128,10 +132,10 @@ export function classifyPhemexHealth(
 }
 
 const SEVERITY_LABEL: Record<PhemexSeverity, string> = {
-  green: 'PHEMEX OK',
-  amber: 'PHEMEX WARN',
-  red: 'PHEMEX FAIL',
-  idle: 'PHEMEX IDLE',
+  green: 'LIVE EXEC OK',
+  amber: 'LIVE EXEC WARN',
+  red: 'LIVE EXEC FAIL',
+  idle: 'LIVE EXEC IDLE',
 };
 
 const SEVERITY_TO_CHIP_KIND: Record<PhemexSeverity, ChipKind | undefined> = {
@@ -180,6 +184,7 @@ interface PhemexStatusPillProps {
 export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillProps) {
   const [health, setHealth] = useState<PhemexHealth | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [statusKnown, setStatusKnown] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -198,6 +203,7 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
       // earlier `is_running` shape was a stale fixture relic. Drive the
       // running/idle severity off the canonical field.
       setIsRunning(statusData?.status === 'running');
+      setStatusKnown(true);
       setError(null);
     } catch (e) {
       if (generation !== generationRef.current) return;
@@ -221,7 +227,8 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
   }, [load, pollIntervalMs]);
 
   const { severity, reasons } = classifyPhemexHealth(health, isRunning, error);
-  const tooltip = error ? `Healthz error: ${error}` : reasons.join(' · ');
+  const label = error ? 'LIVE EXEC UNAVAILABLE' : !statusKnown ? 'LIVE EXEC CHECKING' : SEVERITY_LABEL[severity];
+  const tooltip = `Live executor only; paper session and market feeds are separate. ${error ? `Health unavailable: ${error}` : reasons.join(' · ')}`;
   const dot = severity === 'idle' ? '○' : '●';
 
   return (
@@ -238,11 +245,11 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
           letterSpacing: 'inherit',
         }}
       >
-        {dot} {SEVERITY_LABEL[severity]}
+        {dot} {label}
       </button>
 
       {open && (
-        <Modal onClose={() => setOpen(false)} maxWidth={680}>
+        <Modal label="Live executor health" onClose={() => setOpen(false)} maxWidth={680}>
           <div style={{ padding: 18 }}>
             <div
               style={{
@@ -255,11 +262,12 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
               }}
             >
               <div className="hud" style={{ fontSize: 14, color: 'var(--fg)' }}>
-                Phemex Integration · {SEVERITY_LABEL[severity]}
+                Phemex live executor · {label}
               </div>
               <Chip kind={SEVERITY_TO_CHIP_KIND[severity]}>{severity.toUpperCase()}</Chip>
             </div>
 
+            <p>Live/testnet executor telemetry. Paper session status is shown in Bot Status; this panel does not assess paper feeds.</p>
             {error && (
               <div
                 className="mono"
@@ -312,11 +320,11 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
                         : `${Math.round(health.ws.seconds_since_last_frame)}s ago`
                     }
                   />
-                  <StatRow label="Frames in" value={health.ws?.frames_in_total ?? 0} />
-                  <StatRow label="AOP frames" value={health.ws?.frames_aop_total ?? 0} />
-                  <StatRow label="Parse errors" value={health.ws?.parse_errors_total ?? 0} />
-                  <StatRow label="Disconnects" value={health.ws?.disconnects_total ?? 0} />
-                  <StatRow label="Heartbeat fails" value={health.ws?.heartbeat_failures_total ?? 0} />
+                  <StatRow label="Frames in" value={health.ws?.frames_in_total ?? 'Unknown'} />
+                  <StatRow label="AOP frames" value={health.ws?.frames_aop_total ?? 'Unknown'} />
+                  <StatRow label="Parse errors" value={health.ws?.parse_errors_total ?? 'Unknown'} />
+                  <StatRow label="Disconnects" value={health.ws?.disconnects_total ?? 'Unknown'} />
+                  <StatRow label="Heartbeat fails" value={health.ws?.heartbeat_failures_total ?? 'Unknown'} />
                 </div>
 
                 <div>
@@ -326,10 +334,10 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
                   >
                     REST
                   </div>
-                  <StatRow label="Calls" value={health.rest?.rest_calls_total ?? 0} />
-                  <StatRow label="429s" value={health.rest?.rest_429_total ?? 0} />
-                  <StatRow label="5xx" value={health.rest?.rest_5xx_total ?? 0} />
-                  <StatRow label="Auth errors" value={health.rest?.rest_auth_errors_total ?? 0} />
+                  <StatRow label="Calls" value={health.rest?.rest_calls_total ?? 'Unknown'} />
+                  <StatRow label="429s" value={health.rest?.rest_429_total ?? 'Unknown'} />
+                  <StatRow label="5xx" value={health.rest?.rest_5xx_total ?? 'Unknown'} />
+                  <StatRow label="Auth errors" value={health.rest?.rest_auth_errors_total ?? 'Unknown'} />
                 </div>
 
                 <div>
@@ -339,13 +347,13 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
                   >
                     Fills
                   </div>
-                  <StatRow label="Via WS" value={health.executor?.fills_recorded_via_ws ?? 0} />
-                  <StatRow label="Via REST poll" value={health.executor?.fills_recorded_via_rest ?? 0} />
+                  <StatRow label="Via WS" value={health.executor?.fills_recorded_via_ws ?? 'Unknown'} />
+                  <StatRow label="Via REST poll" value={health.executor?.fills_recorded_via_rest ?? 'Unknown'} />
                   <StatRow
                     label="Via position check"
-                    value={health.executor?.fills_recovered_via_position_check ?? 0}
+                    value={health.executor?.fills_recovered_via_position_check ?? 'Unknown'}
                   />
-                  <StatRow label="Balance fail" value={health.executor?.balance_fetch_failures ?? 0} />
+                  <StatRow label="Balance fail" value={health.executor?.balance_fetch_failures ?? 'Unknown'} />
                 </div>
 
                 <div>
@@ -355,9 +363,9 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
                   >
                     Backfill
                   </div>
-                  <StatRow label="Runs" value={health.backfill?.runs_total ?? 0} />
-                  <StatRow label="Errors" value={health.backfill?.errors_total ?? 0} />
-                  <StatRow label="Rows new" value={health.backfill?.rows_new_total ?? 0} />
+                  <StatRow label="Runs" value={health.backfill?.runs_total ?? 'Unknown'} />
+                  <StatRow label="Errors" value={health.backfill?.errors_total ?? 'Unknown'} />
+                  <StatRow label="Rows new" value={health.backfill?.rows_new_total ?? 'Unknown'} />
                   <StatRow label="Last run" value={formatTs(health.backfill?.last_run_ts)} />
                   <StatRow label="Last synced" value={formatTs(health.backfill?.last_synced_ts)} />
                 </div>
@@ -369,10 +377,10 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
                   >
                     Trade rows
                   </div>
-                  <StatRow label="Journal · session" value={health.journal?.session_rows ?? 0} />
-                  <StatRow label="Journal · total" value={health.journal?.total_rows ?? 0} />
-                  <StatRow label="In memory" value={health.in_memory?.completed_trades ?? 0} />
-                  <StatRow label="Pending orders" value={health.in_memory?.pending_orders ?? 0} />
+                  <StatRow label="Journal · session" value={health.journal?.session_rows ?? 'Unknown'} />
+                  <StatRow label="Journal · total" value={health.journal?.total_rows ?? 'Unknown'} />
+                  <StatRow label="In memory" value={health.in_memory?.completed_trades ?? 'Unknown'} />
+                  <StatRow label="Pending orders" value={health.in_memory?.pending_orders ?? 'Unknown'} />
                 </div>
               </div>
             )}

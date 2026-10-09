@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect,useRef,useState,type ReactNode } from 'react';
+import { Link,useLocation } from 'react-router-dom';
 import { Chip } from './Chip';
+import { lockDialogScroll } from './dialogScrollLock';
 
 const LINKS = [
   { label: 'Scanner', to: '/scanner' },
@@ -47,11 +48,10 @@ export function Topbar({ rightSlot, modeSlot }: TopbarProps) {
     }
     // Native modal dialog owns focus containment, inert background and restoration.
     dialog.showModal();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const release = lockDialogScroll();
     return () => {
       if (dialog.open) dialog.close();
-      document.body.style.overflow = previousOverflow;
+      release();
     };
   }, [drawerOpen]);
 
@@ -87,7 +87,7 @@ export function Topbar({ rightSlot, modeSlot }: TopbarProps) {
       </button>
       <dialog ref={drawer} id="mobile-drawer" className="mobile-drawer" aria-label="Navigation menu"
         onCancel={event => { event.preventDefault(); setDrawerOpen(false); }}
-        onClose={() => setDrawerOpen(false)}
+        onClose={event => { if (event.target === event.currentTarget) setDrawerOpen(false); }}
         onClick={event => { if (event.target === event.currentTarget) setDrawerOpen(false); }}>
         <div className="mobile-drawer-head">
           <span className="mobile-drawer-title">Navigation</span>

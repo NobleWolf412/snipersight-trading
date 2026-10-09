@@ -1,8 +1,17 @@
+.modal-bg :is(button, select, input:not([type=checkbox]):not([type=radio]):not([type=range])) { min-height:44px; }
+.modal-bg .btn { min-height:44px; }
+.workspace :is(input:not([type=checkbox]):not([type=radio]), select, summary, button) { min-height:44px; }
+.workspace :is(input, select, textarea) { max-width:100%; }
+.workspace .page-title h1, .workspace .sec-title { text-transform:none; letter-spacing:0; }
+.workspace .sec-head { flex-wrap:wrap; gap:10px; }
+.preferences-fields { padding:18px; }
+.preferences-fields label { display:flex; align-items:center; gap:12px; min-height:44px; }
+.preferences-fields p { color:var(--fg-2); line-height:1.6; }
+.preferences-links { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0; }
+.workspace .reticle { display:none; }
+.tactical-bg * { animation:none !important; }
 /* Product surfaces share a quiet, readable shell. Landing keeps its brand treatment. */
-.workspace {
-  --fg-3: oklch(0.78 0.012 150);
-  --fg-4: oklch(0.72 0.012 150);
-}
+
 .workspace .panel {
   background: var(--bg-2);
   box-shadow: none;
@@ -51,3 +60,42 @@
     animation: none !important; transition: none !important;
   }
 }
+
+.workspace .page-title h1 { font-family:var(--font-sans); font-size:28px; letter-spacing:0; text-transform:none; }
+.workspace .page-title .sub { font-family:var(--font-sans); letter-spacing:0; text-transform:none; }
+.workspace .sec-title { letter-spacing:0; text-transform:none; }
+.workspace :is(.page, .page-shell, .page-shell > *, .bot-setup-layout > *, .replay-layout > *) { min-width:0; }
+.workspace .btn { white-space:normal; line-height:1.5; }
+.workspace :is(.bot-setup-fields, .paper-setup-fields, .session-diagnostics) summary { padding:12px; cursor:pointer; }
+.session-position-scroll { max-width:100%; overflow-x:auto; }
+.session-position-scroll > * { min-width:760px; }
+.journal-sort { border:0; background:none; padding:4px; font:inherit; text-align:left; cursor:pointer; }
+.risk-preview { padding:14px 0; color:var(--fg-2); line-height:1.6; }
+.scanner-filter-panel summary { padding:12px 16px; }
+.scanner-run-panel fieldset label { min-height:44px; }
+@media(max-width:900px) {
+  .workspace :is(.bot-setup-layout, .replay-layout) { grid-template-columns:minmax(0,1fr) !important; }
+  .bot-setup-layout > div { position:static !important; }
+}
+@media(max-width:600px) {
+  .workspace :is(.bot-setup-fields,.paper-setup-fields,.session-diagnostics) [style*="grid-template-columns"]:not(.mono) { grid-template-columns:minmax(0,1fr) !important; }
+  .workspace .page-title h1 { font-size:24px; }
+}
+
+@media(prefers-reduced-motion:reduce) { .modal-bg *, .active-scan-beacon * { animation:none !important; transition:none !important; } }
+
+.journal-filter-row label { display:flex; flex-direction:column; gap:6px; color:var(--fg-2); font-size:12px; min-width:0; }
+.journal-filter-row :is(input,select) { background:var(--bg); color:var(--fg); border:1px solid var(--border); padding:8px; font:inherit; }
+
+.training-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.training-tools a { display:block; padding:22px; border:1px solid var(--border-soft); border-radius:8px; text-decoration:none; }
+.training-tools h2 { font-size:20px; color:var(--fg); margin:0 0 12px; }
+.training-tools p { line-height:1.6; color:var(--fg-2); }
+.bot-strategy-choice summary { padding:10px 0; }
+@media(max-width:600px) { .training-tools { grid-template-columns:1fr; } }
+
+.execution-toggle { width:100%; min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--border-soft); border-radius:6px; background:var(--bg); color:var(--fg); padding:12px; font:inherit; text-align:left; cursor:pointer; }
+.execution-toggle:disabled { opacity:.6; cursor:not-allowed; }
+.execution-toggle__hint { display:block; color:var(--fg-3); font-size:12px; line-height:1.5; margin-top:4px; }
+.journal-sort-control { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; max-width:100%; }
+@media(max-width:700px) { .journal-trade-row > [data-label]::before { content:attr(data-label) ': '; color:var(--fg-3); font-size:12px; } }

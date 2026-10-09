@@ -15,86 +15,8 @@
 
 /* HUD theme: classes loaded here; token override re-applied at END
    of file to win cascade against the legacy :root block below. */
+@import "./styles/tokens.css";
 @import "./styles/hud.css";
-
-:root {
-  /* ========================================
-     TACTICAL THEME INTENSITY CONTROLS
-     ======================================== */
-  --tactical-intensity: 1.0;
-  /* 0.3 = subtle, 0.6 = medium, 1.0 = intense */
-  --tactical-speed: 1.0;
-  /* Animation speed multiplier */
-
-  /* Force dark color scheme for browser UI */
-  color-scheme: dark;
-
-  /* ========================================
-     MILITARY COMMAND CENTER COLOR PALETTE
-     Dark base with green-dominant tactical HUD
-     ======================================== */
-  /* Metal military background - dark steel gray with slight warm undertone */
-  --background: oklch(0.28 0.008 120);
-  --foreground: oklch(0.92 0.01 150);
-
-  /* Card surfaces - brushed metal appearance */
-  --card: oklch(0.32 0.012 120);
-  --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.32 0.012 120);
-  --popover-foreground: oklch(0.98 0 0);
-
-  /* Primary - console green (radar/terminal vibe) */
-  --primary: oklch(0.60 0.18 145);
-  --primary-foreground: oklch(0.15 0.02 145);
-
-  /* Secondary - dark metal gray */
-  --secondary: oklch(0.36 0.012 125);
-  --secondary-foreground: oklch(0.98 0 0);
-
-  /* Muted backgrounds and text - darker metal */
-  --muted: oklch(0.30 0.010 120);
-  --muted-foreground: oklch(0.55 0.02 150);
-
-  /* Accent - desaturated teal (used sparingly) */
-  --accent: oklch(0.65 0.10 180);
-  --accent-foreground: oklch(0.15 0.01 180);
-
-  /* Destructive - red for critical states */
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.98 0 0);
-
-  /* Success - strong tactical green */
-  --success: oklch(0.65 0.20 140);
-  --success-foreground: oklch(0.15 0.02 140);
-
-  /* Warning - amber/yellow for alerts */
-  --warning: oklch(0.70 0.16 75);
-  --warning-foreground: oklch(0.20 0.02 75);
-
-  /* Borders and inputs - metal edge definition */
-  --border: oklch(0.38 0.015 130);
-  --input: oklch(0.38 0.015 130);
-  --ring: oklch(0.60 0.18 145);
-
-  --radius: 0rem;
-
-  --spacing: 0.20rem;
-
-  /* ========================================
-     BACKWARD COMPATIBILITY ALIASES
-     ======================================== */
-  --color-bg: var(--background);
-  --color-bg-inset: oklch(0.24 0.008 120);
-  --color-bg-overlay: var(--card);
-  --color-fg: var(--foreground);
-  --color-fg-secondary: var(--muted-foreground);
-
-  /* Metal texture variables */
-  --metal-base: oklch(0.28 0.008 120);
-  --metal-highlight: oklch(0.45 0.012 130);
-  --metal-shadow: oklch(0.20 0.008 110);
-  --metal-shine: oklch(0.55 0.015 140);
-}
 
 /* `@theme` block removed in Phase 7 sub-step 5 — Tailwind v4
    utility-generation surface no longer needed. The token aliases it
@@ -120,7 +42,6 @@ body {
 #root {
   width: 100%;
   min-height: 100vh;
-  overflow-x: hidden;
   position: relative;
 }
 
@@ -724,73 +645,6 @@ body {
   border: 1px solid rgba(255,255,255,0.3);
   cursor: pointer;
 }
-@keyframes beacon-sonar {
-  0%   { transform: scale(1);   opacity: 0.75; }
-  100% { transform: scale(3.2); opacity: 0;    }
-}
-
-@keyframes beacon-radar-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-@keyframes beacon-float {
-  0%, 100% { transform: translateY(0px);  }
-  50%       { transform: translateY(-6px); }
-}
-
-@keyframes beacon-glow-breathe {
-  0%, 100% { opacity: 1;   }
-  50%       { opacity: 0.6; }
-}
-
-@keyframes beacon-pill-slide-in {
-  0%   { transform: translateY(8px) scale(0.9); opacity: 0; }
-  100% { transform: translateY(0)   scale(1);   opacity: 1; }
-}
-
-.beacon-sonar-ring {
-  animation: beacon-sonar 2.2s ease-out infinite;
-}
-.beacon-sonar-ring:nth-child(2) { animation-delay: 0.7s; }
-.beacon-sonar-ring:nth-child(3) { animation-delay: 1.4s; }
-
-.beacon-radar-sweep {
-  animation: beacon-radar-spin 3s linear infinite;
-}
-
-.beacon-float {
-  animation: beacon-float 4s ease-in-out infinite;
-}
-
-.beacon-glow-breathe {
-  animation: beacon-glow-breathe 2s ease-in-out infinite;
-}
-
-.beacon-pill-slide-in {
-  animation: beacon-pill-slide-in 0.3s ease-out both;
-}
-
-.hud-progress-bg {
-  background: linear-gradient(90deg, #ff4444 0%, #333 20%, #333 80%, #00ff88 100%);
-  height: 4px;
-  border-radius: 2px;
-  position: relative;
-}
-
-.hud-progress-indicator {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 10px;
-  height: 10px;
-  background: var(--fg);
-  border: 2px solid var(--green);
-  border-radius: 50%;
-  box-shadow: 0 0 10px var(--green);
-  z-index: 10;
-}
-
 /* ============================================================
    PROTOTYPE TOKEN OVERRIDE — re-declared at end so HUD tokens
    win the cascade against the legacy :root block above.
@@ -800,35 +654,3 @@ body {
    overridden here so the prototype look applies globally.
    Full Tailwind/shadcn ejection happens in Phase 4 + Phase 7.
    ============================================================ */
-:root {
-  --bg: oklch(0.18 0.008 120);
-  --bg-2: oklch(0.22 0.010 125);
-  --card: oklch(0.26 0.012 125);
-  --card-2: oklch(0.30 0.012 125);
-  --border: oklch(0.36 0.015 130);
-  --border-soft: oklch(0.32 0.015 130 / 0.6);
-  --fg: oklch(0.94 0.012 150);
-  --fg-2: oklch(0.78 0.012 150);
-  --fg-3: oklch(0.58 0.015 150);
-  --fg-4: oklch(0.42 0.012 150);
-  --green: #00ffaa;
-  --green-soft: #4ade80;
-  --green-bg: rgba(0,255,170,.10);
-  --green-border: rgba(0,255,170,.30);
-  --amber: #ffc266;
-  --amber-2: #fbbf24;
-  --amber-bg: rgba(251,191,36,.10);
-  --amber-border: rgba(251,191,36,.35);
-  --red: #ff6464;
-  --red-2: #f87171;
-  --red-bg: rgba(248,113,113,.10);
-  --red-border: rgba(248,113,113,.35);
-  --blue: #60a5fa;
-  --blue-bg: rgba(96,165,250,.10);
-  --blue-border: rgba(96,165,250,.30);
-  --cyan: #22d3ee;
-  --purple: #c084fc;
-  --accent: var(--green);
-  --accent-bg: var(--green-bg);
-  --accent-border: var(--green-border);
-}

@@ -48,8 +48,8 @@
  *     `/api/signals/{id}/confluence`).
  *   - Mode-delta tooltip integration with the bottleneck pill (3g.ii.f).
  */
-import { useEffect, useState } from 'react';
-import { api, type SignalTrace, type TraceStage, type ResponseMetadata } from '@/utils/api';
+import { api,type ResponseMetadata,type SignalTrace,type TraceStage } from '@/utils/api';
+import { useEffect,useState } from 'react';
 import { Chip } from './Chip';
 import { Modal } from './Modal';
 
@@ -261,7 +261,7 @@ export function PipelineTracer({ signalId, onClose }: Props) {
   }
 
   return (
-    <Modal onClose={onClose} maxWidth={1080}>
+    <Modal label="Signal pipeline trace" onClose={onClose} maxWidth={1080}>
       {header}
       {body}
     </Modal>

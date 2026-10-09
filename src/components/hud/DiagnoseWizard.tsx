@@ -47,14 +47,14 @@
  *   - All step CTAs are static `<Link>`-style buttons with deterministic
  *     route hashes.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { liveTradingService,type LiveTradingStatus } from '@/services/liveTradingService';
+import { api,type CycleHeartbeat,type Universe } from '@/utils/api';
+import { useEffect,useState,type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type CycleHeartbeat, type Universe } from '@/utils/api';
-import { liveTradingService, type LiveTradingStatus } from '@/services/liveTradingService';
 
 import { Chip } from './Chip';
 import { Modal } from './Modal';
-import { classifyPhemexHealth, type PhemexHealth } from './PhemexStatusPill';
+import { classifyPhemexHealth,type PhemexHealth } from './PhemexStatusPill';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -153,7 +153,7 @@ export function DiagnoseWizard({ open, onClose, status, nowSec }: DiagnoseWizard
   const unknownCount = steps.filter((s) => s.result === 'unknown').length;
 
   return (
-    <Modal onClose={onClose} maxWidth={780}>
+    <Modal label="Live executor and scanner diagnostics" onClose={onClose} maxWidth={780}>
       <div style={{ padding: 18 }}>
         <div
           className="sec-head"

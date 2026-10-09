@@ -20,20 +20,20 @@
  *     them (live on _pending_plans server-side). Pending modal shows
  *     limit-price only with an inline note.
  */
-import { useEffect, useRef, useState } from 'react';
-import {
-  createChart,
-  CandlestickSeries,
-  ColorType,
-  type IChartApi,
-  type ISeriesApi,
-  type Time,
-} from 'lightweight-charts';
-import { Chip } from './Chip';
-import { Modal } from './Modal';
-import { api } from '@/utils/api';
 import type { LivePosition } from '@/services/liveTradingService';
 import type { PaperPosition } from '@/services/paperTradingService';
+import { api } from '@/utils/api';
+import {
+CandlestickSeries,
+ColorType,
+createChart,
+type IChartApi,
+type ISeriesApi,
+type Time,
+} from 'lightweight-charts';
+import { useEffect,useRef,useState } from 'react';
+import { Chip } from './Chip';
+import { Modal } from './Modal';
 
 /** Pending order shape — mirrors backend payload, kept local so the modal
  * works whether called with LiveTradingStatus or PaperTradingStatus. */
@@ -159,16 +159,6 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
   const [candlesError, setCandlesError] = useState<string | null>(null);
   const [candlesLoading, setCandlesLoading] = useState(false);
 
-  // Escape-to-close. Window-scoped listener; cleaned up on unmount or
-  // when the close handler reference changes.
-  useEffect(() => {
-    if (!selection) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [selection, onClose]);
 
   // Build chart on selection change. Tear down on unmount.
   useEffect(() => {
@@ -407,7 +397,7 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
   const noUsableTp = pos != null && (usableTp == null || stripDetected);
 
   return (
-    <Modal onClose={onClose} maxWidth={820}>
+    <Modal label="Position and pending setup detail" onClose={onClose} maxWidth={820}>
       {/* Header */}
       <div
         style={{
