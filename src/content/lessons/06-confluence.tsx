@@ -1,15 +1,12 @@
-import { FlipCard } from '@/components/lessons/primitives';
 import {
-  WeightSliderPanel,
-  type WeightComparisonProfile,
-  type WeightFactor,
+WeightSliderPanel,
+type WeightComparisonProfile,
+type WeightFactor,
 } from '@/components/hud';
-import { ChapterPara, ChapterSection, MistakeGrid, HeroWrap } from './_shared';
+import { FlipCard } from '@/components/lessons/primitives';
+import { ChapterPara,ChapterSection,HeroWrap,MistakeGrid } from './_shared';
 
-// 5-factor reduced view of the bot's confluence model — pedagogical demo,
-// not the live 26-factor stack. Numbers are illustrative averages; the real
-// MODE_FACTOR_WEIGHTS lives in backend/strategy/confluence/scorer.py:539-694.
-// SYNC: backend/strategy/confluence/scorer.py:539-694
+// Historical weighted-sum teaching example, not the current evidence-family scorer.
 const DEMO_FACTORS: WeightFactor[] = [
   { name: 'HTF alignment',  subScore: 0.85, baseWeight: 0.30 },
   { name: 'SMC structure',  subScore: 0.70, baseWeight: 0.25 },
@@ -29,7 +26,7 @@ export default function ConfluenceBody() {
   return (
     <>
       <ChapterPara>
-        Confluence scoring is a <strong>weighted-sum signal model</strong>: each factor emits a sub-score in
+        This historical teaching demo uses a <strong>weighted-sum signal model</strong>: each factor emits a sub-score in
         [0, 1], a weight vector mapping factors to a composite, and a mode-specific threshold deciding pass /
         fail. The interesting failure mode is not "score too low" — it is{' '}
         <em>correlated factors voting twice</em> and{' '}
@@ -46,17 +43,13 @@ export default function ConfluenceBody() {
       </HeroWrap>
 
       <ChapterPara>
-        <strong>Reading the demo</strong>: the 5 factors above are a teaching subset. The live model in{' '}
-        <code>backend/strategy/confluence/scorer.py</code> uses <strong>26 factors</strong>, weights are not
-        normalized (the scorer divides by sum at runtime), and the 4 mode profiles shown here are illustrative
-        — not the exact <code>MODE_FACTOR_WEIGHTS</code> tables. Edit the real weights via the{' '}
-        <code>/tune-confluence-weights</code> skill, never by copying these.
+        <strong>Reading the demo</strong>: these five inputs, mode names and thresholds are illustrative. The current engine uses fixed evidence-family budgets with eligibility gates; correlated inputs cannot enlarge a family’s credit. This widget does not configure the scanner, and its score is not a win probability.
       </ChapterPara>
 
       <ChapterSection title="// CORE MECHANIC">
         <ChapterPara>
           Modern scorers layer <strong>pre-scoring gates</strong> (hard binary filters that fail-fast) on top
-          of <strong>soft scoring</strong> (the weighted sum with synergy bonuses and conflict penalties).
+          of <strong>soft scoring</strong>. The current engine caps eligible evidence within fixed family budgets.
           Gates handle nominal-scale failures (yes/no — structural anchor missing, conflict density too high);
           weights handle ordinal (more / less aligned).
         </ChapterPara>

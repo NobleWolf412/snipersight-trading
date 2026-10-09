@@ -94,7 +94,7 @@ Status: **implemented** = working end to end; **partial** = works with known gap
 | `/training` | Hub for learning and research tools | Implemented |
 | `/training/replay` | Step through historical candles with causal evidence | Implemented |
 | `/training/drills` | Experimental model tools | Partial; research only |
-| `/training/lessons` | Lesson library | Scaffold; nine authored chapters exist but are not wired up |
+| `/training/lessons` | Lesson library | Implemented; nine lazy chapters with browser read/resume progress. Historical teaching examples are labeled |
 | `/settings` | Browser preferences (deliberately quiet) | Implemented |
 
 Redirects: `/scan`, `/results`, `/scanner/setup`, `/scanner/status` → `/scanner`; `/market`, `/htf` → `/intel`. Unknown routes show recovery links.

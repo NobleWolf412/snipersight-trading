@@ -1,8 +1,8 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { Chip,FooterStatus,PageHead,Reticle,SectionHead } from '@/components/hud';
+import { useEffect,useRef,type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Chip, FooterStatus, PageHead, Reticle, SectionHead } from '@/components/hud';
 import { SourceList } from './SourceList';
-import type { ChapterMeta, SourceRef } from './types';
+import type { ChapterMeta,SourceRef } from './types';
 
 export interface ChapterShellProps {
   chapter: ChapterMeta;
@@ -86,7 +86,7 @@ export function ChapterShell({
             {isRead ? '● READ' : '○ UNREAD'}
           </div>
           <SectionHead
-            title={chapter.title.toUpperCase()}
+            title={chapter.title}
             right={
               <button
                 type="button"
@@ -157,11 +157,13 @@ function ChapterNav({ allChapters, activeId, progressCounts }: ChapterNavProps) 
             <li key={c.id}>
               <Link
                 to={`/training/lessons#ch-${c.id}`}
+                aria-current={isActive ? "page" : undefined}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 10,
-                  padding: '8px 14px',
+                  padding: '12px 14px',
+                  minHeight: 44,
                   textDecoration: 'none',
                   color: isActive ? c.color : 'var(--fg-2)',
                   background: isActive ? `${c.color}14` : 'transparent',
@@ -210,6 +212,7 @@ function ChapterNavFooter({ prev, next, accentColor }: ChapterNavFooterProps) {
         paddingTop: 14,
         borderTop: '1px dashed var(--border-soft)',
         gap: 12,
+        flexWrap: 'wrap',
       }}
     >
       {prev ? (
@@ -217,7 +220,9 @@ function ChapterNavFooter({ prev, next, accentColor }: ChapterNavFooterProps) {
           to={`/training/lessons#ch-${prev.id}`}
           className="mono"
           style={{
-            fontSize: 11,
+            minHeight: 44,
+            padding: '12px 0',
+            fontSize: 12,
             color: 'var(--fg-3)',
             textDecoration: 'none',
             letterSpacing: '.14em',

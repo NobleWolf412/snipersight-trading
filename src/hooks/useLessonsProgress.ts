@@ -1,17 +1,7 @@
-import { useCallback, useMemo } from 'react';
-import { useLocalStorage } from './useLocalStorage';
-
+import { useCallback,useEffect,useMemo,useState } from 'react';
+import { normalizeLessonsProgress,type LessonsProgressState } from './lessonsProgressState';
 const STORAGE_KEY = 'sniper.lessons.v1';
-
-interface LessonsProgressState {
-  readChapterIds: string[];
-  lastOpenedChapterId: string | null;
-}
-
-const DEFAULT_STATE: LessonsProgressState = {
-  readChapterIds: [],
-  lastOpenedChapterId: null,
-};
+const DEFAULT_STATE: LessonsProgressState = { readChapterIds: [], lastOpenedChapterId: null };
 
 interface ChapterRef {
   id: string;
@@ -20,6 +10,7 @@ interface ChapterRef {
 }
 
 export interface UseLessonsProgressResult<C extends ChapterRef> {
+  persistenceError: string | null;
   readChapterIds: string[];
   lastOpenedChapterId: string | null;
   markRead: (id: string) => void;
@@ -38,10 +29,17 @@ export interface UseLessonsProgressResult<C extends ChapterRef> {
 export function useLessonsProgress<C extends ChapterRef>(
   chapters: C[],
 ): UseLessonsProgressResult<C> {
-  const [state, setState] = useLocalStorage<LessonsProgressState>(
-    STORAGE_KEY,
-    DEFAULT_STATE,
-  );
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
+  const [state, setState] = useState<LessonsProgressState>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return normalizeLessonsProgress(raw ? JSON.parse(raw) : DEFAULT_STATE, chapters.map(chapter => chapter.id));
+    } catch { return DEFAULT_STATE; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); setPersistenceError(null); }
+    catch { setPersistenceError('Progress cannot be saved in this browser. It is kept only for this visit.'); }
+  }, [state]);
 
   const markRead = useCallback(
     (id: string) =>
@@ -96,6 +94,7 @@ export function useLessonsProgress<C extends ChapterRef>(
   }, [chapters, state.readChapterIds]);
 
   return {
+    persistenceError,
     readChapterIds: state.readChapterIds,
     lastOpenedChapterId: state.lastOpenedChapterId,
     markRead,

@@ -1,86 +1,52 @@
-/**
- * Lessons — strategy library (scaffold)
- *
- * Content lives under src/content/lessons/. This stub unblocks navigation
- * from Training Ground so chapter pages can be iterated in-place.
- */
-import { useEffect, useRef } from 'react';
-import { Chip, FooterStatus, PageHead } from '@/components/hud';
+import { FooterStatus,PageHead } from '@/components/hud';
+import { ChapterShell } from '@/components/lessons/primitives';
+import { CHAPTERS } from '@/content/lessons';
+import { useLessonsProgress } from '@/hooks/useLessonsProgress';
+import { Suspense,useEffect } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+import { Link,useLocation } from 'react-router-dom';
+import './Lessons.css';
 
 export function Lessons() {
-  const readyRef = useRef(false);
-
-  useEffect(() => {
-    if (!readyRef.current) {
-      readyRef.current = true;
-      document.body.setAttribute('data-snapshot-ready', 'true');
-    }
-    return () => {
-      document.body.removeAttribute('data-snapshot-ready');
-    };
-  }, []);
-
-  return (
-    <div className="page">
-      <PageHead
-        icon={
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M4 5 L12 3 L20 5 L20 19 L12 17 L4 19 Z"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              fill="none"
-              style={{ color: '#4ade80' }}
-            />
-            <line
-              x1="12"
-              y1="3"
-              x2="12"
-              y2="17"
-              stroke="currentColor"
-              strokeWidth="1"
-              style={{ color: '#4ade80' }}
-            />
-          </svg>
-        }
-        title="Lessons"
-        subtitle="Strategy library — order blocks, FVGs, liquidity sweeps, regime detection, position sizing"
-        badges={
-          <>
-            <Chip kind="green">● SCAFFOLD</Chip>
-            <Chip kind="cyan">CHAPTERS · 0</Chip>
-          </>
-        }
-      />
-
-      <div
-        className="panel"
-        style={{
-          padding: 32,
-          textAlign: 'center',
-          color: 'var(--fg-3)',
-          fontFamily: "'Share Tech Mono', monospace",
-          fontSize: 13,
-          letterSpacing: '.16em',
-          margin: '24px 0',
-        }}
-      >
-        LESSONS UI · IN DEVELOPMENT
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 11,
-            color: 'var(--fg-4)',
-            letterSpacing: '.12em',
-          }}
-        >
-          Chapter content lives under src/content/lessons/
-        </div>
-      </div>
-
-      <FooterStatus />
-    </div>
-  );
+  const { hash } = useLocation();
+  const progress = useLessonsProgress(CHAPTERS);
+  const id = hash.startsWith('#ch-') ? hash.slice(4) : null;
+  const chapter = CHAPTERS.find(item => item.id === id);
+  const { setLastOpened } = progress;
+  useEffect(() => { if (chapter) setLastOpened(chapter.id); }, [chapter, setLastOpened]);
+  const index = chapter ? CHAPTERS.indexOf(chapter) : -1;
+  const resume = CHAPTERS.find(item => item.id === progress.lastOpenedChapterId) ?? progress.counts.nextChapter ?? CHAPTERS[0];
+  const notice = <p className="lesson-reference-notice">Educational reference with illustrative and historical examples.
+    Active mode requirements and evidence policy are shown in the scanner.
+    Chapter examples are not current signals, risk settings or performance guarantees.</p>;
+  if (chapter) {
+    const Body = chapter.Body;
+    return <ChapterShell chapter={chapter} allChapters={CHAPTERS}
+      isRead={progress.readChapterIds.includes(chapter.id)} onToggleRead={() => progress.toggleRead(chapter.id)}
+      sources={chapter.sources} prev={CHAPTERS[index - 1]} next={CHAPTERS[index + 1]}
+      progressCounts={progress.counts}>
+      <Link className="btn" to="/training/lessons">Chapter library</Link>
+      {progress.persistenceError && <p role="alert">{progress.persistenceError}</p>}
+    {notice}
+      <ErrorBoundary resetKeys={[chapter.id]} fallbackRender={({ resetErrorBoundary }) =>
+        <div role="alert"><p>Chapter content could not load.</p><button className="btn" onClick={resetErrorBoundary}>Retry chapter</button></div>}>
+        <Suspense fallback={<p role="status">Loading chapter…</p>}><Body /></Suspense>
+      </ErrorBoundary>
+    </ChapterShell>;
+  }
+  return <div className="page lesson-library">
+    <PageHead title="Lessons" subtitle="Read and resume strategy chapters" />
+    {id && <p role="alert">That chapter is unavailable. Choose a chapter below.</p>}
+    <Link className="btn btn-cyan" to={`/training/lessons#ch-${resume.id}`}>Resume: {resume.title}</Link>
+    <p>{progress.counts.done} of {progress.counts.total} chapters marked read. Progress belongs to this browser.</p>
+    {progress.persistenceError && <p role="alert">{progress.persistenceError}</p>}
+    {notice}
+    <ol className="lesson-library__chapters">
+      {CHAPTERS.map(item => <li key={item.id}><Link to={`/training/lessons#ch-${item.id}`}>
+        <h2>{item.title}</h2><p>{item.summary}</p>
+        <span className="mono">{progress.readChapterIds.includes(item.id) ? 'READ' : 'UNREAD'}</span>
+      </Link></li>)}
+    </ol>
+    <FooterStatus />
+  </div>;
 }
-
-export default Lessons;

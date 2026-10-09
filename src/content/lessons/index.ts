@@ -108,8 +108,8 @@ export const CHAPTERS: ChapterEntry[] = [
     title: 'Confluence Scoring',
     color: '#22d3ee',
     summary:
-      'Weighted-sum scorer with hard pre-scoring gates — more factors ≠ better unless they are independent.',
-    sourceRefs: ['backend/strategy/confluence/scorer.py:539-694'],
+      'Historical weighted-sum demo and correlated evidence, with current evidence-family policy distinguished.',
+    sourceRefs: ['docs/ARCHITECTURE_INDEX.md'],
     sources: [
       { tier: 'primary',     title: 'López de Prado — Advances in Financial ML (SSRN)', url: 'https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3104847' },
       { tier: 'primary',     title: 'Bailey & López de Prado — Deflated Sharpe',        url: 'https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551' },

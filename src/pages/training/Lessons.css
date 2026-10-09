@@ -1,0 +1,9 @@
+.lesson-library__chapters { list-style:none; padding:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.lesson-library__chapters a { display:block; height:100%; padding:18px; border:1px solid var(--border-soft); border-radius:8px; color:var(--fg); text-decoration:none; }
+.lesson-library__chapters h2 { font-size:18px; margin:0 0 8px; }
+.lesson-library__chapters p, .lesson-reference-notice { color:var(--fg-2); line-height:1.6; }
+.lessons-layout > * { min-width:0; }
+.lessons-layout nav a { min-height:44px; }
+.lesson-reference-notice { padding:12px 0; }
+@media(max-width:900px) { .lessons-layout > nav { position:static !important; } .lessons-layout > nav ul { display:flex; overflow-x:auto; } .lessons-layout > nav li { flex:0 0 220px; } }
+@media(max-width:600px) { .lesson-library__chapters { grid-template-columns:1fr; } .lesson-library > .btn { white-space:normal; line-height:1.5; } }
