@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "progress": {
+    "policy": "10 points per distinct verified, committed finding fixed. Related module, provider and dependency removals form one cleanup outcome. Metrics do not earn points.",
+    "evidenceCommit": "68ea66972457a16ce9586240258523e026e64fe9",
+    "outcomes": [
+      {
+        "id": "A01",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "A02",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "A03",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "A15",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      }
+    ],
+    "historicalCheckpoint": {
+      "score": 70,
+      "commit": "68ea66972457a16ce9586240258523e026e64fe9",
+      "formula": "4 orphan modules × 10 + 2 providers × 5 + 2 direct dependencies × 10",
+      "status": "Superseded by PRODUCT.md outcome scoring; retained as historical evidence."
+    },
+    "correction": "40 points for four independently verified fixes already committed in 68ea669. No additional award for this documentation or scoring correction."
+  },
+  "date": "2026-10-09",
+  "scope": "UI audit, refactor proposal and bounded foundation changes. Remaining screen and feature migrations are planned. Existing working-tree edits and runtime records preserved.",
+  "removals": {
+    "files": 4,
+    "sourceLines": 350,
+    "sourceBytes": 9700,
+    "providers": 2,
+    "directDependencies": [
+      "@tanstack/react-query",
+      "numeral"
+    ],
+    "manifest": "UI_REFACTOR_2026-10-09_removals.json",
+    "measurement": "Gross removed source in four modules; excludes net diff and node_modules disk savings."
+  },
+  "inventory": {
+    "baselineActiveFiles": 153,
+    "activeFiles": 149,
+    "archivedFiles": 153,
+    "candidates": 45,
+    "scope": "Literal import graph rooted at main, active tests and TS/JS stories. Declarations, MDX/config globs, computed imports and external scripts need manual checks. Candidate count is not a removal count."
+  },
+  "build": {
+    "before": {
+      "entryBytes": 488224,
+      "entryGzipBytes": 155154,
+      "totalJsBytes": 824406,
+      "totalCssBytes": 70546
+    },
+    "after": {
+      "entryBytes": 289010,
+      "entryGzipBytes": 91822,
+      "totalJsBytes": 794996,
+      "totalCssBytes": 72407
+    },
+    "measurement": "Separate Vite working-tree builds. Main entry -40.8%; all JS -3.6%; CSS +1861 bytes. lightweight-charts moved to a lazy chunk. These are asset sizes, not measured network latency, FPS or total route download savings."
+  },
+  "verification": {
+    "typescript": "tsc --noEmit passed before and after",
+    "frontendTests": 103,
+    "frontendTestFiles": 6,
+    "commands": [
+      ".\\node_modules\\.bin\\tsc.cmd --noEmit",
+      ".\\node_modules\\.bin\\vite.cmd build --outDir build/ui-audit-refactor",
+      ".\\node_modules\\.bin\\vitest.cmd run src/services/accounting.test.ts src/services/liveLifecycle.test.ts src/services/scanHistoryService.test.ts src/services/workflowOwnership.test.ts src/components/hud/rejectionEvidence.test.ts src/pages/Scanner.score.test.tsx --exclude '**/.claude/**' --exclude '**/.agents/**' --exclude '**/node_modules/**'",
+      "node scripts/audit_frontend.mjs --output docs/audits/UI_REFACTOR_2026-10-09_inventory.json"
+    ],
+    "diffCheck": "Scoped git diff --check passed",
+    "browser": [
+      "Desktop1280, tablet768 and phone390 inspections of selected routes",
+      "Closed menu excluded from accessibility tree; native modal isolates background",
+      "Escape restores trigger focus and body overflow; route selection closes menu",
+      "Journal five filter fields44px; Previous/Next/Refresh fit390px viewport"
+    ],
+    "limitations": [
+      "No full route-state matrix or WCAG sign-off",
+      "No backend tests/API import, session mutation or live order",
+      "No full Storybook build; preview imports index.css rather than workspace layer",
+      "No mobile Safari, 200% zoom or complete reduced-motion matrix",
+      "Broader unused-code cleanup and screen/feature migrations remain planned"
+    ]
+  },
+  "review": {
+    "status": "passed scoped implementation/removal review",
+    "independent": true,
+    "report": [
+      "No blocking findings in scoped diff",
+      "Reviewer Edge unavailable-API fixture: initial Close focus,14 Tabs contain focus, Escape/backdrop/desktop resize close and restore scrolling; header fits1121/1180/1280/1440",
+      "Deletion consumers, manifest totals, dependency retirement and journal presentational boundaries checked",
+      "Storybook does not exercise workspace.css; scope limits retained"
+    ],
+    "artifactReview": "passed: formula, manifest, candidate count, levels, embedded ledger, saved asset metrics and scope limits independently verified"
+  },
+  "milestones": [
+    "Keyboard-safe primary navigation",
+    "Scanner and session owners preserved",
+    "Four-file orphan batch verified",
+    "Chart library loads with its route"
+  ],
+  "levels": [
+    {
+      "id": 1,
+      "title": "Map the current product",
+      "status": "cleared",
+      "purpose": "Replace assumptions with current route, owner and reference evidence.",
+      "tasks": [
+        "Mapped every route to one purpose and primary action.",
+        "Recorded baseline import inventory and16 prioritized findings."
+      ],
+      "gate": "Current sources, route definitions, graph navigation and selected browser evidence recorded."
+    },
+    {
+      "id": 2,
+      "title": "Simplify the shared shell",
+      "status": "cleared",
+      "purpose": "Make navigation and shared controls quieter and usable on a phone.",
+      "tasks": [
+        "Native menu dialog, active-page semantics, skip link and tablet breakpoint.",
+        "Quieter workspace surfaces and optional decorative defaults.",
+        "Diagnostic route fixed; journal names, focus and pagination repaired."
+      ],
+      "gate": "Compiler/build pass; selected browser/menu checks and independent scoped review pass. Full screen audit remains level6."
+    },
+    {
+      "id": 3,
+      "title": "Remove confirmed bloat",
+      "status": "cleared",
+      "purpose": "Clear a bounded batch with reference and provenance proof.",
+      "tasks": [
+        "Removed4 orphan modules,350 source lines and9700 bytes.",
+        "Retired2 root providers and2 unused direct dependencies.",
+        "Preserved authored lessons, generated contracts and archive consumers."
+      ],
+      "gate": "Hashed manifest, consumer checks,103 relevant tests, compiler/build and scoped independent review."
+    },
+    {
+      "id": 4,
+      "title": "Give every screen one job",
+      "status": "planned",
+      "purpose": "Make the next useful action obvious, especially on a phone.",
+      "tasks": [
+        "Compact Scanner mode/setup; bring Run Scan and results forward.",
+        "Prioritize session attention, positions and recovery over diagnostic grids.",
+        "Separate Journal review from research controls.",
+        "Clarify live-health ownership and remove unsupported landing claims.",
+        "Wire authored lessons; move paper setup under bot navigation with aliases."
+      ],
+      "gate": "Core tasks and honest loading/error/partial/recovery states verified on desktop and phone."
+    },
+    {
+      "id": 5,
+      "title": "Establish feature boundaries",
+      "status": "planned",
+      "purpose": "Reduce maintenance cost without creating duplicate state owners.",
+      "tasks": [
+        "Extract feature-local view models, components and CSS from monolithic pages.",
+        "Consolidate tokens and shared Field/Dialog/Button primitives.",
+        "Keep paper/live transports separate; retries remain explicit for mutations.",
+        "Separate active Storybook roots from historical archive examples."
+      ],
+      "gate": "Consumers migrate incrementally; lifecycle, contracts, state identity and applicable offline checks stay green."
+    },
+    {
+      "id": 6,
+      "title": "Verify complete journeys",
+      "status": "planned",
+      "purpose": "Clear acceptance gates across the app, not just the foundation.",
+      "tasks": [
+        "Every route/state at320/390/768/1280px and200% zoom.",
+        "Keyboard, all dialogs, contrast, touch targets, reduced motion and Safari.",
+        "Success, unavailable feed, stale data, cancellation and recovery.",
+        "Compare entry and total assets; remove obsolete compatibility CSS only with reference evidence."
+      ],
+      "gate": "Documented route/state matrix, meaningful regressions, independent review and updated evidence."
+    }
+  ],
+  "findings": [
+    {
+      "id": "A01",
+      "priority": "P1",
+      "status": "fixed",
+      "title": "Closed navigation exposed",
+      "action": "Native modal dialog excludes closed links and owns background/focus."
+    },
+    {
+      "id": "A02",
+      "priority": "P1",
+      "status": "fixed",
+      "title": "Diagnostic action did not navigate",
+      "action": "Removed the hash prefix from the Scanner/Intel/setup route."
+    },
+    {
+      "id": "A03",
+      "priority": "P1",
+      "status": "fixed",
+      "title": "Journal filters unnamed and pagination clipped",
+      "action": "Five accessible names, focus visibility and responsive wrapping."
+    },
+    {
+      "id": "A04",
+      "priority": "P1",
+      "status": "open",
+      "title": "Shared modal accessibility",
+      "action": "Audit every caller, then add consistent labels, Escape and focus handling."
+    },
+    {
+      "id": "A05",
+      "priority": "P1",
+      "status": "open",
+      "title": "Static examples appear live",
+      "action": "Label examples and replace unestablished landing capability claims."
+    },
+    {
+      "id": "A06",
+      "priority": "P1",
+      "status": "open",
+      "title": "Health status owner unclear",
+      "action": "Separate live-executor health from paper-session/feed status."
+    },
+    {
+      "id": "A07",
+      "priority": "P2",
+      "status": "open",
+      "title": "Scanner action below dense setup",
+      "action": "Compact mode/input summary alongside Run Scan; keep failure evidence visible."
+    },
+    {
+      "id": "A08",
+      "priority": "P2",
+      "status": "partial",
+      "title": "Small page controls",
+      "action": "Shared navigation/buttons and journal fields improved; review remaining controls."
+    },
+    {
+      "id": "A09",
+      "priority": "P2",
+      "status": "partial",
+      "title": "Competing tokens and decorative layers",
+      "action": "Workspace layer quiets common surfaces; per-state contrast and CSS consolidation remain."
+    },
+    {
+      "id": "A10",
+      "priority": "P2",
+      "status": "open",
+      "title": "Journal mixes review with model tools",
+      "action": "Move experimental controls to research without changing ML behavior."
+    },
+    {
+      "id": "A11",
+      "priority": "P2",
+      "status": "open",
+      "title": "Authored lessons unreachable",
+      "action": "Wire nine lazy chapters and existing progress, or mark entry unavailable."
+    },
+    {
+      "id": "A12",
+      "priority": "P2",
+      "status": "open",
+      "title": "Oversized pages and inline styles",
+      "action": "Extract by feature/owner; keep lifecycle and financial semantics."
+    },
+    {
+      "id": "A13",
+      "priority": "P2",
+      "status": "partial",
+      "title": "Legacy API scaffolding",
+      "action": "Unused journal import removed; remaining archive-dependent graph needs coordinated retirement."
+    },
+    {
+      "id": "A14",
+      "priority": "P2",
+      "status": "open",
+      "title": "Archives enter Storybook",
+      "action": "Separate active roots before deleting archive dependencies."
+    },
+    {
+      "id": "A15",
+      "priority": "P2",
+      "status": "fixed",
+      "title": "Orphan modules and root providers",
+      "action": "Four-file batch and two unused providers retired with a removal manifest."
+    },
+    {
+      "id": "A16",
+      "priority": "P3",
+      "status": "open",
+      "title": "Persistent shortcut and duplicated copy",
+      "action": "Keep genuine session shortcuts; remove ambient navigation decoration."
+    }
+  ]
+}

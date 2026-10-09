@@ -1,0 +1,84 @@
+{
+  "scope": "Active Vitest unit files, excluding separate historical checkouts and Playwright spec runner. No active unit test weakened or removed.",
+  "success": true,
+  "total": 177,
+  "passed": 177,
+  "failed": 0,
+  "files": [
+    {
+      "path": "src/components/FundingTable.test.tsx",
+      "passed": 4,
+      "status": "passed"
+    },
+    {
+      "path": "src/context/ScannerContext.test.ts",
+      "passed": 17,
+      "status": "passed"
+    },
+    {
+      "path": "src/hooks/lessonsProgressState.test.ts",
+      "passed": 1,
+      "status": "passed"
+    },
+    {
+      "path": "src/pages/Scanner.score.test.tsx",
+      "passed": 30,
+      "status": "passed"
+    },
+    {
+      "path": "src/services/accounting.test.ts",
+      "passed": 14,
+      "status": "passed"
+    },
+    {
+      "path": "src/services/liveLifecycle.test.ts",
+      "passed": 11,
+      "status": "passed"
+    },
+    {
+      "path": "src/services/scanHistoryService.test.ts",
+      "passed": 3,
+      "status": "passed"
+    },
+    {
+      "path": "src/services/scannerSetup.test.ts",
+      "passed": 13,
+      "status": "passed"
+    },
+    {
+      "path": "src/services/workflowOwnership.test.ts",
+      "passed": 35,
+      "status": "passed"
+    },
+    {
+      "path": "src/utils/api.retry.test.ts",
+      "passed": 5,
+      "status": "passed"
+    },
+    {
+      "path": "src/components/hud/marketInputRejections.test.ts",
+      "passed": 4,
+      "status": "passed"
+    },
+    {
+      "path": "src/components/hud/rejectionEvidence.test.ts",
+      "passed": 10,
+      "status": "passed"
+    },
+    {
+      "path": "src/components/hud/ScannerModePicker.policy.test.tsx",
+      "passed": 5,
+      "status": "passed"
+    },
+    {
+      "path": "tests/visual/audit.test.ts",
+      "passed": 14,
+      "status": "passed"
+    },
+    {
+      "path": "tests/visual/states.test.ts",
+      "passed": 11,
+      "status": "passed"
+    }
+  ]
+}

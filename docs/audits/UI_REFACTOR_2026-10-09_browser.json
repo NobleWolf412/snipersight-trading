@@ -1,0 +1,1676 @@
+{
+  "scope": "Independent intercepted Edge fixtures. Every API call stubbed; zero trading or ML mutations. Initial failures retained and superseded by named retests. CSS zoom is not native browser zoom.",
+  "interpretation": "Dialog contained=false includes temporary BODY focus while cycling browser chrome. Every backgroundFocusBlocked=true, close target44px and restored=true must be read separately. Initial BotSetup overflow was fixed; expandedRetest is the final setup result.",
+  "initial": {
+    "scope": "All API requests intercepted; idle/session-empty and canned journal/market fixtures. CSS zoom is a limited approximation of browser zoom.",
+    "results": [
+      {
+        "route": "/",
+        "width": 320,
+        "title": "Read the setup.Check the evidence.",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/scanner",
+        "width": 320,
+        "title": "Scanner",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 320,
+        "title": "Bot Setup",
+        "docWidth": 757,
+        "offenders": [
+          {
+            "tag": "INPUT",
+            "text": "",
+            "right": 391,
+            "left": 238
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "right": 391,
+            "left": 238
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "right": 391,
+            "left": 238
+          },
+          {
+            "tag": "BUTTON",
+            "text": "15%",
+            "right": 328,
+            "left": 256
+          },
+          {
+            "tag": "BUTTON",
+            "text": "25%",
+            "right": 404,
+            "left": 332
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "right": 389,
+            "left": 300
+          }
+        ]
+      },
+      {
+        "route": "/bot/status",
+        "width": 320,
+        "title": "Session status",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/journal",
+        "width": 320,
+        "title": "Journal",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/intel",
+        "width": 320,
+        "title": "Market Intel",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/settings",
+        "width": 320,
+        "title": "Settings",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/training",
+        "width": 320,
+        "title": "Training Ground",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/training/range",
+        "width": 320,
+        "title": "Ghost Range",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/training/replay",
+        "width": 320,
+        "title": "REPLAY",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 320,
+        "title": "Lessons",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 320,
+        "title": "Research tools",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 320,
+        "title": "Page not found",
+        "docWidth": 320,
+        "offenders": []
+      },
+      {
+        "route": "/",
+        "width": 390,
+        "title": "Read the setup.Check the evidence.",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/scanner",
+        "width": 390,
+        "title": "Scanner",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 390,
+        "title": "Bot Setup",
+        "docWidth": 757,
+        "offenders": [
+          {
+            "tag": "BUTTON",
+            "text": "25%",
+            "right": 404,
+            "left": 332
+          },
+          {
+            "tag": "BUTTON",
+            "text": "○ MEME",
+            "right": 404,
+            "left": 283
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "right": 404,
+            "left": 29
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "right": 484,
+            "left": 471
+          },
+          {
+            "tag": "BUTTON",
+            "text": "SAVE CONFIG",
+            "right": 740,
+            "left": 454
+          },
+          {
+            "tag": "BUTTON",
+            "text": "▶ DEPLOY LIVE BOT",
+            "right": 740,
+            "left": 454
+          }
+        ]
+      },
+      {
+        "route": "/bot/status",
+        "width": 390,
+        "title": "Session status",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/journal",
+        "width": 390,
+        "title": "Journal",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/intel",
+        "width": 390,
+        "title": "Market Intel",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/settings",
+        "width": 390,
+        "title": "Settings",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/training",
+        "width": 390,
+        "title": "Training Ground",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/training/range",
+        "width": 390,
+        "title": "Ghost Range",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/training/replay",
+        "width": 390,
+        "title": "REPLAY",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 390,
+        "title": "Lessons",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 390,
+        "title": "Research tools",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 390,
+        "title": "Page not found",
+        "docWidth": 390,
+        "offenders": []
+      },
+      {
+        "route": "/",
+        "width": 768,
+        "title": "Read the setup.Check the evidence.",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/scanner",
+        "width": 768,
+        "title": "Scanner",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 768,
+        "title": "Bot Setup",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 768,
+        "title": "Session status",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/journal",
+        "width": 768,
+        "title": "Journal",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/intel",
+        "width": 768,
+        "title": "Market Intel",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/settings",
+        "width": 768,
+        "title": "Settings",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/training",
+        "width": 768,
+        "title": "Training Ground",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/training/range",
+        "width": 768,
+        "title": "Ghost Range",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/training/replay",
+        "width": 768,
+        "title": "REPLAY",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 768,
+        "title": "Lessons",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 768,
+        "title": "Research tools",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 768,
+        "title": "Page not found",
+        "docWidth": 768,
+        "offenders": []
+      },
+      {
+        "route": "/",
+        "width": 1280,
+        "title": "Read the setup.Check the evidence.",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/scanner",
+        "width": 1280,
+        "title": "Scanner",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 1280,
+        "title": "Bot Setup",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 1280,
+        "title": "Session status",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/journal",
+        "width": 1280,
+        "title": "Journal",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/intel",
+        "width": 1280,
+        "title": "Market Intel",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/settings",
+        "width": 1280,
+        "title": "Settings",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/training",
+        "width": 1280,
+        "title": "Training Ground",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/training/range",
+        "width": 1280,
+        "title": "Ghost Range",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/training/replay",
+        "width": 1280,
+        "title": "REPLAY",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 1280,
+        "title": "Lessons",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 1280,
+        "title": "Research tools",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 1280,
+        "title": "Page not found",
+        "docWidth": 1280,
+        "offenders": []
+      },
+      {
+        "route": "/scanner",
+        "mode": "CSS200% zoom and reduced motion",
+        "docWidth": 640,
+        "viewport": 640,
+        "reduced": true,
+        "h1Width": 481.953125
+      },
+      {
+        "route": "/bot/status",
+        "mode": "CSS200% zoom and reduced motion",
+        "docWidth": 640,
+        "viewport": 640,
+        "reduced": true,
+        "h1Width": 416.640625
+      },
+      {
+        "route": "/journal",
+        "mode": "CSS200% zoom and reduced motion",
+        "docWidth": 640,
+        "viewport": 640,
+        "reduced": true,
+        "h1Width": 402.703125
+      },
+      {
+        "route": "/intel",
+        "mode": "CSS200% zoom and reduced motion",
+        "docWidth": 640,
+        "viewport": 640,
+        "reduced": true,
+        "h1Width": 489.53125
+      },
+      {
+        "route": "/settings",
+        "mode": "CSS200% zoom and reduced motion",
+        "docWidth": 640,
+        "viewport": 640,
+        "reduced": true,
+        "h1Width": 584
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  },
+  "sessionStates": {
+    "scope": "Canned LONG/SHORT, paper, synthetic live recovery and unavailable API. No commands; every API call intercepted.",
+    "results": [
+      {
+        "state": "long",
+        "width": 320,
+        "title": "Live session",
+        "docWidth": 320,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": true
+      },
+      {
+        "state": "long",
+        "width": 390,
+        "title": "Live session",
+        "docWidth": 390,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": true
+      },
+      {
+        "state": "long",
+        "width": 1280,
+        "title": "Live session",
+        "docWidth": 1280,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": true
+      },
+      {
+        "state": "short",
+        "width": 320,
+        "title": "Live session",
+        "docWidth": 320,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": true
+      },
+      {
+        "state": "short",
+        "width": 390,
+        "title": "Live session",
+        "docWidth": 390,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": true
+      },
+      {
+        "state": "short",
+        "width": 1280,
+        "title": "Live session",
+        "docWidth": 1280,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": true
+      },
+      {
+        "state": "paper",
+        "width": 320,
+        "title": "Paper session",
+        "docWidth": 320,
+        "reset": [],
+        "paperDiagnostic": [
+          true
+        ],
+        "recoveryText": false,
+        "liveKill": false
+      },
+      {
+        "state": "paper",
+        "width": 390,
+        "title": "Paper session",
+        "docWidth": 390,
+        "reset": [],
+        "paperDiagnostic": [
+          true
+        ],
+        "recoveryText": false,
+        "liveKill": false
+      },
+      {
+        "state": "paper",
+        "width": 1280,
+        "title": "Paper session",
+        "docWidth": 1280,
+        "reset": [],
+        "paperDiagnostic": [
+          true
+        ],
+        "recoveryText": false,
+        "liveKill": false
+      },
+      {
+        "state": "recovery",
+        "width": 320,
+        "title": "Live session",
+        "docWidth": 320,
+        "reset": [
+          {
+            "disabled": true
+          }
+        ],
+        "paperDiagnostic": [],
+        "recoveryText": true,
+        "liveKill": false
+      },
+      {
+        "state": "recovery",
+        "width": 390,
+        "title": "Live session",
+        "docWidth": 390,
+        "reset": [
+          {
+            "disabled": true
+          }
+        ],
+        "paperDiagnostic": [],
+        "recoveryText": true,
+        "liveKill": false
+      },
+      {
+        "state": "recovery",
+        "width": 1280,
+        "title": "Live session",
+        "docWidth": 1280,
+        "reset": [
+          {
+            "disabled": true
+          }
+        ],
+        "paperDiagnostic": [],
+        "recoveryText": true,
+        "liveKill": false
+      },
+      {
+        "state": "unavailable",
+        "width": 320,
+        "title": "Session status",
+        "docWidth": 320,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": false
+      },
+      {
+        "state": "unavailable",
+        "width": 390,
+        "title": "Session status",
+        "docWidth": 390,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": false
+      },
+      {
+        "state": "unavailable",
+        "width": 1280,
+        "title": "Session status",
+        "docWidth": 1280,
+        "reset": [],
+        "paperDiagnostic": [],
+        "recoveryText": false,
+        "liveKill": false
+      }
+    ],
+    "errors": []
+  },
+  "expandedRetest": {
+    "results": [
+      {
+        "path": "/bot/setup",
+        "width": 320,
+        "docWidth": 320,
+        "controls": 32,
+        "offenders": []
+      },
+      {
+        "path": "/training/range#setup",
+        "width": 320,
+        "docWidth": 320,
+        "controls": 27,
+        "offenders": []
+      },
+      {
+        "path": "/training/replay",
+        "width": 320,
+        "docWidth": 320,
+        "controls": 6,
+        "offenders": []
+      },
+      {
+        "path": "/bot/setup",
+        "width": 390,
+        "docWidth": 390,
+        "controls": 32,
+        "offenders": []
+      },
+      {
+        "path": "/training/range#setup",
+        "width": 390,
+        "docWidth": 390,
+        "controls": 27,
+        "offenders": []
+      },
+      {
+        "path": "/training/replay",
+        "width": 390,
+        "docWidth": 390,
+        "controls": 6,
+        "offenders": []
+      },
+      {
+        "path": "/bot/setup",
+        "width": 768,
+        "docWidth": 768,
+        "controls": 32,
+        "offenders": []
+      },
+      {
+        "path": "/training/range#setup",
+        "width": 768,
+        "docWidth": 768,
+        "controls": 27,
+        "offenders": []
+      },
+      {
+        "path": "/training/replay",
+        "width": 768,
+        "docWidth": 768,
+        "controls": 6,
+        "offenders": []
+      },
+      {
+        "path": "/bot/setup",
+        "width": 1280,
+        "docWidth": 1280,
+        "controls": 32,
+        "offenders": []
+      },
+      {
+        "path": "/training/range#setup",
+        "width": 1280,
+        "docWidth": 1280,
+        "controls": 27,
+        "offenders": []
+      },
+      {
+        "path": "/training/replay",
+        "width": 1280,
+        "docWidth": 1280,
+        "controls": 6,
+        "offenders": []
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  },
+  "dialogs": {
+    "scope": "Direct caller assembly under StrictMode with intercepted APIs; no application route ownership asserted.",
+    "results": [
+      {
+        "viewport": 320,
+        "label": "Live executor and scanner diagnostics",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Live executor and scanner diagnostics",
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 288,
+        "left": 16,
+        "right": 304,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 320,
+        "label": "Signal pipeline trace",
+        "contained": true,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 288,
+        "left": 16,
+        "right": 304,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 320,
+        "label": "Position and pending setup detail",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": "Close detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Position and pending setup detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Position and pending setup detail",
+            "dialog": "Position and pending setup detail"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 288,
+        "left": 16,
+        "right": 304,
+        "closeHeight": 44,
+        "canvas": [
+          194,
+          194,
+          62,
+          62,
+          194,
+          194,
+          62
+        ],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 320,
+        "label": "Completed trade detail",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": "Close trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Completed trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Completed trade detail",
+            "dialog": "Completed trade detail"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 288,
+        "left": 16,
+        "right": 304,
+        "closeHeight": 44,
+        "canvas": [
+          188,
+          188,
+          68,
+          68,
+          188,
+          188,
+          68
+        ],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 320,
+        "label": "Scanner universe",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Scanner universe",
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 288,
+        "left": 16,
+        "right": 304,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 390,
+        "label": "Live executor and scanner diagnostics",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Live executor and scanner diagnostics",
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 358,
+        "left": 16,
+        "right": 374,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 390,
+        "label": "Signal pipeline trace",
+        "contained": true,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 358,
+        "left": 16,
+        "right": 374,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 390,
+        "label": "Position and pending setup detail",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": "Close detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Position and pending setup detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Position and pending setup detail",
+            "dialog": "Position and pending setup detail"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 358,
+        "left": 16,
+        "right": 374,
+        "closeHeight": 44,
+        "canvas": [
+          264,
+          264,
+          62,
+          62,
+          264,
+          264,
+          62
+        ],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 390,
+        "label": "Completed trade detail",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": "Close trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Completed trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Completed trade detail",
+            "dialog": "Completed trade detail"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 358,
+        "left": 16,
+        "right": 374,
+        "closeHeight": 44,
+        "canvas": [
+          258,
+          258,
+          68,
+          68,
+          258,
+          258,
+          68
+        ],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 390,
+        "label": "Scanner universe",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Scanner universe",
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 358,
+        "left": 16,
+        "right": 374,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "nested": "health",
+        "menuOpen": true,
+        "focus": "● LIVE EXEC WARN",
+        "lock": "hidden"
+      },
+      {
+        "nestedOuter": "health",
+        "menuClosed": true,
+        "focus": "Open menu",
+        "lock": ""
+      },
+      {
+        "nested": "help",
+        "menuOpen": true,
+        "focus": "Help fixture",
+        "lock": "hidden"
+      },
+      {
+        "nestedOuter": "help",
+        "menuClosed": true,
+        "focus": "Open menu",
+        "lock": ""
+      },
+      {
+        "viewport": 1280,
+        "label": "Live executor and scanner diagnostics",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Live executor and scanner diagnostics",
+            "dialog": "Live executor and scanner diagnostics"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Live executor and scanner diagnostics"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 780,
+        "left": 250,
+        "right": 1030,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 1280,
+        "label": "Signal pipeline trace",
+        "contained": true,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Signal pipeline trace"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 1080,
+        "left": 100,
+        "right": 1180,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 1280,
+        "label": "Position and pending setup detail",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": "Close detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Position and pending setup detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close detail",
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Position and pending setup detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Position and pending setup detail",
+            "dialog": "Position and pending setup detail"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 820,
+        "left": 230,
+        "right": 1050,
+        "closeHeight": 44,
+        "canvas": [
+          726,
+          726,
+          62,
+          62,
+          726,
+          726,
+          62
+        ],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 1280,
+        "label": "Completed trade detail",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": "Close trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Completed trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close trade detail",
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "A",
+            "label": null,
+            "dialog": "Completed trade detail"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Completed trade detail",
+            "dialog": "Completed trade detail"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 860,
+        "left": 210,
+        "right": 1070,
+        "closeHeight": 44,
+        "canvas": [
+          760,
+          760,
+          68,
+          68,
+          760,
+          760,
+          68
+        ],
+        "restored": true,
+        "overflow": ""
+      },
+      {
+        "viewport": 1280,
+        "label": "Scanner universe",
+        "contained": false,
+        "focusTargets": [
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Scanner universe",
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "BUTTON",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "DIV",
+            "label": null,
+            "dialog": "Scanner universe"
+          },
+          {
+            "tag": "BODY",
+            "label": null
+          },
+          {
+            "tag": "BUTTON",
+            "label": "Close Scanner universe",
+            "dialog": "Scanner universe"
+          }
+        ],
+        "backgroundFocusBlocked": true,
+        "width": 920,
+        "left": 180,
+        "right": 1100,
+        "closeHeight": 44,
+        "canvas": [],
+        "restored": true,
+        "overflow": ""
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  },
+  "keyboardSwitches": {
+    "results": [
+      {
+        "path": "/bot/setup",
+        "before": "true",
+        "space": "false",
+        "enter": "true",
+        "height": 68,
+        "width": 390,
+        "disabled": []
+      },
+      {
+        "path": "/training/range#setup",
+        "before": "true",
+        "space": "false",
+        "enter": "true",
+        "height": 68,
+        "width": 390,
+        "disabled": []
+      },
+      {
+        "resize": {
+          "menuOpen": false,
+          "childOpen": true,
+          "lock": "hidden"
+        }
+      },
+      {
+        "resizeClosed": {
+          "remaining": 0,
+          "lock": "",
+          "focus": "SniperSight home"
+        }
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  }
+}

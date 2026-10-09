@@ -30,5 +30,42 @@
     "lines": 12,
     "provenance": "8e8f01e initial scaffold; no current code consumers after root provider retirement",
     "disposition": "delete tracked source; Git retains history"
+  },
+  {
+    "path": "src/config/landingConfig.ts",
+    "sha256": "fe1f0103dde45c7cca6be198e1e78fa91a3da7bc0675161efd4b68ca96daca0c",
+    "bytes": 2479,
+    "lines": 71,
+    "provenance": "8e8f01e initial scaffold. Full source/config/script/test/archive path and exported-symbol searches found no consumers. Current Landing/Scanner/BotSetup own their implemented controls and copy.",
+    "disposition": "Delete obsolete scaffold; retain Git history. Not an authored lesson or runtime/audit record.",
+    "batch": "follow-through"
+  },
+  {
+    "path": "src/constants/assetPresets.ts",
+    "sha256": "2b7111c5d7f10a27409d1b095888296840decaf451aeb16eeff55d9b4b000bd6",
+    "bytes": 1637,
+    "lines": 58,
+    "provenance": "8e8f01e initial scaffold. Full source/config/script/test/archive path and exported-symbol searches found no consumers. Current Landing/Scanner/BotSetup own their implemented controls and copy.",
+    "disposition": "Delete obsolete scaffold; retain Git history. Not an authored lesson or runtime/audit record.",
+    "batch": "follow-through"
+  },
+  {
+    "path": "src/constants/scannerFieldHelp.ts",
+    "sha256": "5b02f8362353a9c8a97d8175ba01e2248228be8e36a554992e1554f7ec9d4aac",
+    "bytes": 3441,
+    "lines": 82,
+    "provenance": "8e8f01e initial scaffold. Full source/config/script/test/archive path and exported-symbol searches found no consumers. Current Landing/Scanner/BotSetup own their implemented controls and copy.",
+    "disposition": "Delete obsolete scaffold; retain Git history. Not an authored lesson or runtime/audit record.",
+    "batch": "follow-through"
+  },
+  {
+    "kind": "retired-css-section",
+    "path": "src/styles/hud.css",
+    "section": "Landing-specific hero/ticker/scope/proof/doctrine styles",
+    "sha256": "b387a89a891150b2c81c39757d891f4a0c8aec3f99ae90033b258f7c5f88e013",
+    "bytes": 10640,
+    "lines": 188,
+    "provenance": "Last consumer was the replaced Landing presentation. Exact class-reference checks across active/archive TSX, tests, scripts and stories found no remaining consumers. New Landing uses its own scoped stylesheet.",
+    "disposition": "Remove retired section; keep shared HUD rules and history. Bundled with A05, no separate points."
   }
 ]

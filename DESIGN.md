@@ -10,8 +10,8 @@ colors:
   border-soft: "oklch(0.32 0.015 130 / 0.6)"
   fg: "oklch(0.94 0.012 150)"
   fg-2: "oklch(0.78 0.012 150)"
-  fg-3: "oklch(0.58 0.015 150)"
-  fg-4: "oklch(0.42 0.012 150)"
+  fg-3: "oklch(0.78 0.012 150)"
+  fg-4: "oklch(0.72 0.012 150)"
   green: "#00ffaa"
   green-soft: "#4ade80"
   amber: "#ffc266"
@@ -124,6 +124,14 @@ components:
 ---
 
 # Design System: SniperSight
+
+## Current product treatment, 2026-10-09
+
+[PRODUCT.md](PRODUCT.md) owns current screen intent and tone. The olive dark palette is preserved; [tokens.css](src/styles/tokens.css) is its sole declaration owner, including compatibility aliases. Muted foreground tokens are now .78/.72 lightness; no whole-app contrast certification is implied.
+
+Product page titles use sentence case and the sans body family; numbers, symbols and short state labels retain mono type. Shared panels are quiet, with visible focus and 44px common controls. Native dialog backdrops provide earned layering. Static surfaces have no implied stream or activity. [workspace.css](src/styles/workspace.css) contains these product rules and responsive corrections; legacy presentation selectors remain under the open A09 review.
+
+The historical component/effect recipes below describe the prior HUD treatment. Where they prescribe gratuitous glow, ambient animation, dim tiny hierarchy or all-uppercase prose, current PRODUCT.md and implemented product rules supersede them. They are retained as design history, not instructions to restore ornament. Current evidence: [UI audit](docs/audits/UI_REFACTOR_2026-10-09.md).
 
 ## 1. Overview
 

@@ -92,7 +92,7 @@ Status: **implemented** = working end to end; **partial** = works with known gap
 | `/journal` | Review completed execution records; filter and export | Implemented; research controls live in /training/drills |
 | `/intel` | Market context: regime, mode advice, sessions, funding | Implemented; some fields can be unavailable |
 | `/training` | Hub for learning and research tools | Implemented |
-| `/training/replay` | Step through historical candles with causal evidence | Implemented |
+| `/training/replay` | Step through historical candles with causal evidence | Implemented; candle/structure playback. Signal replay is unavailable when required historical inputs are missing |
 | `/training/drills` | Experimental model tools | Partial; research only |
 | `/training/lessons` | Lesson library | Implemented; nine lazy chapters with browser read/resume progress. Historical teaching examples are labeled |
 | `/settings` | Browser preferences (deliberately quiet) | Implemented |

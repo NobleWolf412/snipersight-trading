@@ -1,32 +1,176 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "progress": {
-    "policy": "10 points per distinct verified, committed finding fixed. Related module, provider and dependency removals form one cleanup outcome. Metrics do not earn points.",
-    "evidenceCommit": "68ea66972457a16ce9586240258523e026e64fe9",
+    "policy": "Verified committed P1/P2/P3 fix20/10/5; distinct cleanup10 (module+provider+dependency once); complete screen acceptance25. No points for moves, lines, metrics, weakened tests or trading. No full-screen awards yet.",
+    "evidenceCommit": "e0f4f44bd2682f57f091bbac06882cfef5369904",
     "outcomes": [
       {
         "id": "A01",
-        "points": 10,
+        "type": "finding",
+        "points": 20,
         "verified": true,
         "commit": "68ea66972457a16ce9586240258523e026e64fe9"
       },
       {
         "id": "A02",
-        "points": 10,
+        "type": "finding",
+        "points": 20,
         "verified": true,
         "commit": "68ea66972457a16ce9586240258523e026e64fe9"
       },
       {
         "id": "A03",
+        "type": "finding",
+        "points": 20,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "A04",
+        "type": "finding",
+        "points": 20,
+        "verified": true,
+        "commit": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6"
+      },
+      {
+        "id": "A05",
+        "type": "finding",
+        "points": 20,
+        "verified": true,
+        "commit": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6"
+      },
+      {
+        "id": "A06",
+        "type": "finding",
+        "points": 20,
+        "verified": true,
+        "commit": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6"
+      },
+      {
+        "id": "A07",
+        "type": "finding",
+        "points": 10,
+        "verified": true,
+        "commit": "61aa258be255d278397eaffed84d66b1b83421bb"
+      },
+      {
+        "id": "A10",
+        "type": "finding",
+        "points": 10,
+        "verified": true,
+        "commit": "5a624f8ff90cac2131a355a2f85e61be988a5eca"
+      },
+      {
+        "id": "A11",
+        "type": "finding",
+        "points": 10,
+        "verified": true,
+        "commit": "a3e2e8908e78b8948430f0754616500d0f7dabc5"
+      },
+      {
+        "id": "A12",
+        "type": "finding",
+        "points": 10,
+        "verified": true,
+        "commit": "ef225046f805c868a4d2c37ccaf56ddb04c01c37"
+      },
+      {
+        "id": "A13",
+        "type": "finding",
+        "points": 10,
+        "verified": true,
+        "commit": "e0f4f44bd2682f57f091bbac06882cfef5369904"
+      },
+      {
+        "id": "A14",
+        "type": "finding",
+        "points": 10,
+        "verified": true,
+        "commit": "e0f4f44bd2682f57f091bbac06882cfef5369904"
+      },
+      {
+        "id": "A16",
+        "type": "finding",
+        "points": 5,
+        "verified": true,
+        "commit": "ec5e5daac0e987bd41a7830b47882e5158806c6d"
+      },
+      {
+        "id": "A17",
+        "type": "finding",
+        "points": 20,
+        "verified": true,
+        "commit": "203bc935415faa1feadb8553e68f2de47907e24f"
+      },
+      {
+        "id": "A18",
+        "type": "finding",
+        "points": 10,
+        "verified": true,
+        "commit": "e0f4f44bd2682f57f091bbac06882cfef5369904"
+      },
+      {
+        "id": "A19",
+        "type": "finding",
+        "points": 20,
+        "verified": true,
+        "commit": "203bc935415faa1feadb8553e68f2de47907e24f"
+      },
+      {
+        "id": "C01",
+        "type": "cleanup",
         "points": 10,
         "verified": true,
         "commit": "68ea66972457a16ce9586240258523e026e64fe9"
       },
       {
-        "id": "A15",
+        "id": "C02",
+        "type": "cleanup",
         "points": 10,
         "verified": true,
         "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "C03",
+        "type": "cleanup",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "C04",
+        "type": "cleanup",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "C05",
+        "type": "cleanup",
+        "points": 10,
+        "verified": true,
+        "commit": "68ea66972457a16ce9586240258523e026e64fe9"
+      },
+      {
+        "id": "C06",
+        "type": "cleanup",
+        "points": 10,
+        "verified": true,
+        "commit": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6"
+      },
+      {
+        "id": "C07",
+        "type": "cleanup",
+        "points": 10,
+        "verified": true,
+        "commit": "61aa258be255d278397eaffed84d66b1b83421bb"
+      },
+      {
+        "id": "C08",
+        "type": "cleanup",
+        "points": 10,
+        "verified": true,
+        "commit": "61aa258be255d278397eaffed84d66b1b83421bb"
       }
     ],
     "historicalCheckpoint": {
@@ -35,28 +179,43 @@
       "formula": "4 orphan modules × 10 + 2 providers × 5 + 2 direct dependencies × 10",
       "status": "Superseded by PRODUCT.md outcome scoring; retained as historical evidence."
     },
-    "correction": "40 points for four independently verified fixes already committed in 68ea669. No additional award for this documentation or scoring correction."
+    "correction": "The supplied weighted policy supersedes the historical70 and40 policies. The already committed foundation is110 (A01-A03=60 plus five cleanup outcomes=50). Follow-through adds205, for315. A15 is represented by cleanup items, never awarded again as a finding.",
+    "screenAcceptanceAwards": 0
   },
   "date": "2026-10-09",
-  "scope": "UI audit, refactor proposal and bounded foundation changes. Remaining screen and feature migrations are planned. Existing working-tree edits and runtime records preserved.",
+  "scope": "UI simplification follow-through: current screen focus, native dialogs, truthful state, nine lessons, in-place responsibility splits, shared token/API owners, guarded retries and verified scaffold cleanup. Backend execution/training/strategy unchanged; full cross-browser/state acceptance remains open.",
   "removals": {
-    "files": 4,
-    "sourceLines": 350,
-    "sourceBytes": 9700,
+    "files": 7,
+    "sourceLines": 561,
+    "sourceBytes": 17257,
     "providers": 2,
     "directDependencies": [
       "@tanstack/react-query",
       "numeral"
     ],
     "manifest": "UI_REFACTOR_2026-10-09_removals.json",
-    "measurement": "Gross removed source in four modules; excludes net diff and node_modules disk savings."
+    "retiredCss": [
+      {
+        "kind": "retired-css-section",
+        "path": "src/styles/hud.css",
+        "section": "Landing-specific hero/ticker/scope/proof/doctrine styles",
+        "sha256": "b387a89a891150b2c81c39757d891f4a0c8aec3f99ae90033b258f7c5f88e013",
+        "bytes": 10640,
+        "lines": 188,
+        "provenance": "Last consumer was the replaced Landing presentation. Exact class-reference checks across active/archive TSX, tests, scripts and stories found no remaining consumers. New Landing uses its own scoped stylesheet.",
+        "disposition": "Remove retired section; keep shared HUD rules and history. Bundled with A05, no separate points."
+      }
+    ],
+    "measurement": "Gross source removed in seven proven obsolete modules. Retired Landing CSS separate and bundled into A05. Not net diff, disk savings, or a whole-repository dead-code claim."
   },
   "inventory": {
     "baselineActiveFiles": 153,
-    "activeFiles": 149,
+    "activeFiles": 163,
     "archivedFiles": 153,
-    "candidates": 45,
-    "scope": "Literal import graph rooted at main, active tests and TS/JS stories. Declarations, MDX/config globs, computed imports and external scripts need manual checks. Candidate count is not a removal count."
+    "candidates": 18,
+    "inlineStyleCount": 1026,
+    "scope": "Static literal imports/exports from main.tsx, active tests and stories. Excludes archive; declarations, CSS classes, computed imports, config globs and external scripts require manual reference/provenance checks.",
+    "retained": "Eighteen triage candidates include archive consumers, generated contracts and external verification/packaging scripts. Unreachability alone does not authorize deletion."
   },
   "build": {
     "before": {
@@ -65,131 +224,163 @@
       "totalJsBytes": 824406,
       "totalCssBytes": 70546
     },
-    "after": {
+    "foundation": {
       "entryBytes": 289010,
       "entryGzipBytes": 91822,
       "totalJsBytes": 794996,
       "totalCssBytes": 72407
     },
-    "measurement": "Separate Vite working-tree builds. Main entry -40.8%; all JS -3.6%; CSS +1861 bytes. lightweight-charts moved to a lazy chunk. These are asset sizes, not measured network latency, FPS or total route download savings."
+    "after": {
+      "entryBytes": 287240,
+      "entryGzipBytes": 91196,
+      "totalJsBytes": 862598,
+      "totalCssBytes": 68105
+    },
+    "entryAsset": "index-B8cEi1Bv.js",
+    "measurement": "Exact bytes from separate local Vite builds. Total JS now includes the newly reachable nine lazy chapters and other intervening committed scanner fixes; cannot attribute every difference solely to cleanup. Asset size is not latency, FPS or total route download."
   },
   "verification": {
-    "typescript": "tsc --noEmit passed before and after",
-    "frontendTests": 103,
-    "frontendTestFiles": 6,
+    "typescript": "tsc --noEmit passed on final source",
+    "frontendTests": 177,
+    "frontendTestFiles": 15,
+    "unitEvidence": "UI_REFACTOR_2026-10-09_tests.json",
     "commands": [
       ".\\node_modules\\.bin\\tsc.cmd --noEmit",
-      ".\\node_modules\\.bin\\vite.cmd build --outDir build/ui-audit-refactor",
-      ".\\node_modules\\.bin\\vitest.cmd run src/services/accounting.test.ts src/services/liveLifecycle.test.ts src/services/scanHistoryService.test.ts src/services/workflowOwnership.test.ts src/components/hud/rejectionEvidence.test.ts src/pages/Scanner.score.test.tsx --exclude '**/.claude/**' --exclude '**/.agents/**' --exclude '**/node_modules/**'",
-      "node scripts/audit_frontend.mjs --output docs/audits/UI_REFACTOR_2026-10-09_inventory.json"
+      "npm test -- --reporter=json --outputFile=build/ui-simplify-tests.json",
+      "npm run build:frontend",
+      "npm run build-storybook",
+      "node scripts/audit_frontend.mjs --output docs/audits/UI_REFACTOR_2026-10-09_inventory.json",
+      "git diff --check",
+      "node scripts/build_refactor_dashboard.mjs"
     ],
-    "diffCheck": "Scoped git diff --check passed",
+    "frontendBuild": "Passed;4714 modules",
+    "storybook": "Passed;348 modules. Non-failing warnings: unmatched active component story glob, stale baseline-browser-mapping metadata, large Storybook chunks.",
+    "diffCheck": "Final source git diff --check passed; staged evidence checked before commit.",
+    "browserEvidence": "UI_REFACTOR_2026-10-09_browser.json",
     "browser": [
-      "Desktop1280, tablet768 and phone390 inspections of selected routes",
-      "Closed menu excluded from accessibility tree; native modal isolates background",
-      "Escape restores trigger focus and body overflow; route selection closes menu",
-      "Journal five filter fields44px; Previous/Next/Refresh fit390px viewport"
+      "Initial13-route×4width matrix (320/390/768/1280), plus five CSS zoom/reduced-motion samples. BotSetup initial overflow corrected and retested.",
+      "15 session-state fixtures cover LONG/SHORT, paper, recovery and unavailable APIs.",
+      "12 expanded live/paper/replay layout retests, zero overflow.",
+      "All six shared Modal callers plus Replay help under StrictMode with Escape, focus, chart sizing,44px close targets; nested menu resize and shared scroll lock.",
+      "Live and paper switches: Space changes state, Enter restores."
     ],
+    "independentReview": {
+      "rubric": ".claude/AUDIT_RUBRIC.md",
+      "result": "No remaining verified P1/P2 issues in the reviewed batch.",
+      "fixes": "Nested native close-event propagation, shared scroll lock, portal target sizing and phone preflight overflow corrected and independently retested.",
+      "semantics": "AST comparison confirmed BotStatus polling/action initializers and generation guards, ten leaf view helpers and Scanner builder semantics. No API mutations in intercepted fixtures."
+    },
     "limitations": [
-      "No full route-state matrix or WCAG sign-off",
-      "No backend tests/API import, session mutation or live order",
-      "No full Storybook build; preview imports index.css rather than workspace layer",
-      "No mobile Safari, 200% zoom or complete reduced-motion matrix",
-      "Broader unused-code cleanup and screen/feature migrations remain planned"
+      "Mobile Safari and native200% browser zoom unavailable in this environment. CSS zoom does not satisfy that gate.",
+      "Full WCAG and every route/state/provenance/contrast permutation not verified. A08/A09 and Level07 remain open.",
+      "No backend suite, exchange operation, actual order, new paper/live/testnet session, ML training/reset or journal mutation performed.",
+      "No claim that every repository orphan is removed or all inline styling is eliminated."
     ]
   },
   "review": {
-    "status": "passed scoped implementation/removal review",
+    "status": "Passed scoped implementation, deletion and evidence review",
     "independent": true,
+    "rubric": ".claude/AUDIT_RUBRIC.md",
     "report": [
-      "No blocking findings in scoped diff",
-      "Reviewer Edge unavailable-API fixture: initial Close focus,14 Tabs contain focus, Escape/backdrop/desktop resize close and restore scrolling; header fits1121/1180/1280/1440",
-      "Deletion consumers, manifest totals, dependency retirement and journal presentational boundaries checked",
-      "Storybook does not exercise workspace.css; scope limits retained"
+      "No remaining verified P1/P2 findings in this reviewed batch.",
+      "Expanded layouts, native/nested dialogs, keyboard switches and private controller/builder semantics independently retested.",
+      "Three new scaffold deletions: path, exported-symbol, provenance and Windows-line-ending hashes verified.",
+      "Storybook imports workspace.css through main.css and its production build passed.",
+      "315=235 finding points+80 grouped cleanup points; no duplicates, partial-finding or screen awards. Inventory, units, removal totals, dashboard and preserved foundation history reconcile.",
+      "Mobile Safari, native browser zoom, full state/contrast/WCAG and real execution remain unverified."
     ],
-    "artifactReview": "passed: formula, manifest, candidate count, levels, embedded ledger, saved asset metrics and scope limits independently verified"
+    "artifactReview": "Passed. Level01 evidence-commit gate is fulfilled by the final evidence commit. Cleared levels are bounded; Level07 remains planned."
   },
   "milestones": [
-    "Keyboard-safe primary navigation",
-    "Scanner and session owners preserved",
-    "Four-file orphan batch verified",
-    "Chart library loads with its route"
+    "Shared dialogs and navigation restore focus through nested StrictMode lifecycles.",
+    "Nine authored lessons are reachable; browser progress failures stay visible.",
+    "Scanner, sessions, feeds, replay and financial owners retained.",
+    "Six oversized screens split in place; private controller contract and keyboard switches consolidated.",
+    "Seven obsolete modules proven and removed; archive/history/generated contracts retained.",
+    "One palette owner and one API base resolver; mutation retry regression checks pass.",
+    "177 active unit tests, compiler, frontend and Storybook builds passed."
   ],
   "levels": [
     {
       "id": 1,
-      "title": "Map the current product",
+      "title": "Map the product",
       "status": "cleared",
-      "purpose": "Replace assumptions with current route, owner and reference evidence.",
+      "purpose": "Use current route, owner and source evidence.",
       "tasks": [
-        "Mapped every route to one purpose and primary action.",
-        "Recorded baseline import inventory and16 prioritized findings."
+        "Route tasks and owners documented.",
+        "Baseline/current inventories, manifest and independent evidence saved."
       ],
-      "gate": "Current sources, route definitions, graph navigation and selected browser evidence recorded."
+      "gate": "Evidence files committed."
     },
     {
       "id": 2,
-      "title": "Simplify the shared shell",
+      "title": "Repair the shell",
       "status": "cleared",
-      "purpose": "Make navigation and shared controls quieter and usable on a phone.",
+      "purpose": "Resolve navigation and journal access defects.",
       "tasks": [
-        "Native menu dialog, active-page semantics, skip link and tablet breakpoint.",
-        "Quieter workspace surfaces and optional decorative defaults.",
-        "Diagnostic route fixed; journal names, focus and pagination repaired."
+        "Native menu, keyboard restore and active-route semantics.",
+        "Real diagnostic routes and named journal controls/pagination."
       ],
-      "gate": "Compiler/build pass; selected browser/menu checks and independent scoped review pass. Full screen audit remains level6."
+      "gate": "A01-A03 compiler, browser checks and independent review pass."
     },
     {
       "id": 3,
       "title": "Remove confirmed bloat",
       "status": "cleared",
-      "purpose": "Clear a bounded batch with reference and provenance proof.",
+      "purpose": "Retire only established obsolete source.",
       "tasks": [
-        "Removed4 orphan modules,350 source lines and9700 bytes.",
-        "Retired2 root providers and2 unused direct dependencies.",
-        "Preserved authored lessons, generated contracts and archive consumers."
+        "Seven modules removed with hashes and provenance.",
+        "Two providers and two dependencies retired once as grouped items."
       ],
-      "gate": "Hashed manifest, consumer checks,103 relevant tests, compiler/build and scoped independent review."
+      "gate": "Reference search, builds, tests and independent review pass."
     },
     {
       "id": 4,
-      "title": "Give every screen one job",
-      "status": "planned",
-      "purpose": "Make the next useful action obvious, especially on a phone.",
+      "title": "Make state truthful",
+      "status": "cleared",
+      "purpose": "Remove known false capability, health and financial claims.",
       "tasks": [
-        "Compact Scanner mode/setup; bring Run Scan and results forward.",
-        "Prioritize session attention, positions and recovery over diagnostic grids.",
-        "Separate Journal review from research controls.",
-        "Clarify live-health ownership and remove unsupported landing claims.",
-        "Wire authored lessons; move paper setup under bot navigation with aliases."
+        "A04-A06 verified; all shared dialog callers checked.",
+        "Missing health counters remain Unknown; paper status stays separate.",
+        "False stop-independent exposure estimates removed (A17)."
       ],
-      "gate": "Core tasks and honest loading/error/partial/recovery states verified on desktop and phone."
+      "gate": "Known false claims corrected against source; shared dialog keyboard checks pass. Whole-state acceptance remains Level07."
     },
     {
       "id": 5,
-      "title": "Establish feature boundaries",
-      "status": "planned",
-      "purpose": "Reduce maintenance cost without creating duplicate state owners.",
+      "title": "Focus each screen",
+      "status": "cleared",
+      "purpose": "Primary tasks come before optional chrome.",
       "tasks": [
-        "Extract feature-local view models, components and CSS from monolithic pages.",
-        "Consolidate tokens and shared Field/Dialog/Button primitives.",
-        "Keep paper/live transports separate; retries remain explicit for mutations.",
-        "Separate active Storybook roots from historical archive examples."
+        "Run Scan early; records before summaries; research on Drills.",
+        "Nine chapters with resume; actual task beacon only.",
+        "Phone preflight fits; paper start and replay controls precede optional input details."
       ],
-      "gate": "Consumers migrate incrementally; lifecycle, contracts, state identity and applicable offline checks stay green."
+      "gate": "Route primary-task rows inspected at desktop and phone widths. Exhaustive state/accessibility acceptance and screen-point awards remain Level07."
     },
     {
       "id": 6,
+      "title": "Split in place",
+      "status": "cleared",
+      "purpose": "Separate responsibility without duplicating lifecycle state.",
+      "tasks": [
+        "Six oversized routes split into hooks, pure views and leaf controls.",
+        "One canonical palette and API base; read retry opt-in, mutation retry prohibited.",
+        "Active Storybook and unit roots exclude historical checkouts."
+      ],
+      "gate": "Owners preserved; existing unit contracts unchanged and passing, compiler/builds and independent semantic review pass."
+    },
+    {
+      "id": 7,
       "title": "Verify complete journeys",
       "status": "planned",
-      "purpose": "Clear acceptance gates across the app, not just the foundation.",
+      "purpose": "Complete strict screen acceptance before awarding screen points.",
       "tasks": [
-        "Every route/state at320/390/768/1280px and200% zoom.",
-        "Keyboard, all dialogs, contrast, touch targets, reduced motion and Safari.",
-        "Success, unavailable feed, stale data, cancellation and recovery.",
-        "Compare entry and total assets; remove obsolete compatibility CSS only with reference evidence."
+        "Remaining A08/A09 control, per-state contrast and legacy CSS review.",
+        "Native200% zoom, mobile Safari, complete route/state/recovery/provenance matrix.",
+        "All screens: keyboard order, long symbols, unknown financial data, safe areas, zero/partial/stale/error/loading states and reduced motion."
       ],
-      "gate": "Documented route/state matrix, meaningful regressions, independent review and updated evidence."
+      "gate": "All stated responsive criteria and full route/state matrix pass. CSS zoom and synthetic fixtures alone do not clear this level."
     }
   ],
   "findings": [
@@ -217,79 +408,88 @@
     {
       "id": "A04",
       "priority": "P1",
-      "status": "open",
+      "status": "fixed",
       "title": "Shared modal accessibility",
-      "action": "Audit every caller, then add consistent labels, Escape and focus handling."
+      "action": "Native dialogs for all six shared callers and Replay help; labels, Escape, nested StrictMode lifecycle, shared scroll locking and trigger restoration verified.",
+      "commit": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6"
     },
     {
       "id": "A05",
       "priority": "P1",
-      "status": "open",
+      "status": "fixed",
       "title": "Static examples appear live",
-      "action": "Label examples and replace unestablished landing capability claims."
+      "action": "Short implemented-capability landing with visibly labeled illustrative data; false streaming/performance claims and retired landing-only CSS removed.",
+      "commit": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6"
     },
     {
       "id": "A06",
       "priority": "P1",
-      "status": "open",
+      "status": "fixed",
       "title": "Health status owner unclear",
-      "action": "Separate live-executor health from paper-session/feed status."
+      "action": "Live executor health labeled independently of paper sessions; failed/partial requests show unavailable/attention and missing counters show Unknown.",
+      "commit": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6"
     },
     {
       "id": "A07",
       "priority": "P2",
-      "status": "open",
+      "status": "fixed",
       "title": "Scanner action below dense setup",
-      "action": "Compact mode/input summary alongside Run Scan; keep failure evidence visible."
+      "action": "Compact manual mode selection and critical requirements beside Run Scan; optional inputs and filters secondary, evidence and rejections retained.",
+      "commit": "61aa258be255d278397eaffed84d66b1b83421bb"
     },
     {
       "id": "A08",
       "priority": "P2",
       "status": "partial",
       "title": "Small page controls",
-      "action": "Shared navigation/buttons and journal fields improved; review remaining controls."
+      "action": "Shared controls/dialog close targets and reviewed setup switches meet44px; journal sort and phone rows labeled. Whole-app state/control audit remains open; no points yet."
     },
     {
       "id": "A09",
       "priority": "P2",
       "status": "partial",
       "title": "Competing tokens and decorative layers",
-      "action": "Workspace layer quiets common surfaces; per-state contrast and CSS consolidation remain."
+      "action": "Canonical palette lives in tokens.css; old palette owners removed, muted text lifted, common glow/motion quieted. Legacy presentation selectors and full per-state contrast review remain; no points yet."
     },
     {
       "id": "A10",
       "priority": "P2",
-      "status": "open",
+      "status": "fixed",
       "title": "Journal mixes review with model tools",
-      "action": "Move experimental controls to research without changing ML behavior."
+      "action": "Journal filters/list/detail separated from summaries; unchanged research handlers moved to /training/drills.",
+      "commit": "5a624f8ff90cac2131a355a2f85e61be988a5eca"
     },
     {
       "id": "A11",
       "priority": "P2",
-      "status": "open",
+      "status": "fixed",
       "title": "Authored lessons unreachable",
-      "action": "Wire nine lazy chapters and existing progress, or mark entry unavailable."
+      "action": "Nine lazy authored chapters wired with library, read/resume progress, accessible navigation and persistence-error visibility. Historical strategy demonstrations labeled.",
+      "commit": "a3e2e8908e78b8948430f0754616500d0f7dabc5"
     },
     {
       "id": "A12",
       "priority": "P2",
-      "status": "open",
+      "status": "fixed",
       "title": "Oversized pages and inline styles",
-      "action": "Extract by feature/owner; keep lifecycle and financial semantics."
+      "action": "Six large route modules split in place. BotStatus controller owns existing fenced state and commands with private refs; view model and leaves remain pure. Duplicated execution switches replaced by one keyboard control. No points awarded per move or line count.",
+      "commit": "ef225046f805c868a4d2c37ccaf56ddb04c01c37"
     },
     {
       "id": "A13",
       "priority": "P2",
-      "status": "partial",
+      "status": "fixed",
       "title": "Legacy API scaffolding",
-      "action": "Unused journal import removed; remaining archive-dependent graph needs coordinated retirement."
+      "action": "One API base resolver, compatibility adapter retained for archive; GET/HEAD retry opt-in, commands never automatically retried. Service and feed/session owners preserved.",
+      "commit": "e0f4f44bd2682f57f091bbac06882cfef5369904"
     },
     {
       "id": "A14",
       "priority": "P2",
-      "status": "open",
+      "status": "fixed",
       "title": "Archives enter Storybook",
-      "action": "Separate active roots before deleting archive dependencies."
+      "action": "Active Storybook roots exclude archives and load actual product styles; Storybook build passed.",
+      "commit": "e0f4f44bd2682f57f091bbac06882cfef5369904"
     },
     {
       "id": "A15",
@@ -301,9 +501,120 @@
     {
       "id": "A16",
       "priority": "P3",
-      "status": "open",
+      "status": "fixed",
       "title": "Persistent shortcut and duplicated copy",
-      "action": "Keep genuine session shortcuts; remove ambient navigation decoration."
+      "action": "Task links appear only for existing running scan/live/paper state; ambient shortcut animation and training-hub feature scaffolds removed.",
+      "commit": "ec5e5daac0e987bd41a7830b47882e5158806c6d"
+    },
+    {
+      "id": "A17",
+      "priority": "P1",
+      "status": "fixed",
+      "title": "Risk estimates claimed exposure without a stop distance",
+      "action": "Removed risk×leverage position/exposure estimates. Show configured risk budget and drawdown only; execution engine owns sizing.",
+      "commit": "203bc935415faa1feadb8553e68f2de47907e24f"
+    },
+    {
+      "id": "A18",
+      "priority": "P2",
+      "status": "fixed",
+      "title": "Unit discovery entered archived checkouts and Playwright specs",
+      "action": "Dedicated Vitest config roots active unit files explicitly. The same active unit cases run unchanged; Playwright remains a separate runner.",
+      "commit": "e0f4f44bd2682f57f091bbac06882cfef5369904"
+    },
+    {
+      "id": "A19",
+      "priority": "P1",
+      "status": "fixed",
+      "title": "Live preflight controls clipped on narrow screens",
+      "action": "Replace fixed phone side column with a single responsive column, preflight/action first and optional fields below. Expanded320/390/768/1280 retest has no overflow.",
+      "commit": "203bc935415faa1feadb8553e68f2de47907e24f"
     }
-  ]
+  ],
+  "history": [
+    {
+      "date": "2026-10-09",
+      "file": "UI_REFACTOR_2026-10-09_foundation.json",
+      "report": "UI_REFACTOR_2026-10-09_foundation.md",
+      "note": "Retains the original70-point checkpoint and subsequent40-point policy correction without rewriting historical evidence."
+    }
+  ],
+  "cleanupItems": [
+    {
+      "id": "C01",
+      "title": "Fake telemetry hook",
+      "commit": "68ea66972457a16ce9586240258523e026e64fe9",
+      "path": "src/hooks/useTelemetry.ts",
+      "verified": true,
+      "evidence": "Hashed removal manifest, full path/symbol/provenance checks and applicable build/tests/review."
+    },
+    {
+      "id": "C02",
+      "title": "Unused notification polling",
+      "commit": "68ea66972457a16ce9586240258523e026e64fe9",
+      "path": "src/utils/notificationPolling.ts",
+      "verified": true,
+      "evidence": "Hashed removal manifest, full path/symbol/provenance checks and applicable build/tests/review."
+    },
+    {
+      "id": "C03",
+      "title": "Unused numeral formatter and dependency",
+      "commit": "68ea66972457a16ce9586240258523e026e64fe9",
+      "path": "src/utils/format.ts",
+      "verified": true,
+      "evidence": "Hashed removal manifest, full path/symbol/provenance checks and applicable build/tests/review."
+    },
+    {
+      "id": "C04",
+      "title": "Idle query cache, provider and dependency",
+      "commit": "68ea66972457a16ce9586240258523e026e64fe9",
+      "path": "src/lib/queryClient.ts",
+      "verified": true,
+      "evidence": "Hashed removal manifest, full path/symbol/provenance checks and applicable build/tests/review."
+    },
+    {
+      "id": "C05",
+      "title": "Idle root wallet provider (archive source retained)",
+      "commit": "68ea66972457a16ce9586240258523e026e64fe9",
+      "path": "src/App.tsx",
+      "verified": true,
+      "evidence": "Consumer check and scoped independent foundation review; source kept for stories/archive."
+    },
+    {
+      "id": "C06",
+      "title": "Unconsumed landing configuration scaffold",
+      "commit": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6",
+      "path": "src/config/landingConfig.ts",
+      "verified": true,
+      "evidence": "Hashed removal manifest, full path/symbol/provenance checks and applicable build/tests/review."
+    },
+    {
+      "id": "C07",
+      "title": "Unconsumed asset preset scaffold",
+      "commit": "61aa258be255d278397eaffed84d66b1b83421bb",
+      "path": "src/constants/assetPresets.ts",
+      "verified": true,
+      "evidence": "Hashed removal manifest, full path/symbol/provenance checks and applicable build/tests/review."
+    },
+    {
+      "id": "C08",
+      "title": "Unconsumed scanner help scaffold",
+      "commit": "61aa258be255d278397eaffed84d66b1b83421bb",
+      "path": "src/constants/scannerFieldHelp.ts",
+      "verified": true,
+      "evidence": "Hashed removal manifest, full path/symbol/provenance checks and applicable build/tests/review."
+    }
+  ],
+  "commits": {
+    "truth": "9250fc0657f5b0f46bcf4d22512cf638dcae0dd6",
+    "scanner": "61aa258be255d278397eaffed84d66b1b83421bb",
+    "journal": "5a624f8ff90cac2131a355a2f85e61be988a5eca",
+    "lessons": "a3e2e8908e78b8948430f0754616500d0f7dabc5",
+    "status": "b8167be074e08bcfd6f001ce572544641ea1238d",
+    "preflight": "203bc935415faa1feadb8553e68f2de47907e24f",
+    "paper": "538ab1bb3b09e0c262b083c9ff4a7ba4783864b6",
+    "replay": "ef225046f805c868a4d2c37ccaf56ddb04c01c37",
+    "navigation": "ec5e5daac0e987bd41a7830b47882e5158806c6d",
+    "transport": "e0f4f44bd2682f57f091bbac06882cfef5369904"
+  }
 }
