@@ -208,8 +208,8 @@
     },
     {
       "file": "src/pages/BotSetup.tsx",
-      "lines": 913,
-      "bytes": 34940,
+      "lines": 920,
+      "bytes": 35231,
       "inlineStyles": 54,
       "imports": [
         "@/utils/configDraft",
@@ -225,8 +225,8 @@
     },
     {
       "file": "src/pages/training/RangeBotViews.tsx",
-      "lines": 889,
-      "bytes": 56226,
+      "lines": 891,
+      "bytes": 56949,
       "inlineStyles": 151,
       "imports": [
         "@/components/hud/Toggle",
@@ -241,9 +241,9 @@
     },
     {
       "file": "src/pages/Scanner.tsx",
-      "lines": 851,
-      "bytes": 32953,
-      "inlineStyles": 59,
+      "lines": 854,
+      "bytes": 33133,
+      "inlineStyles": 60,
       "imports": [
         "@/components/hud/ScannerInputs",
         "@/components/hud",
@@ -260,9 +260,9 @@
     },
     {
       "file": "src/components/hud/GauntletBreakdown.tsx",
-      "lines": 819,
-      "bytes": 35807,
-      "inlineStyles": 45,
+      "lines": 820,
+      "bytes": 35968,
+      "inlineStyles": 46,
       "imports": [
         "react",
         "@/utils/api",
@@ -315,8 +315,8 @@
     },
     {
       "file": "src/pages/TradeJournal.tsx",
-      "lines": 631,
-      "bytes": 25937,
+      "lines": 630,
+      "bytes": 25894,
       "inlineStyles": 32,
       "imports": [
         "./JournalFilters",
@@ -346,7 +346,7 @@
     {
       "file": "src/components/hud/RejectionPanel.tsx",
       "lines": 561,
-      "bytes": 22077,
+      "bytes": 22096,
       "inlineStyles": 23,
       "imports": [
         "react",
@@ -388,7 +388,7 @@
       ]
     }
   ],
-  "inlineStyleCount": 1026,
+  "inlineStyleCount": 1028,
   "packageImports": [
     "@phosphor-icons/react",
     "@storybook/react",

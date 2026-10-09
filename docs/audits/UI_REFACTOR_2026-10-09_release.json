@@ -1,0 +1,4544 @@
+{
+  "schemaVersion": 1,
+  "implementationCommit": "8e7bdf00e920bdaba8f72e19fbc98def571994f4",
+  "scope": "Final UI release review against .claude/AUDIT_RUBRIC.md. Intercepted Edge fixtures; no runtime commands, backend imports, orders, ML actions or API mutations.",
+  "initial": {
+    "scope": "Synthetic Edge rendered active-route/expanded-input samples; all API intercepted, no commands. Contrast candidates use computed solid background composition; gradients and full WCAG/state acceptance need manual verification. Safari/native zoom not covered.",
+    "results": [
+      {
+        "route": "/",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/scanner",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 45,
+        "targetIssues": [
+          {
+            "selector": "button.btn.btn-cyan",
+            "label": "BOS",
+            "width": 38,
+            "height": 44,
+            "type": "submit"
+          },
+          {
+            "selector": "button.btn.btn-cyan",
+            "label": "SMC",
+            "width": 38,
+            "height": 44,
+            "type": "submit"
+          }
+        ],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "button.btn.btn-cyan",
+            "text": "1m",
+            "ratio": 2.89,
+            "required": 4.5,
+            "color": "rgb(103, 232, 249)",
+            "background": [
+              23,
+              42,
+              45
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "button.btn.btn-cyan",
+            "text": "1W",
+            "ratio": 2.89,
+            "required": 4.5,
+            "color": "rgb(103, 232, 249)",
+            "background": [
+              23,
+              42,
+              45
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/bot/setup",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "text"
+          }
+        ],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 33,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/journal",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "(1.79%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(1.81%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(1.79%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(2.50%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.34%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-2.47%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.03%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-0.90%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-0.72%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.06%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(2.02%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-1.56%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "div.metric-sub",
+            "text": "4 losses",
+            "ratio": 3.89,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "div.metric-sub",
+            "text": "peak-to-trough",
+            "ratio": 3.89,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/intel",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/settings",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#setup",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/range#status",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/replay",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-order-blocks",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-fvg",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-bos-choch",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-liquidity-sweeps",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-wyckoff",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-confluence",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-regime",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "text",
+            "text": "COMPRESSION",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "text",
+            "text": "CHOP",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "text",
+            "text": "VOLATILE TREND",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/lessons#ch-position-sizing",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/scanner",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 45,
+        "targetIssues": [
+          {
+            "selector": "button.btn.btn-cyan",
+            "label": "BOS",
+            "width": 38,
+            "height": 44,
+            "type": "submit"
+          },
+          {
+            "selector": "button.btn.btn-cyan",
+            "label": "SMC",
+            "width": 38,
+            "height": 44,
+            "type": "submit"
+          }
+        ],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "button.btn.btn-cyan",
+            "text": "1m",
+            "ratio": 2.89,
+            "required": 4.5,
+            "color": "rgb(103, 232, 249)",
+            "background": [
+              23,
+              42,
+              45
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "button.btn.btn-cyan",
+            "text": "1W",
+            "ratio": 2.89,
+            "required": 4.5,
+            "color": "rgb(103, 232, 249)",
+            "background": [
+              23,
+              42,
+              45
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/bot/setup",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "text"
+          }
+        ],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 33,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/journal",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "(1.79%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(1.81%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(1.79%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(2.50%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.34%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-2.47%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.03%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-0.90%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-0.72%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.06%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(2.02%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-1.56%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "div.metric-sub",
+            "text": "4 losses",
+            "ratio": 3.89,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "div.metric-sub",
+            "text": "peak-to-trough",
+            "ratio": 3.89,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/intel",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/settings",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#setup",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/range#status",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/replay",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-order-blocks",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-fvg",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-bos-choch",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-liquidity-sweeps",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-wyckoff",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-confluence",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-regime",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "text",
+            "text": "COMPRESSION",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "text",
+            "text": "CHOP",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "text",
+            "text": "VOLATILE TREND",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/lessons#ch-position-sizing",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/scanner",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 45,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "button.btn.btn-cyan",
+            "text": "1m",
+            "ratio": 2.89,
+            "required": 4.5,
+            "color": "rgb(103, 232, 249)",
+            "background": [
+              23,
+              42,
+              45
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "button.btn.btn-cyan",
+            "text": "1W",
+            "ratio": 2.89,
+            "required": 4.5,
+            "color": "rgb(103, 232, 249)",
+            "background": [
+              23,
+              42,
+              45
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/bot/setup",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 32,
+        "targetIssues": [
+          {
+            "selector": "input",
+            "label": "I accept full responsibility for all trading outcomes. Capital at risk — losses are perman",
+            "width": 706,
+            "height": 41,
+            "type": "checkbox"
+          }
+        ],
+        "nameIssues": [
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "text"
+          }
+        ],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 33,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/journal",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 32,
+        "targetIssues": [
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect SOL/USDT SHORT scalp trade, net P&L $3.20, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect BTC/USDT LONG swing trade, net P&L $61.00, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ETH/USDT LONG intraday trade, net P&L $29.25, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect LINK/USDT SHORT intraday trade, net P&L $7.40, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect AVAX/USDT LONG swing trade, net P&L $6.50, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect DOGE/USDT LONG scalp trade, net P&L -$4.00, exit stop_loss",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ARB/USDT LONG swing trade, net P&L $5.40, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect BTC/USDT LONG intraday trade, net P&L -$30.00, exit stop_loss",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect SOL/USDT SHORT scalp trade, net P&L -$1.30, exit stop_loss",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect INJ/USDT LONG intraday trade, net P&L $5.92, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ETH/USDT LONG swing trade, net P&L $32.50, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect TIA/USDT LONG intraday trade, net P&L -$2.40, exit stagnation",
+            "width": 710,
+            "height": 31
+          }
+        ],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "(1.79%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(1.81%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(1.79%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(2.50%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.34%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-2.47%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.03%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-0.90%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-0.72%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.06%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(2.02%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-1.56%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "div.metric-sub",
+            "text": "4 losses",
+            "ratio": 3.89,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "div.metric-sub",
+            "text": "peak-to-trough",
+            "ratio": 3.89,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/intel",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/settings",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#setup",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/range#status",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/replay",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-order-blocks",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-fvg",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-bos-choch",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-liquidity-sweeps",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-wyckoff",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-confluence",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-regime",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "text",
+            "text": "COMPRESSION",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "text",
+            "text": "CHOP",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "text",
+            "text": "VOLATILE TREND",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/lessons#ch-position-sizing",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/scanner",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 45,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "button.btn.btn-cyan",
+            "text": "1m",
+            "ratio": 2.89,
+            "required": 4.5,
+            "color": "rgb(103, 232, 249)",
+            "background": [
+              23,
+              42,
+              45
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "button.btn.btn-cyan",
+            "text": "1W",
+            "ratio": 2.89,
+            "required": 4.5,
+            "color": "rgb(103, 232, 249)",
+            "background": [
+              23,
+              42,
+              45
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/bot/setup",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "text"
+          }
+        ],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 33,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 1.78,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/journal",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 32,
+        "targetIssues": [
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect SOL/USDT SHORT scalp trade, net P&L $3.20, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect BTC/USDT LONG swing trade, net P&L $61.00, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ETH/USDT LONG intraday trade, net P&L $29.25, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect LINK/USDT SHORT intraday trade, net P&L $7.40, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect AVAX/USDT LONG swing trade, net P&L $6.50, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect DOGE/USDT LONG scalp trade, net P&L -$4.00, exit stop_loss",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ARB/USDT LONG swing trade, net P&L $5.40, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect BTC/USDT LONG intraday trade, net P&L -$30.00, exit stop_loss",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect SOL/USDT SHORT scalp trade, net P&L -$1.30, exit stop_loss",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect INJ/USDT LONG intraday trade, net P&L $5.92, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ETH/USDT LONG swing trade, net P&L $32.50, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect TIA/USDT LONG intraday trade, net P&L -$2.40, exit stagnation",
+            "width": 734,
+            "height": 31
+          }
+        ],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "(1.79%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(1.81%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(1.79%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(2.50%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.34%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-2.47%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.03%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-0.90%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-0.72%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(3.06%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(2.02%)",
+            "ratio": 4.37,
+            "required": 4.5,
+            "color": "rgb(74, 222, 128)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "(-1.56%)",
+            "ratio": 3.04,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "div.metric-sub",
+            "text": "4 losses",
+            "ratio": 3.89,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "div.metric-sub",
+            "text": "peak-to-trough",
+            "ratio": 3.89,
+            "required": 4.5,
+            "color": "rgb(248, 113, 113)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/intel",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/settings",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#setup",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/range#status",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "span",
+            "text": "·",
+            "ratio": 2.21,
+            "required": 4.5,
+            "color": "oklch(0.72 0.012 150)",
+            "background": [
+              29,
+              27,
+              15
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/replay",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-order-blocks",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-fvg",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-bos-choch",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-liquidity-sweeps",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-wyckoff",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-confluence",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-regime",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "text",
+            "text": "COMPRESSION",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "text",
+            "text": "CHOP",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          },
+          {
+            "selector": "text",
+            "text": "VOLATILE TREND",
+            "ratio": 3.41,
+            "required": 4.5,
+            "color": "oklch(0.94 0.012 150)",
+            "background": [
+              15,
+              16,
+              13
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/training/lessons#ch-position-sizing",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  },
+  "matrix": {
+    "scope": "Synthetic Edge rendered active-route/expanded-input samples; all API intercepted, no commands. Contrast candidates use computed solid background composition; gradients and full WCAG/state acceptance need manual verification. Safari/native zoom not covered.",
+    "results": [
+      {
+        "route": "/",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/scanner",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 45,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "text"
+          }
+        ],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 33,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/journal",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/intel",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/settings",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#setup",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#status",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/replay",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-order-blocks",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-fvg",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-bos-choch",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-liquidity-sweeps",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-wyckoff",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-confluence",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-regime",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-position-sizing",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/scanner",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 45,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "text"
+          }
+        ],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 33,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/journal",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/intel",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/settings",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#setup",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#status",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/replay",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-order-blocks",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-fvg",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-bos-choch",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-liquidity-sweeps",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-wyckoff",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-confluence",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-regime",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-position-sizing",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/scanner",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 45,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 32,
+        "targetIssues": [
+          {
+            "selector": "input",
+            "label": "I accept full responsibility for all trading outcomes. Capital at risk — losses are perman",
+            "width": 706,
+            "height": 41,
+            "type": "checkbox"
+          }
+        ],
+        "nameIssues": [
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "text"
+          }
+        ],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 33,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/journal",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 32,
+        "targetIssues": [
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect SOL/USDT SHORT scalp trade, net P&L $3.20, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect BTC/USDT LONG swing trade, net P&L $61.00, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ETH/USDT LONG intraday trade, net P&L $29.25, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect LINK/USDT SHORT intraday trade, net P&L $7.40, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect AVAX/USDT LONG swing trade, net P&L $6.50, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect DOGE/USDT LONG scalp trade, net P&L -$4.00, exit stop_loss",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ARB/USDT LONG swing trade, net P&L $5.40, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect BTC/USDT LONG intraday trade, net P&L -$30.00, exit stop_loss",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect SOL/USDT SHORT scalp trade, net P&L -$1.30, exit stop_loss",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect INJ/USDT LONG intraday trade, net P&L $5.92, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ETH/USDT LONG swing trade, net P&L $32.50, exit target",
+            "width": 710,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect TIA/USDT LONG intraday trade, net P&L -$2.40, exit stagnation",
+            "width": 710,
+            "height": 31
+          }
+        ],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/intel",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/settings",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#setup",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#status",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/replay",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-order-blocks",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-fvg",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-bos-choch",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-liquidity-sweeps",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-wyckoff",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-confluence",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 12,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-regime",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-position-sizing",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": [
+          {
+            "selector": "text",
+            "text": "ASIAN",
+            "ratio": 3.99,
+            "required": 4.5,
+            "color": "rgb(96, 165, 250)",
+            "background": [
+              25,
+              27,
+              22
+            ],
+            "gradient": false
+          }
+        ]
+      },
+      {
+        "route": "/",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/scanner",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 45,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "number"
+          },
+          {
+            "selector": "input",
+            "type": "text"
+          }
+        ],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/status",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 33,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/journal",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 32,
+        "targetIssues": [
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect SOL/USDT SHORT scalp trade, net P&L $3.20, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect BTC/USDT LONG swing trade, net P&L $61.00, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ETH/USDT LONG intraday trade, net P&L $29.25, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect LINK/USDT SHORT intraday trade, net P&L $7.40, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect AVAX/USDT LONG swing trade, net P&L $6.50, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect DOGE/USDT LONG scalp trade, net P&L -$4.00, exit stop_loss",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ARB/USDT LONG swing trade, net P&L $5.40, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect BTC/USDT LONG intraday trade, net P&L -$30.00, exit stop_loss",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect SOL/USDT SHORT scalp trade, net P&L -$1.30, exit stop_loss",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect INJ/USDT LONG intraday trade, net P&L $5.92, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect ETH/USDT LONG swing trade, net P&L $32.50, exit target",
+            "width": 734,
+            "height": 31
+          },
+          {
+            "selector": "div.journal-trade-row",
+            "label": "Inspect TIA/USDT LONG intraday trade, net P&L -$2.40, exit stagnation",
+            "width": 734,
+            "height": 31
+          }
+        ],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/intel",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/settings",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#setup",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/range#status",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/replay",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 1,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/drills",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 3,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/missing-review-route",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 0,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-order-blocks",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-fvg",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-bos-choch",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-liquidity-sweeps",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 7,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-wyckoff",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-confluence",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-regime",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-position-sizing",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 2,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  },
+  "keyboard": {
+    "scope": "Rendered intercepted keyboard tests: trace opens/closes, completed paper trade expands/collapses, FlipCard and rejection controls,650px title boundary. No actual commands or API mutations. Safari/native zoom unverified.",
+    "results": [
+      {
+        "width": 320,
+        "traceKeyboard": {
+          "restored": true,
+          "outline": "solid",
+          "height": 44
+        },
+        "traceScroll": [
+          "TimeSymbolTFSideScoreStageDetail10:01:14AVAXUSDT1hLONG64.2 / 70.0CONFLUENCElow_confluence — below STEALTH 7009:42:00ETHUSDT4hLONG78.4EXECUTEDOB+FVG long @ 4h"
+        ],
+        "docWidth": 320
+      },
+      {
+        "width": 320,
+        "paper": {
+          "expanded": "true",
+          "closed": "false",
+          "outline": "solid",
+          "left": 25,
+          "right": 295,
+          "height": 124
+        },
+        "docWidth": 320
+      },
+      {
+        "width": 390,
+        "traceKeyboard": {
+          "restored": true,
+          "outline": "solid",
+          "height": 44
+        },
+        "traceScroll": [
+          "TimeSymbolTFSideScoreStageDetail10:01:14AVAXUSDT1hLONG64.2 / 70.0CONFLUENCElow_confluence — below STEALTH 7009:42:00ETHUSDT4hLONG78.4EXECUTEDOB+FVG long @ 4h"
+        ],
+        "docWidth": 390
+      },
+      {
+        "width": 390,
+        "paper": {
+          "expanded": "true",
+          "closed": "false",
+          "outline": "solid",
+          "left": 25,
+          "right": 365,
+          "height": 124
+        },
+        "docWidth": 390
+      },
+      {
+        "width": 768,
+        "traceKeyboard": {
+          "restored": true,
+          "outline": "solid",
+          "height": 44
+        },
+        "traceScroll": [
+          "TimeSymbolTFSideScoreStageDetail10:01:14AVAXUSDT1hLONG64.2 / 70.0CONFLUENCElow_confluence — below STEALTH 7009:42:00ETHUSDT4hLONG78.4EXECUTEDOB+FVG long @ 4h"
+        ],
+        "docWidth": 768
+      },
+      {
+        "width": 768,
+        "paper": {
+          "expanded": "true",
+          "closed": "false",
+          "outline": "solid",
+          "left": 29,
+          "right": 739,
+          "height": 47
+        },
+        "docWidth": 768
+      },
+      {
+        "width": 1280,
+        "traceKeyboard": {
+          "restored": true,
+          "outline": "solid",
+          "height": 44
+        },
+        "traceScroll": [
+          "TimeSymbolTFSideScoreStageDetail10:01:14AVAXUSDT1hLONG64.2 / 70.0CONFLUENCElow_confluence — below STEALTH 7009:42:00ETHUSDT4hLONG78.4EXECUTEDOB+FVG long @ 4h"
+        ],
+        "docWidth": 1280
+      },
+      {
+        "width": 1280,
+        "paper": {
+          "expanded": "true",
+          "closed": "false",
+          "outline": "solid",
+          "left": 43,
+          "right": 1237,
+          "height": 47
+        },
+        "docWidth": 1280
+      },
+      {
+        "flip": {
+          "pressed": "true",
+          "outline": "solid",
+          "activeFaces": 1,
+          "hiddenInert": true
+        }
+      },
+      {
+        "flipRestored": "false"
+      },
+      {
+        "rejectionFocus": {
+          "outline": "solid",
+          "width": 120.203125,
+          "height": 44
+        }
+      },
+      {
+        "rejectionExpanded": "true"
+      },
+      {
+        "width": 650,
+        "titleSize": "24px"
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  },
+  "retest": {
+    "scope": "Synthetic Edge rendered active-route/expanded-input samples; all API intercepted, no commands. Contrast candidates use computed solid background composition; gradients and full WCAG/state acceptance need manual verification. Safari/native zoom not covered.",
+    "results": [
+      {
+        "route": "/bot/setup",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/journal",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/journal",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 27,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/journal",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/bot/setup",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/journal",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 32,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  },
+  "clockRetest": {
+    "scope": "Synthetic Edge rendered active-route/expanded-input samples; all API intercepted, no commands. Contrast candidates use computed solid background composition; gradients and full WCAG/state acceptance need manual verification. Safari/native zoom not covered.",
+    "results": [
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 320,
+        "docWidth": 320,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 390,
+        "docWidth": 390,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 768,
+        "docWidth": 768,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      },
+      {
+        "route": "/training/lessons#ch-kill-zones",
+        "width": 1280,
+        "docWidth": 1280,
+        "controlCount": 6,
+        "targetIssues": [],
+        "nameIssues": [],
+        "focusIssues": [],
+        "contrastCandidates": []
+      }
+    ],
+    "errors": [],
+    "mutations": []
+  },
+  "review": {
+    "review": "Independent bounded release UI review using .claude/AUDIT_RUBRIC.md",
+    "result": "Passed bounded release UI review. No remaining verified P1/P2 defects in the corrected candidates and sampled states; full acceptance remains open.",
+    "sourceScope": "Shared focus/responsive CSS consolidation; scanner filter targets/state labels; live setup input labels and acknowledgment target; journal row targets, P&L text and calendar contrast; native paper history/trace actions; lesson flip-face accessibility and regime labels; replay setup controls. No API mutations or source edits by reviewer.",
+    "rubric": {
+      "1_scope_intent": "Authorized UI simplification and release polish. Review bounded to current rendered controls, readability and keyboard access; no whole-system acceptance claim.",
+      "2_fundamentals": "Current callers, styles and input labels inspected. Fixture source status determines live setup redirect, so idle setup was checked separately from running LONG status. SVG fill and text opacity included; CSS composition estimates do not fully capture vector-painted backgrounds.",
+      "3_contracts_ownership": "Settings values/parsing, filter handlers, timing definitions and financial calculations remain owned by existing producers. Named native actions replace click-only surfaces; no session/cache or strategy owner introduced.",
+      "4_behavioral_evidence": "92 rendered route/chapter-by-width cases; focused trace, paper autopsy, flip-card/rejection keyboard tests; 8 final setup/journal retests. No broad test suite rerun by reviewer. Root owns final compiler/unit/build validation.",
+      "5_accounting_diagnosability": "No accounting producer or financial handler changes; numerical sign/P&L values retained while calendar tint and text opacity changed. Offline failures visible in fixtures.",
+      "6_safe_verification": "Installed Edge headless with all /api calls intercepted. Zero mutation requests; no credentials, API imports, runtime stores, exchange operations or unrestricted backend tests.",
+      "7_trading_assumptions": "No weights, thresholds, mode minimums, order behavior or teaching calibration altered. Scanner out-of-mode status now explicit without changing filter behavior.",
+      "8_reviewable_completion": "Current diffs inspected; source ownership preserved. Initial defects and corrected retests retained separately. A08/A09 broader scope and Level07 remain open. No additional scoring recommended for CSS consolidation."
+    },
+    "checks": {
+      "renderedMatrix": {
+        "cases": 92,
+        "widths": [
+          320,
+          390,
+          768,
+          1280
+        ],
+        "routes": "14 active/fallback routes plus nine authored chapter routes",
+        "renderErrors": 0,
+        "documentOverflow": 0,
+        "mutationRequests": 0
+      },
+      "keyboard": "Trace Enter opens; Escape restores focused native trigger. Paper Enter expands and Space collapses; phone summaries fit. FlipCard exposes one active face, hidden face inert, Space/Enter and visible focus pass. Rejection chip focus and aria-expanded pass. 650px title is24px.",
+      "finalTargetRetest": {
+        "cases": 8,
+        "routes": [
+          "/bot/setup",
+          "/journal"
+        ],
+        "targetIssues": 0,
+        "nameIssues": 0,
+        "contrastCandidates": 0,
+        "renderErrors": 0,
+        "mutationRequests": 0
+      },
+      "correctedContrast": "Journal calendar and percentage/subtitle text, scanner mode labels and regime quadrant labels have no remaining computed contrast candidates in sampled states.",
+      "clockRetest": {
+        "cases": 4,
+        "route": "/training/lessons#ch-kill-zones",
+        "contrastCandidates": 0,
+        "targetIssues": 0,
+        "nameIssues": 0,
+        "renderErrors": 0,
+        "mutationRequests": 0,
+        "visual": "Opaque bg-2 label backplates and full-opacity fg labels checked in320px and1280px screenshots. Zone arcs and timing preserved."
+      }
+    },
+    "openFindings": [],
+    "resolvedFinalConcern": "KillZoneClock same-color-on-arc labels now have opaque bg-2 backplates and fg text. Final targeted four-width retest supersedes the ASIAN contrast candidate in the92-case matrix.",
+    "evidence": [
+      "build/reviewer_release_initial.json",
+      "build/reviewer_release_audit.json",
+      "build/reviewer_release_keyboard.json",
+      "build/reviewer_release_retest.json",
+      "build/reviewer_release_clock.json"
+    ],
+    "limitations": [
+      "Synthetic states and selected keyboard paths do not cover every error/stale/recovery/input variant.",
+      "Contrast uses computed styles and canvas color composition; gradients, inherited group opacity and vector-painted backgrounds require further manual checks.",
+      "Mobile Safari and native200% browser zoom unverified; no full WCAG certification or screen-acceptance awards."
+    ]
+  },
+  "unit": {
+    "passed": 177,
+    "failed": 0,
+    "files": 15
+  },
+  "builds": {
+    "typescript": "tsc --noEmit passed",
+    "frontend": "Passed;4714 modules",
+    "storybook": "Passed;348 modules; existing non-failing warnings",
+    "bytes": {
+      "entryAsset": "index-SdD1-N6L.js",
+      "entryBytes": 287240,
+      "entryGzipBytes": 91200,
+      "totalJsBytes": 863216,
+      "totalCssBytes": 68085
+    }
+  },
+  "limitations": [
+    "Mobile Safari and native200% browser zoom unavailable in this environment. CSS zoom does not satisfy that gate.",
+    "Full WCAG and every route/state/provenance/contrast permutation not verified. A08/A09 and Level07 remain open.",
+    "No backend suite, exchange operation, actual order, new paper/live/testnet session, ML training/reset or journal mutation performed.",
+    "No claim that every repository orphan is removed or all inline styling is eliminated."
+  ]
+}

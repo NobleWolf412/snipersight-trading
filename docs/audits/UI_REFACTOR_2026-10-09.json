@@ -213,7 +213,7 @@
     "activeFiles": 163,
     "archivedFiles": 153,
     "candidates": 18,
-    "inlineStyleCount": 1026,
+    "inlineStyleCount": 1028,
     "scope": "Static literal imports/exports from main.tsx, active tests and stories. Excludes archive; declarations, CSS classes, computed imports, config globs and external scripts require manual reference/provenance checks.",
     "retained": "Eighteen triage candidates include archive consumers, generated contracts and external verification/packaging scripts. Unreachability alone does not authorize deletion."
   },
@@ -442,14 +442,14 @@
       "priority": "P2",
       "status": "partial",
       "title": "Small page controls",
-      "action": "Shared controls/dialog close targets and reviewed setup switches meet44px; journal sort and phone rows labeled. Whole-app state/control audit remains open; no points yet."
+      "action": "Shared/portal controls, native evidence/history actions, journal rows, replay fields and linked advanced setup inputs pass targeted width/keyboard checks. Exhaustive state/control review remains open; no points yet."
     },
     {
       "id": "A09",
       "priority": "P2",
       "status": "partial",
       "title": "Competing tokens and decorative layers",
-      "action": "Canonical palette lives in tokens.css; old palette owners removed, muted text lifted, common glow/motion quieted. Legacy presentation selectors and full per-state contrast review remain; no points yet."
+      "action": "One palette owner; consolidated shell rules, readable journal text/calendar and lesson labels, static regime point and clock label backplates verified in selected states. Full per-state/gradient/contrast review remains open; no points yet."
     },
     {
       "id": "A10",
@@ -537,6 +537,11 @@
       "file": "UI_REFACTOR_2026-10-09_foundation.json",
       "report": "UI_REFACTOR_2026-10-09_foundation.md",
       "note": "Retains the original70-point checkpoint and subsequent40-point policy correction without rewriting historical evidence."
+    },
+    {
+      "date": "2026-10-09",
+      "file": "UI_REFACTOR_2026-10-09_release.json",
+      "note": "Additional concrete A08/A09 defects fixed and retested before main publication; previous checkpoint measurements and foundation records retained."
     }
   ],
   "cleanupItems": [
@@ -616,5 +621,92 @@
     "replay": "ef225046f805c868a4d2c37ccaf56ddb04c01c37",
     "navigation": "ec5e5daac0e987bd41a7830b47882e5158806c6d",
     "transport": "e0f4f44bd2682f57f091bbac06882cfef5369904"
+  },
+  "releaseChecks": {
+    "implementationCommit": "8e7bdf00e920bdaba8f72e19fbc98def571994f4",
+    "artifact": "UI_REFACTOR_2026-10-09_release.json",
+    "findings": "Keyboard trace/history controls, linked setup labels, touch targets, journal calendar and percentage contrast, exposed lesson face, static regime point and consolidated shell rules verified. No added points while A08/A09 and Level07 remain partial.",
+    "frontendTests": 177,
+    "frontendTestFiles": 15,
+    "builds": {
+      "typescript": "tsc --noEmit passed",
+      "frontend": "Passed;4714 modules",
+      "storybook": "Passed;348 modules; existing non-failing warnings",
+      "bytes": {
+        "entryAsset": "index-SdD1-N6L.js",
+        "entryBytes": 287240,
+        "entryGzipBytes": 91200,
+        "totalJsBytes": 863216,
+        "totalCssBytes": 68085
+      }
+    },
+    "independentReview": {
+      "review": "Independent bounded release UI review using .claude/AUDIT_RUBRIC.md",
+      "result": "Passed bounded release UI review. No remaining verified P1/P2 defects in the corrected candidates and sampled states; full acceptance remains open.",
+      "sourceScope": "Shared focus/responsive CSS consolidation; scanner filter targets/state labels; live setup input labels and acknowledgment target; journal row targets, P&L text and calendar contrast; native paper history/trace actions; lesson flip-face accessibility and regime labels; replay setup controls. No API mutations or source edits by reviewer.",
+      "rubric": {
+        "1_scope_intent": "Authorized UI simplification and release polish. Review bounded to current rendered controls, readability and keyboard access; no whole-system acceptance claim.",
+        "2_fundamentals": "Current callers, styles and input labels inspected. Fixture source status determines live setup redirect, so idle setup was checked separately from running LONG status. SVG fill and text opacity included; CSS composition estimates do not fully capture vector-painted backgrounds.",
+        "3_contracts_ownership": "Settings values/parsing, filter handlers, timing definitions and financial calculations remain owned by existing producers. Named native actions replace click-only surfaces; no session/cache or strategy owner introduced.",
+        "4_behavioral_evidence": "92 rendered route/chapter-by-width cases; focused trace, paper autopsy, flip-card/rejection keyboard tests; 8 final setup/journal retests. No broad test suite rerun by reviewer. Root owns final compiler/unit/build validation.",
+        "5_accounting_diagnosability": "No accounting producer or financial handler changes; numerical sign/P&L values retained while calendar tint and text opacity changed. Offline failures visible in fixtures.",
+        "6_safe_verification": "Installed Edge headless with all /api calls intercepted. Zero mutation requests; no credentials, API imports, runtime stores, exchange operations or unrestricted backend tests.",
+        "7_trading_assumptions": "No weights, thresholds, mode minimums, order behavior or teaching calibration altered. Scanner out-of-mode status now explicit without changing filter behavior.",
+        "8_reviewable_completion": "Current diffs inspected; source ownership preserved. Initial defects and corrected retests retained separately. A08/A09 broader scope and Level07 remain open. No additional scoring recommended for CSS consolidation."
+      },
+      "checks": {
+        "renderedMatrix": {
+          "cases": 92,
+          "widths": [
+            320,
+            390,
+            768,
+            1280
+          ],
+          "routes": "14 active/fallback routes plus nine authored chapter routes",
+          "renderErrors": 0,
+          "documentOverflow": 0,
+          "mutationRequests": 0
+        },
+        "keyboard": "Trace Enter opens; Escape restores focused native trigger. Paper Enter expands and Space collapses; phone summaries fit. FlipCard exposes one active face, hidden face inert, Space/Enter and visible focus pass. Rejection chip focus and aria-expanded pass. 650px title is24px.",
+        "finalTargetRetest": {
+          "cases": 8,
+          "routes": [
+            "/bot/setup",
+            "/journal"
+          ],
+          "targetIssues": 0,
+          "nameIssues": 0,
+          "contrastCandidates": 0,
+          "renderErrors": 0,
+          "mutationRequests": 0
+        },
+        "correctedContrast": "Journal calendar and percentage/subtitle text, scanner mode labels and regime quadrant labels have no remaining computed contrast candidates in sampled states.",
+        "clockRetest": {
+          "cases": 4,
+          "route": "/training/lessons#ch-kill-zones",
+          "contrastCandidates": 0,
+          "targetIssues": 0,
+          "nameIssues": 0,
+          "renderErrors": 0,
+          "mutationRequests": 0,
+          "visual": "Opaque bg-2 label backplates and full-opacity fg labels checked in320px and1280px screenshots. Zone arcs and timing preserved."
+        }
+      },
+      "openFindings": [],
+      "resolvedFinalConcern": "KillZoneClock same-color-on-arc labels now have opaque bg-2 backplates and fg text. Final targeted four-width retest supersedes the ASIAN contrast candidate in the92-case matrix.",
+      "evidence": [
+        "build/reviewer_release_initial.json",
+        "build/reviewer_release_audit.json",
+        "build/reviewer_release_keyboard.json",
+        "build/reviewer_release_retest.json",
+        "build/reviewer_release_clock.json"
+      ],
+      "limitations": [
+        "Synthetic states and selected keyboard paths do not cover every error/stale/recovery/input variant.",
+        "Contrast uses computed styles and canvas color composition; gradients, inherited group opacity and vector-painted backgrounds require further manual checks.",
+        "Mobile Safari and native200% browser zoom unverified; no full WCAG certification or screen-acceptance awards."
+      ]
+    }
   }
 }

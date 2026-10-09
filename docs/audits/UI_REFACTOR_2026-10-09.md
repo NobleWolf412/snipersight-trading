@@ -110,3 +110,13 @@ node scripts/build_refactor_dashboard.mjs
 ~~~
 
 Next work is the remaining control/contrast/CSS review and native cross-browser journey matrix. Reopen a cleared level if later evidence invalidates its bounded gate.
+
+## Final release review before main publication
+
+The final review corrected inherited keyboard, target and contrast defects: native paper-history and pipeline-evidence actions, visible focus, linked advanced live-setup labels, 44px journal/position/replay/dialog targets, muted journal calendar backgrounds and readable percentages/subtitles. Lesson cards expose only the active face. Regime diagrams show a static observed point with readable inactive labels. Duplicate shell rules were consolidated. Financial calculations, commands, strategy and existing state owners did not change.
+
+[Final release evidence](UI_REFACTOR_2026-10-09_release.json) retains the initial candidates, 92-case responsive/lesson matrix, targeted keyboard checks and final setup/journal retests separately. The scoped independent review applies the current rubric. TypeScript and both builds pass;177 active unit tests in15 files pass. Final assets: main JS 287,240 bytes, all JS 863,216 bytes, all CSS 68,085 bytes. These append the earlier checkpoint rather than rewriting its measurements.
+
+Final inventory:163 active files,153 archive files,18 retained candidates and1,028 inline style objects; this supersedes the preceding checkpoint's1,026 count. The additional four-width clock retest passes with opaque label backplates.
+
+Implementation commit: 8e7bdf00e920bdaba8f72e19fbc98def571994f4. Score remains315: this closes concrete issues within partial A08/A09, with no duplicate awards. Level07 remains open for the complete native cross-browser and state matrix. Safari, native200% zoom and full WCAG remain unverified.
