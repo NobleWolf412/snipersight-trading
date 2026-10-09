@@ -123,3 +123,29 @@ def test_workflow_sentiment_preserves_provider_observation():
     value, classification, observed = parse_sentiment_observation(
         {'value': '62', 'value_classification': 'Greed', 'timestamp': str(int(now.timestamp()) - 3600)}, now=now)
     assert (value, classification, observed) == (62, 'Greed', '2026-10-09T11:00:00+00:00')
+
+
+@pytest.mark.parametrize('kind', ['paper', 'live'])
+def test_workflow_bot_status_json_preserves_nested_analysis_without_mutating_runtime(kind):
+    import numpy as np
+    from fastapi.encoders import jsonable_encoder
+    from backend.bot.live_trading_service import LiveTradingService
+
+    service = PaperTradingService() if kind == 'paper' else LiveTradingService()
+    evidence = {'numeric_pass': np.bool_(True), 'evidence_eligible': np.bool_(False),
+                'score': np.float64(63.5), 'unknown': np.float64('nan'),
+                'counts': (np.int64(2), np.bool_(False))}
+    service.signal_log = [evidence]
+    service.current_scan = {'status': 'completed', 'metadata': {'eligible': np.bool_(False)}}
+    service.activity_log = [{'data': {'confirmed': np.bool_(True)}}]
+    payload = json.loads(json.dumps(jsonable_encoder(service.get_status()), allow_nan=False))
+    assert payload['signal_log'][0] == {
+        'numeric_pass': True, 'evidence_eligible': False, 'score': 63.5,
+        'unknown': None, 'counts': [2, False]}
+    assert payload['current_scan']['metadata']['eligible'] is False
+    assert payload['recent_activity'][0]['data']['confirmed'] is True
+    assert isinstance(service.signal_log[0]['numeric_pass'], np.bool_)
+    assert np.isnan(service.signal_log[0]['unknown'])
+    assert isinstance(service.signal_log[0]['counts'], tuple)
+    payload['current_scan']['metadata']['eligible'] = True
+    assert not service.current_scan['metadata']['eligible']

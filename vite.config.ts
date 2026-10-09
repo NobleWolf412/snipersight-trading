@@ -39,6 +39,27 @@ export default defineConfig({
     host: hostBind,
     strictPort,
     allowedHosts: true,
+    // The UI only needs frontend edits. Python environments, runtime stores,
+    // agent worktrees and generated graphs otherwise add thousands of watches.
+    // API requests still use the proxy below; this does not affect bot services.
+    watch: {
+      ignored: [
+        '**/backend/**',
+        '**/logs/**',
+        '**/*.log',
+        '**/.claude/**',
+        '**/.agents/**',
+        '**/.codex/**',
+        '**/.codex-remote-attachments/**',
+        '**/.serena/**',
+        '**/.claire/**',
+        '**/.impeccable/**',
+        '**/.pytest_cache/**',
+        '**/.live_trading/**',
+        '**/graphify/**',
+        '**/graphify-out/**',
+      ],
+    },
     hmr: {
       overlay: true,
     },

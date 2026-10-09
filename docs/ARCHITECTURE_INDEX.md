@@ -45,6 +45,34 @@ Recorded result summaries replace demo counts, charts, connections and performan
 See the [verification record](audits/WORKFLOW_PASS_2026-10-09.json) for tests and
 runtime boundaries, including the browser-discovered NumPy serialization failure.
 
+Bot-status follow-up: the [active-session serialization correction](audits/BOT_STATUS_JSON_2026-10-09.json)
+extends JSON-safe publication to paper/live `get_status`. A NumPy boolean in
+active scan evidence broke paper status even while the process and scan loop
+remained healthy. The earlier idle browser checks did not exercise this payload.
+Runtime evidence records the preserved stopped simulation and replacement run.
+
+Development footprint: [Vite watcher exclusions](../vite.config.ts) keep backend
+stores, logs, agent worktrees and generated graphs outside frontend file watching.
+[Before/after measurements](audits/RUNTIME_FOOTPRINT_2026-10-09.json) record the
+reduced watch/handle counts with the same paper session continuing. Disk cleanup
+candidates are recorded separately; the telemetry database is historical data.
+
+Intel mobile follow-up: [FundingTable](../src/components/FundingTable.tsx) owns
+per-field availability and responsive funding cards. A failed exchange request
+does not hide other valid fields or print raw provider errors into the page.
+The [phone-layout evidence](audits/INTEL_MOBILE_2026-10-09.json) records Phemex's
+delisted TON markets, viewport checks and the compact mobile session shortcut.
+Backend market selection and the running paper session were unchanged.
+
+Scanner chart follow-up: [Review setup](../src/components/ScannerSetupModal.tsx)
+opens real candles with both saved entry boundaries, stop and all recorded targets.
+[The display projection](../src/services/scannerSetup.ts) retains contract identity
+and semantic near/far values, including SHORT plans. New scan receipts retain
+exchange/market provenance; older missing sources require an explicitly labeled
+viewing selection. Chart timeframe changes do not recalculate a saved plan.
+[Verification](audits/SCANNER_CHART_2026-10-09.json) includes a real LIT scan,
+desktop/mobile chart checks, 81 frontend tests and independent source review.
+
 ## Entry points and state owners
 
 | Area | Implementation / key symbols | Responsibility and boundary |

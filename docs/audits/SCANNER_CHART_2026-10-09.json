@@ -1,0 +1,138 @@
+{
+  "recorded_at": "2026-10-09T21:22:43.178046+00:00",
+  "scope": "Manual scanner result chart review and responsive result cards; frontend only",
+  "status": "running locally; not committed or pushed",
+  "problem": "Review setup only expanded rationale/raw JSON. Result grid forced two columns on phones, clipping card labels and prices. The small level diagram had no candles.",
+  "behavior": [
+    "Review setup opens a lazy-loaded native dialog with real candles from the existing market endpoint, both saved entry boundaries, stop and every valid target.",
+    "Exact saved price text, labeled chart timeframe selection, fit/reset and refresh. Setup levels never recomputed by changing the viewing timeframe.",
+    "Original contract symbol and source metadata retained in new browser scan history; legacy missing source/timeframe explicitly labeled. No historical records rewritten.",
+    "Qualified stablecoin-settled symbols prevent CCXT resolving a swap request to spot. Unsupported source/market returns an error rather than a substitute feed.",
+    "Finite, valid OHLC with UTC-aware/legacy naive timestamps; sorted and deduplicated before plotting. Missing or malformed values are not invented.",
+    "Full-width phone cards, readable metric grid, full-screen phone dialog, keyboard/escape and focus restoration, scroll isolation, resize/chart teardown and late-response guards."
+  ],
+  "ownership": {
+    "pipeline": "Completed scan metadata/request -> ScanRunService receipt -> convertSignalToScanResult retains original_symbol -> buildCardSignals/buildSetupChartPlan -> ScannerSetupModal -> api.getCandles -> existing data router",
+    "existing_api_consumers": [
+      "PositionDetailModal",
+      "TradeHistoryDetailModal"
+    ],
+    "compatibility": "Optional fourth getCandles source argument; existing three-argument calls retain the old default query and retry behavior.",
+    "backend_changes": false,
+    "trading_changes": false
+  },
+  "verification": {
+    "typescript": {
+      "command": "node_modules/.bin/tsc.cmd --noEmit",
+      "exit_code": 0
+    },
+    "tests": {
+      "command": "node_modules/.bin/vitest.cmd run src/services/scannerSetup.test.ts src/pages/Scanner.score.test.tsx src/services/workflowOwnership.test.ts src/services/scanHistoryService.test.ts --exclude '**/.claude/**'",
+      "passed": 81,
+      "scope": "13 chart evidence/source/normalization cases, 30 scanner score cases, 35 workflow cases, 3 history cases"
+    },
+    "build": {
+      "command": "node_modules/.bin/vite.cmd build",
+      "exit_code": 0,
+      "duration_seconds": 8.12
+    },
+    "initial_failures": [
+      "Initial test filename selection also discovered three old nested .claude worktrees; their stale history tests failed. Current checkout tests passed. Rerun explicitly excludes those unrelated historical checkouts.",
+      "TypeScript caught Array.at unsupported by configured target and a zero-argument mock tuple access; fixed implementation/test typing and reran successfully."
+    ],
+    "browser": {
+      "url": "https://noblewolf.tailb37fc7.ts.net:8446/scanner",
+      "real_scan": {
+        "symbol": "LIT/USDT:USDT",
+        "mode": "stealth",
+        "exchange": "phemex",
+        "market_type": "swap",
+        "completed_at": "2026-10-09T17:17:20-04:00",
+        "processed": 1,
+        "signals": 1,
+        "score_display": "65.4",
+        "timeframe": "1h",
+        "entry_near": 3.607,
+        "entry_far": 3.604,
+        "stop": 3.539,
+        "tp1": 3.759
+      },
+      "candles": {
+        "endpoint": "/api/market/candles/LIT%2FUSDT%3AUSDT?timeframe=1h&limit=160&exchange=phemex&market_type=swap",
+        "count": 160,
+        "last_open": "2026-10-09T16:00:00-04:00"
+      },
+      "mobile": {
+        "viewport": [
+          390,
+          844
+        ],
+        "document_scroll_width": 375,
+        "card_width": 329,
+        "dialog_client_and_scroll_width": 375,
+        "chart_width": 355
+      },
+      "interaction": [
+        "Desktop chart screenshot shows real candles and NEAR/FAR/STOP/TP1 lines.",
+        "Phone screenshot shows full-screen chart and unchanged exact price list; no horizontal overflow or training beacon over modal.",
+        "Changed 1h to15m: real candles loaded and all four saved prices unchanged.",
+        "Changed to4h then immediately escaped during request; focus returned to review button. Reopened with setup1h, correct prices and no chart lifecycle error.",
+        "Restored initial empty target input and normal viewport after real focused scan; auto-scan remained off."
+      ],
+      "console_limit": "Existing localhost-tab HMR context errors at21:12:53 preceded full navigation; no newer chart error seen during mobile verification."
+    },
+    "runtime": {
+      "backend_pid": 18572,
+      "frontend_pid": 24428,
+      "paper_session": "503206fe",
+      "paper_started_at": "2026-10-09T16:06:38.184336-04:00",
+      "paper_running": true,
+      "open_positions": 0,
+      "pending_simulated_orders": 1,
+      "services_restarted": false
+    }
+  },
+  "independent_review": {
+    "reviewer": "/root/api_ownership_design",
+    "scope": "Current frontend diff and existing candle backend/CCXT call path; read-only source review",
+    "addressed": [
+      "Preserve actual original_symbol; qualify fallback swap symbols to prevent spot resolution.",
+      "Do not reorder SHORT semantic near/far boundaries.",
+      "Use round-tripping exact saved price strings.",
+      "Use supported exchange roster and explicit errors for mismatched configured markets.",
+      "Validate/sort/deduplicate candles and interpret naive ISO as UTC."
+    ],
+    "final": "No remaining material blockers found in the scoped frontend diff.",
+    "limits": "Reviewer did not independently run tests or browser checks; primary agent performed those."
+  },
+  "checklist": {
+    "scope": "User-requested actual plotted scanner setup; no score/admission/entry/target recalibration.",
+    "fundamentals": "Trace true contract, venue, market, plan timeframe and UTC candles; exact data retained.",
+    "contracts": "Additive browser history provenance; optional API client argument; backend schema unchanged.",
+    "behavior": "LONG/SHORT conversion, all targets, missing data, tiny prices, source request, corrupt candles, real mobile chart and close/reopen.",
+    "accounting": "Read-only manual chart and manual scan; no order placement or existing session mutation.",
+    "verification": "Frontend tests/types/build and public existing API/browser paths only. Backend offline tests/contracts not rerun because no backend code changed.",
+    "trading_assumptions": "Current candles overlay the historical saved plan; this is not historical strategy reconstruction or updated trade qualification.",
+    "completion": "Independent review, scoped diff inspection, architecture/evidence append; unrelated changes preserved."
+  },
+  "limitations": [
+    "Phone browser viewport simulation, not physical Android touch hardware.",
+    "Known-source real Phemex success tested. Legacy source selection and unsupported feed handling covered by source review and request fixtures, not every exchange live.",
+    "Backend adapter configuration may reject spot feeds; chart does not silently replace them with perpetual data.",
+    "Outstanding read-only candle HTTP requests may finish after closing; stale responses cannot update removed or replacement charts.",
+    "Latest candles may be cached/closed; last-bar timestamp is shown. Saved setup levels are not automatically refreshed or requalified."
+  ],
+  "source_sha256": {
+    "src/components/ScannerSetupModal.tsx": "839560671da3718d6b3f095dc3fc9f28d2117135225a5b8b4f229d8977d2c213",
+    "src/components/ScannerSetupModal.css": "53f4902f3240637b62604f0ff27aa229b8d59d855dede54fa7271194d228dd73",
+    "src/services/scannerSetup.ts": "f6de8febf764d4b5ad514abf3e27d74c1f0dd0072e44d4e2f7eadea6d718165a",
+    "src/services/scannerSetup.test.ts": "340cbe8d559ce9ee6ff649b74a1d49a9ffb547993f23419632cc3e38b1afef3a",
+    "src/pages/Scanner.tsx": "7bdcbf6ad7e48aeb6bf82bb80bd0c4789087cb38fd8d7d095bf5b5e23348959a",
+    "src/pages/Scanner.css": "07ded34d143dec435412b42be2f575937cab01dc215f59748fe409fc0264409d",
+    "src/services/scanHistoryService.ts": "a2d6dfb96e2dc81b0be68e215efa12f4988298d407621e41603b2636bb1f7471",
+    "src/services/scanRunService.ts": "8fec3a44cb051082ed4d0dc239b54b0e9df2e94a62c014102aa8fb3c97f69c36",
+    "src/services/workflowOwnership.test.ts": "614b048eb0c3bf114ac821b762bf9a309c8a0be6fa3d6e2dcff90737af8b71de",
+    "src/utils/api.ts": "1d94421af65a51e08678ff4704b613e117b4fd29cc7094b0d5ce1291018d9e2a",
+    "src/utils/mockData.ts": "03da81f53fb951754abe2a8f619a0fc15cc8a0e70b7f9d6ee24824ff50cdc352"
+  }
+}

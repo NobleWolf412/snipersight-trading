@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-09",
+  "baseline": "75f3b487e08252e92938756c16d5c017cd652aff",
+  "problem": "Paper status HTTP500 after active analysis: FastAPI cannot encode nested numpy.bool. Health/live idle status200; user UI reports Backend unreachable.",
+  "root_cause": "Bot status publication returned raw signal/activity/current-scan analysis scalars. Earlier scanner serialization fix did not cover these service boundaries; idle status verification missed active evidence.",
+  "change": "Apply existing recursive JSON sanitizer to completed paper and live get_status payloads. No scoring, execution, accounting calculation or stored evidence mutations.",
+  "verification": {
+    "focused": "2 passed,2478 deselected; actual FastAPI encoder and strict JSON with nested NumPy booleans/numbers and copy preservation for both services",
+    "affected": "193 passed,2287 deselected,98 warnings,180.30s",
+    "affected_command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py backend -k 'workflow or live_lifecycle or testnet_shutdown or accounting_delivery'",
+    "contracts": "exit1; API/telemetry/pipeline clean; exactly six prior JSONL drifts, baseline unchanged",
+    "guards": "seven denial checks passed in each invocation; external transports/processes denied, fixture writes only",
+    "independent_review": "api_backend_integrity: source-only caller/consumer and copy/ownership review; no material regression found",
+    "typescript": "not run; no frontend edits"
+  },
+  "runtime": {
+    "previous_session": "8b17a726",
+    "replacement_session": "503206fe",
+    "old_paper_positions": 0,
+    "old_paper_pending_orders": 0,
+    "old_paper_completed_trades": 0,
+    "old_paper_final_balance": 1000.0,
+    "stop": "Old stop response500 due same serializer; separate session_stopped event and later flat checkpoint confirmed completion before terminating verified API process14640.",
+    "api_pid": 18572,
+    "ui_pid": 24428,
+    "restored_config_exact_match": true,
+    "simulation_only": true,
+    "live_service": "idle",
+    "duration": "Replacement keeps original24-hour duration setting; its clock restarts with the new session. Prior session history preserved.",
+    "browser_and_post_scan": {
+      "local_status_http": 200,
+      "tailscale_status_http": 200,
+      "scans_completed": 1,
+      "published_signal_rows": 18,
+      "recovery_required": false,
+      "range_page": "Running paper session503206FE without Backend unreachable banner",
+      "main_bot_page": "PAPER DEPLOYMENT, PAPER RUNNING, session503206FE; no Backend unreachable banner after completed scan"
+    },
+    "post_scan_payload_sha256": "b92ddfe7bb356db9bb371339f121bbb1c34fd724eb64fd70a6fd102285cde2fb"
+  },
+  "limitations": [
+    "No real exchange order or live session started; simulated paper restarted to preserve the user-started run intent.",
+    "Separate activity/positions/history endpoints are outside this bounded status-publication change.",
+    "Prior checkpoints remain historical; this correction does not retroactively certify active bot status during earlier idle checks."
+  ],
+  "source_hashes_sha256": {
+    "backend/bot/paper_trading_service.py": "65f4f9ff29d360af3bc84a285dea0e894a453675264e2acc9e037d4ae1e5f83d",
+    "backend/bot/live_trading_service.py": "5b28cea64d79df4100b765514be36b592c67f099c184ec24fb1b2debd43ce6a6",
+    "backend/tests/unit/test_workflow_repairs.py": "eb0e567ab247350b8527de01e887bcee2615ee3d74fb578860ceb964e501f686"
+  },
+  "log_directory": "C:\\Users\\macca\\AppData\\Local\\SniperSight\\audits\\20261009-bot-status-json",
+  "log_sha256": {
+    "backend.txt": "de711e05fd86c644d94d5ecb5efb1137c7d79469d7bfd543958aca57d2b87ab6",
+    "focused.txt": "b20f5557ae41daff716bf6f0d8bc161b1dc31dbff37f02784c688631378c51fb",
+    "contracts.txt": "15fbb1f21343b86724903c9a72be185e98cf04612ce70dcd875a67f9ad0d2ece"
+  },
+  "restart_snapshot_directory": "C:\\Users\\macca\\AppData\\Local\\SniperSight\\restarts\\20261009-bot-status-json",
+  "status": "fixed_and_running_locally; not committed or pushed"
+}

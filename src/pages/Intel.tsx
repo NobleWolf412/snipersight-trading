@@ -3,8 +3,9 @@ import { useFreshFeed } from '@/hooks/useFreshFeed';
 import { observationDeadline } from '@/services/freshFeed';
 import { Link } from 'react-router-dom';
 import { PageHead, SectionHead, Chip } from '@/components/hud';
-import { api, type FundingResponse, type FearGreedResponse, type TradFiResponse, type BTCCycleContextData } from '@/utils/api';
+import { api } from '@/utils/api';
 import { useMarketRegime } from '@/hooks/useMarketRegime';
+import { FundingTable } from '@/components/FundingTable';
 
 const number = (value: unknown, digits = 2) => typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '—';
 const time = (value?: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : 'Unavailable';
@@ -55,15 +56,16 @@ export function Intel() {
       </Panel>
       <Panel title="Traditional markets">
         {!tradfi && <p>Quotes unavailable.</p>}
-        {tradfi?.rows.map(row => <div key={row.key} style={{ marginBottom: 14 }}><strong>{row.label}: {row.error ? 'Unavailable' : number(row.value)} {row.currency}</strong><div>As of {time(row.as_of)} · {row.error ?? `${number(row.delta_pct)}% vs previous close`}</div></div>)}
+        {tradfi?.rows.map(row => <div key={row.key} style={{ marginBottom: 14 }}><strong>{row.label}: {row.error ? 'Unavailable' : number(row.value)} {row.currency}</strong><div>As of {time(row.as_of)} · {row.error ? 'Quote unavailable from provider' : `${number(row.delta_pct)}% vs previous close`}</div></div>)}
         {tradfi && <p>Source: {tradfi.source}. Closed-market quotes retain their observation time.</p>}
       </Panel>
     </div>
     <div style={{ marginTop: 18 }}><Panel title="Funding and open interest · Phemex">
       {!funding && <p>Funding feed unavailable. No substitute values are shown.</p>}
-      {funding && <><p>Received by backend: {time(funding.cached_at)}</p><table style={{ width: '100%', textAlign: 'left' }}><thead><tr><th>Pair</th><th>Mark</th><th>Funding</th><th>Open interest USD</th><th>Next funding</th></tr></thead><tbody>
-        {funding.rows.map(row => <tr key={row.symbol}><td>{row.symbol}{row.error && <div>{row.error}</div>}</td><td>{row.error ? '—' : number(row.mark_price)}</td><td>{row.error || row.funding_rate == null ? '—' : `${number(row.funding_rate * 100, 4)}%`}</td><td>{row.error ? '—' : number(row.open_interest_usd)}</td><td>{time(row.next_funding_ts)}</td></tr>)}
-      </tbody></table></>}
+      {funding && <><p>Received by backend: {time(funding.cached_at)}</p>
+        <FundingTable rows={funding.rows} />
+        <p style={{ fontSize: 12, color: 'var(--fg-2)' }}>Unavailable fields were not supplied by the exchange. Price may use the spot quote when the perpetual mark is unavailable.</p>
+      </>}
     </Panel></div>
     {errors.length > 0 && <p role="status">{errors.join(' ')}</p>}
   </div>;

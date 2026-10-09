@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useScanner } from '@/context/ScannerContext';
+import './ActiveScanBeacon.css';
 
 type ModeConfig = {
   label: string;
@@ -54,7 +55,10 @@ function SingleBeacon({ modeKey, onClick }: { modeKey: string; onClick: () => vo
   const { color, glow, ringColor, label, shortCode } = cfg;
 
   return (
-    <div
+    <button
+      type="button"
+      className="active-scan-beacon__button"
+      aria-label={`Return to ${label}`}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -66,11 +70,15 @@ function SingleBeacon({ modeKey, onClick }: { modeKey: string; onClick: () => vo
         gap: 8,
         cursor: 'pointer',
         userSelect: 'none',
+        background: 'none',
+        border: 0,
+        padding: 0,
+        font: 'inherit',
       }}
     >
       {/* Label pill */}
       <div
-        className="beacon-pill-slide-in"
+        className="beacon-pill-slide-in active-scan-beacon__pill"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -114,7 +122,8 @@ function SingleBeacon({ modeKey, onClick }: { modeKey: string; onClick: () => vo
 
       {/* Beacon orb */}
       <div
-        className="beacon-float"
+        className="beacon-float active-scan-beacon__orb"
+        aria-hidden="true"
         style={{
           position: 'relative',
           display: 'flex',
@@ -205,7 +214,7 @@ function SingleBeacon({ modeKey, onClick }: { modeKey: string; onClick: () => vo
           />
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -233,19 +242,7 @@ export function ActiveScanBeacon() {
   const extras = filtered.length - 1;
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 24,
-        right: 24,
-        zIndex: 90,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 16,
-        pointerEvents: 'auto',
-      }}
-    >
+    <div className="active-scan-beacon">
       {extras > 0 && (
         <div
           style={{

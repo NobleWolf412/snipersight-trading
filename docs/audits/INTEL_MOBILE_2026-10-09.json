@@ -1,0 +1,101 @@
+{
+  "recorded_at": "2026-10-09T21:09:25.468569+00:00",
+  "scope": "Intel funding error presentation and mobile layout; no backend or strategy change in this batch",
+  "status": "running locally through frontend hot reload; not committed or pushed",
+  "cause": {
+    "api": "/api/market/funding",
+    "observation": "TON returned three Phemex 6001 invalid-argument responses; other nine rows returned funding and price data.",
+    "market_source": "https://api.phemex.com/public/products",
+    "products": [
+      {
+        "collection": "products",
+        "symbol": "sTONUSDT",
+        "status": "Delisted"
+      },
+      {
+        "collection": "perpProductsV2",
+        "symbol": "TONUSDT",
+        "status": "Delisted"
+      }
+    ],
+    "presentation": "Any row.error hid valid partial values; raw exchange JSON expanded the pair cell; fixed radar orb obscured phone content."
+  },
+  "changes": [
+    "Per-field availability with finite numeric guards; failed markets remain visible with a short message; diagnostic errors remain in the original API response.",
+    "Responsive funding cards at widths <=760px and a table on desktop; no mobile horizontal table scroll.",
+    "Preserve zero and negative funding and price precision up to eight decimals; label price as USDT because backend can fall back to spot.",
+    "Compact mobile active-session footer with a keyboard-accessible button and bottom content clearance; desktop radar retained.",
+    "Traditional-market failures also use a short provider message instead of raw errors."
+  ],
+  "verification": {
+    "typescript": {
+      "command": "node_modules/.bin/tsc.cmd --noEmit",
+      "exit_code": 0
+    },
+    "tests": {
+      "command": "node_modules/.bin/vitest.cmd run src/components/FundingTable.test.tsx src/services/workflowOwnership.test.ts",
+      "passed": 38,
+      "new_funding_cases": 4
+    },
+    "production_build": {
+      "command": "node_modules/.bin/vite.cmd build",
+      "exit_code": 0,
+      "final_duration_seconds": 6.39
+    },
+    "diff_check": "passed",
+    "browser": {
+      "url": "https://noblewolf.tailb37fc7.ts.net:8446/intel",
+      "viewports": [
+        {
+          "width": 390,
+          "height": 844,
+          "document_scroll_width": 375,
+          "funding_client_and_scroll_width": 313,
+          "footer_height": 61,
+          "orb_display": "none"
+        },
+        {
+          "width": 320,
+          "height": 740,
+          "document_scroll_width": 305,
+          "funding_client_and_scroll_width": 243
+        }
+      ],
+      "visual": "390px screenshot shows readable TON unavailable card, AVAX negative rate, all field labels and compact Training Ground footer; end-of-page DOGE fields and note scroll above footer. Default desktop table visually checked. Temporary viewport override reset."
+    },
+    "runtime": {
+      "api_pid": 18572,
+      "frontend_pid": 24428,
+      "paper_session_id": "503206fe",
+      "paper_started_at": "2026-10-09T16:06:38.184336-04:00",
+      "paper_status": "running",
+      "open_positions": 0,
+      "pending_simulated_orders": 1,
+      "services_restarted": false
+    }
+  },
+  "checklist": {
+    "scope_and_intent": "User phone screenshot; bounded display repair.",
+    "fundamentals": "Inspected Phemex source metadata, endpoint values, rate fraction-to-percent conversion and existing spot-price fallback.",
+    "contracts_and_ownership": "Endpoint -> API FundingRow -> Intel FreshFeed -> FundingTable; response and expiry unchanged. ActiveScanBeacon retains ScannerContext ownership and routes.",
+    "behavioral_evidence": "Unavailable, partial, zero/negative, invalid numeric/time fixtures; real Tailscale phone/desktop render.",
+    "accounting_and_diagnosability": "No account mutation; raw diagnostics remain in API; unknowns not replaced with zero.",
+    "safe_verification": "Frontend checks and read-only public/runtime requests only. No backend imports or offline backend tests necessary for this display change.",
+    "trading_assumptions": "No admission, weights, risk, strategy or market-universe change.",
+    "reviewable_completion": "Scoped diff inspected; architecture and evidence appended; prior unrelated working-tree changes preserved."
+  },
+  "limitations": [
+    "Browser viewport simulation is not a physical Android test.",
+    "TON remains unavailable; this does not restore a delisted market or change backend default symbols/fetch attempts.",
+    "Next funding timestamps were null in the observed backend response and remain explicitly unavailable.",
+    "No full system certification, backend restart, live/testnet orders or changes to existing simulated pending orders."
+  ],
+  "source_sha256": {
+    "src/pages/Intel.tsx": "ee190f5aba0c882a980594eb0779dc387c3447a323069ca0b584f371b59ed260",
+    "src/components/FundingTable.tsx": "1e14fd72e66ec6cf311609fba4056bd81621d8bfa1ac0da9504b85c53726394d",
+    "src/components/FundingTable.css": "5c76331da8c5e129395c821ca2b4322b61e70f5fbcdaa8e8224aa2b4340c3e3b",
+    "src/components/FundingTable.test.tsx": "bd64456b59f668053a48c0c29ea237ff59fdb0b1354f4af8bf5df27a6e65295c",
+    "src/components/ActiveScanBeacon/ActiveScanBeacon.tsx": "517a28b0c6dfe06e72fdd020d3c9062547f91a19eed7a507dba97265f053969a",
+    "src/components/ActiveScanBeacon/ActiveScanBeacon.css": "50acfc21dcccd671ab6f822994b65344e752add3559f29ea225dfd9b99f9f865"
+  }
+}

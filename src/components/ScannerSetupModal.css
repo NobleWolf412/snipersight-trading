@@ -1,0 +1,38 @@
+.scanner-setup-dialog {
+  width: min(1120px, calc(100vw - 40px));
+  max-width: none;
+  max-height: calc(100dvh - 40px);
+  padding: 0;
+  border: 1px solid var(--accent-border);
+  border-radius: 14px;
+  background: #101712;
+  color: var(--fg);
+  overflow: auto;
+}
+.scanner-setup-dialog::backdrop { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(5px); }
+.scanner-setup-dialog__body { padding: 22px; min-width: 0; }
+.setup-chart-header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.setup-chart-header h2 { margin: 0; font-size: 22px; overflow-wrap: anywhere; }
+.setup-chart-header p { color: var(--fg-2); font-size: 12px; }
+.setup-chart-header button { flex-shrink: 0; min-height: 44px; }
+.setup-chart-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin: 12px 0; }
+.setup-chart-controls label { display: grid; gap: 6px; color: var(--fg-2); font-size: 12px; }
+.setup-chart-controls select { min-height: 40px; background: #1b2921; color: var(--fg); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; }
+.setup-chart { width: 100%; height: clamp(310px, 50dvh, 540px); }
+.setup-chart-message { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; overflow-wrap: anywhere; }
+.setup-chart-caption { color: var(--fg-2); font-size: 12px; line-height: 1.6; }
+.setup-chart-caption button { margin-left: 8px; }
+.setup-chart-notice { font-size: 12px; color: #e7bd70; line-height: 1.5; }
+.setup-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 18px; }
+.setup-levels > div { display: grid; gap: 7px; background: #ffffff04; border-left: 3px solid; padding: 10px 12px; min-width: 0; }
+.setup-levels span { font-size: 12px; color: var(--fg-2); }
+.setup-levels strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.setup-rationale { margin-top: 20px; color: var(--fg-2); line-height: 1.6; overflow-wrap: anywhere; }
+.setup-rationale summary { cursor: pointer; min-height: 36px; color: var(--fg); }
+@media (max-width: 600px) {
+  .scanner-setup-dialog { width: 100%; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .scanner-setup-dialog__body { padding: 16px 10px calc(20px + env(safe-area-inset-bottom)); }
+  .setup-chart-header { position: sticky; top: 0; z-index: 2; background: #101712; padding-bottom: 8px; }
+  .setup-chart-header h2 { font-size: 18px; }
+  .setup-levels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

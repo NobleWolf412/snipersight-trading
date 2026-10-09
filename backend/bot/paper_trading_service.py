@@ -45,6 +45,7 @@ from backend.analysis.regime_policies import get_regime_policy
 from backend.diagnostics.logger import DiagnosticLogger, ProbeCategory, Severity
 from backend.diagnostics.report import ReportGenerator, ModeStats
 from backend.bot.trade_journal import get_trade_journal
+from backend.shared.utils.signal_transform import _sanitize_for_json
 
 logger = logging.getLogger(__name__)
 
@@ -1369,7 +1370,8 @@ class PaperTradingService:
         result.setdefault("recovery_required", False)
         result["reset_allowed"] = not (busy or self.status == PaperBotStatus.RUNNING or result["recovery_required"])
         result["lifecycle_busy"] = busy
-        return result
+        # Analysis/log fields may contain NumPy scalars; publish a detached JSON-safe view.
+        return _sanitize_for_json(result)
 
     def get_positions(self) -> List[Dict[str, Any]]:
         """Get active positions with real-time P&L."""

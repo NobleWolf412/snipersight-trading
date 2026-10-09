@@ -167,6 +167,8 @@ export class ScanRunService {
         try {
           this.history.saveScan({ id: runId, timestamp: job.completed_at ?? job.created_at,
             mode: meta.mode ?? this.mode?.name ?? 'unknown', profile: this.mode?.profile ?? 'unknown',
+            exchange: meta.exchange ?? this.params?.exchange,
+            marketType: meta.market_type ?? (this.params ? this.params.market_type ?? 'swap' : undefined),
             timeframes: meta.applied_timeframes ?? this.mode?.timeframes ?? [],
             symbolsScanned: meta.scanned ?? job.total, signalsGenerated: job.signals?.length ?? 0,
             signalsRejected: job.rejections?.total_rejected ?? 0,

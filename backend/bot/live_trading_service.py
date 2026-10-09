@@ -36,6 +36,7 @@ from backend.bot.paper_trading_service import (
     _MAX_LIMIT_DISTANCE_PCT,
 )
 from backend.bot.trade_journal import get_trade_journal
+from backend.shared.utils.signal_transform import _sanitize_for_json
 from backend.engine.orchestrator import Orchestrator
 from backend.shared.config.live_trading_config import LiveTradingConfig, load_phemex_credentials
 from backend.shared.config.strategy_policy import validate_strategy_selection, resolve_bot_sensitivity, plan_strategy_gate
@@ -797,7 +798,8 @@ class LiveTradingService:
                         "awaiting_adoption": bool(order.filled_quantity > 0),
                         "status": order.status.value,
                     })
-        return result
+        # Analysis/log fields may contain NumPy scalars; publish a detached JSON-safe view.
+        return _sanitize_for_json(result)
 
     def get_positions(self) -> List[Dict[str, Any]]:
         return self._get_active_positions()

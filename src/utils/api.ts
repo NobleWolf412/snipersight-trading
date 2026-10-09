@@ -688,9 +688,13 @@ class ApiClient {
     );
   }
 
-  async getCandles(symbol: string, timeframe = '1h', limit = 100) {
+  async getCandles(symbol: string, timeframe = '1h', limit = 100,
+    source?: { exchange: string; marketType: string }) {
+    const query = new URLSearchParams({ timeframe, limit: String(limit) });
+    if (source) { query.set('exchange', source.exchange); query.set('market_type', source.marketType); }
     return this.request(
-      `/market/candles/${encodeURIComponent(symbol)}?timeframe=${timeframe}&limit=${limit}`
+      `/market/candles/${encodeURIComponent(symbol)}?${query}`,
+      source ? { silent: true, skipRetry: true } : {}
     );
   }
 

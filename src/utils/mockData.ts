@@ -13,6 +13,7 @@ export interface ScanResult {
   riskReward?: number; // Actual R:R ratio from trade plan
   classification: 'SWING' | 'INTRADAY' | 'SCALP' | 'UNKNOWN';
   entryZone: { low: number; high: number };
+  original_symbol?: string;
   stopLoss: number;
   stopLossRationale?: string;
   takeProfits: number[];
@@ -148,6 +149,7 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     id: `signal-${signal.symbol}-${Date.now()}`,
     // Clean symbol: strip any :USDT suffix (exchange swap notation), then format as pair
     pair: String(signal.symbol ?? '').split(':')[0].replace(/\/?USDT$/, '/USDT'),
+    original_symbol: typeof signal.original_symbol === 'string' ? signal.original_symbol : undefined,
     sniper_mode: signal.sniper_mode || signal.mode || undefined,
     trendBias,
     confidenceScore: confidence,

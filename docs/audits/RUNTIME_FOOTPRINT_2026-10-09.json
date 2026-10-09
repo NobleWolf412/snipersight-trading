@@ -1,0 +1,258 @@
+{
+  "date": "2026-10-09",
+  "request": "Identify dead weight that can be removed to help the program run better; explain open handles.",
+  "change": "Exclude backend/runtime data, agent worktrees and generated graph folders from the Vite development watcher. Source and frontend tests remain watched. No files deleted or trading settings changed.",
+  "measurement_method": "Installed Vite createServer in middleware mode with HMR disabled; same current config except before/after watcher exclusions. Capture getWatched after ready or six seconds, then close. OS process counters taken on existing dashboard PID24428 before/after Vite config reload.",
+  "before_watcher": {
+    "watched_directories": 1256,
+    "watched_entries": 8591,
+    "groups": {
+      "(root)": {
+        "directories": 1,
+        "entries": 59
+      },
+      "..": {
+        "directories": 1,
+        "entries": 1
+      },
+      "public": {
+        "directories": 2,
+        "entries": 2
+      },
+      ".claire": {
+        "directories": 6,
+        "entries": 5
+      },
+      ".agents": {
+        "directories": 30,
+        "entries": 144
+      },
+      ".claude": {
+        "directories": 319,
+        "entries": 1735
+      },
+      ".codex": {
+        "directories": 4,
+        "entries": 12
+      },
+      ".codex-remote-attachments": {
+        "directories": 3,
+        "entries": 3
+      },
+      ".github": {
+        "directories": 2,
+        "entries": 3
+      },
+      ".impeccable": {
+        "directories": 3,
+        "entries": 9
+      },
+      ".live_trading": {
+        "directories": 1,
+        "entries": 1
+      },
+      ".pytest_cache": {
+        "directories": 3,
+        "entries": 7
+      },
+      ".serena": {
+        "directories": 6,
+        "entries": 18
+      },
+      ".storybook": {
+        "directories": 1,
+        "entries": 2
+      },
+      "archive": {
+        "directories": 3,
+        "entries": 40
+      },
+      "backend": {
+        "directories": 585,
+        "entries": 3834
+      },
+      "data": {
+        "directories": 1,
+        "entries": 1
+      },
+      "build": {
+        "directories": 1,
+        "entries": 1
+      },
+      "diagnostics": {
+        "directories": 1,
+        "entries": 29
+      },
+      "docs": {
+        "directories": 2,
+        "entries": 31
+      },
+      "graphify": {
+        "directories": 69,
+        "entries": 628
+      },
+      "logs": {
+        "directories": 86,
+        "entries": 621
+      },
+      "graphify-out": {
+        "directories": 22,
+        "entries": 545
+      },
+      "scripts": {
+        "directories": 4,
+        "entries": 114
+      },
+      "src": {
+        "directories": 53,
+        "entries": 385
+      },
+      "prototype": {
+        "directories": 2,
+        "entries": 25
+      },
+      "tests": {
+        "directories": 45,
+        "entries": 336
+      }
+    }
+  },
+  "after_watcher": {
+    "watched_directories": 118,
+    "watched_entries": 989,
+    "groups": {
+      "(root)": {
+        "directories": 1,
+        "entries": 44
+      },
+      "..": {
+        "directories": 1,
+        "entries": 1
+      },
+      "public": {
+        "directories": 2,
+        "entries": 2
+      },
+      ".github": {
+        "directories": 2,
+        "entries": 3
+      },
+      "archive": {
+        "directories": 2,
+        "entries": 15
+      },
+      ".storybook": {
+        "directories": 1,
+        "entries": 2
+      },
+      "data": {
+        "directories": 1,
+        "entries": 1
+      },
+      "build": {
+        "directories": 1,
+        "entries": 1
+      },
+      "diagnostics": {
+        "directories": 1,
+        "entries": 29
+      },
+      "docs": {
+        "directories": 2,
+        "entries": 31
+      },
+      "prototype": {
+        "directories": 2,
+        "entries": 25
+      },
+      "scripts": {
+        "directories": 4,
+        "entries": 114
+      },
+      "src": {
+        "directories": 53,
+        "entries": 385
+      },
+      "tests": {
+        "directories": 45,
+        "entries": 336
+      }
+    }
+  },
+  "before_process": {
+    "Id": 24428,
+    "ProcessName": "node",
+    "CPU": 791.71875,
+    "WorkingSet64": 400416768,
+    "PrivateMemorySize64": 437182464,
+    "HandleCount": 25906
+  },
+  "after_process": {
+    "Id": 24428,
+    "ProcessName": "node",
+    "CPU": 795.125,
+    "WorkingSet64": 369037312,
+    "PrivateMemorySize64": 411918336,
+    "HandleCount": 1335
+  },
+  "paper_before": {
+    "checked_at": "2026-10-09T20:56:39.105150+00:00",
+    "session_id": "503206fe",
+    "status": "running",
+    "simulation_only": true,
+    "scans_completed": 17,
+    "positions": 0,
+    "pending": 1
+  },
+  "paper_after": {
+    "api_pid": 18572,
+    "health_http": 200,
+    "session": "503206fe",
+    "paper_status": "running",
+    "scans": 18,
+    "positions": 0,
+    "pending": 1
+  },
+  "verification": {
+    "watcher_scope": "src remains watched; backend/logs/.claude/graphify-out absent",
+    "typescript": "tsc --noEmit exit0",
+    "build": "vite build exit0",
+    "proxy_health": 200,
+    "backend_restarted": false,
+    "paper_session_preserved": true,
+    "build_log_sha256": "e4664553fa7dbacd32ed797e6a8ede8829d9d4190ae7aea042449cb52ec19d26"
+  },
+  "inventory": {
+    "workspace_estimate_bytes": 7227499207,
+    "telemetry_db_bytes": 1516240896,
+    "telemetry_correction": "The previous cache-size label was misleading: this folder is mostly an active historical telemetry database, not disposable market-data cache.",
+    "old_console_log_candidates": {
+      "logs/dev_servers.log": 760864585,
+      "logs/backend.err.log": 330748683,
+      "backend.err.log": 226289685,
+      "backend.out.log": 6041631
+    },
+    "old_console_log_disposition": "Archive candidates only; original logs preserved in this pass.",
+    "worktree_candidate_bytes_approx": 876000000,
+    "worktree_disposition": "Three registered Git worktrees contain historical checkouts; not removed. Review unique changes before archive.",
+    "graph_output_bytes_approx": 217000000,
+    "graph_disposition": "Generated navigation/history artifacts excluded from UI watching; not deleted.",
+    "archived_ui_dependency_candidates": [
+      "@react-three/fiber",
+      "@react-three/drei",
+      "@react-three/postprocessing",
+      "echarts-for-react",
+      "@xterm/xterm",
+      "@xterm/addon-fit"
+    ],
+    "dependency_disposition": "Observed imports are in src/_archive; no packages removed. Complete transitive/build/script review is needed before uninstall."
+  },
+  "limitations": [
+    "Lower file watching and handle counts establish reduced development-server resource footprint, not a scanner throughput improvement.",
+    "Working-set changes around reload are not a controlled memory benchmark.",
+    "No retention purge, database vacuum, source deletion, ML changes, bot restart or order action performed."
+  ],
+  "source_sha256": "0d2cb00660d73aa4a9cb2e942b4734ff09a7e66886c298d7dbc1fc40cfabacc9",
+  "measurement_directory": "C:\\Users\\macca\\AppData\\Local\\SniperSight\\audits\\20261009-runtime-footprint",
+  "status": "applied locally; not committed or pushed"
+}

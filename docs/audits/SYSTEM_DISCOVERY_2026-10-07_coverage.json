@@ -22262,5 +22262,25 @@
     "runtime_scan_id": "1223f77d-84bf-49cb-a7e4-ebb8bb04782a",
     "runtime_scan_result": "20 processed,0 setups,20 recorded rejections; browser navigation/reload verified",
     "supersedes_availability_note": "restart_utc_handoff_2026_10_09.runtime_limit; named CoinGecko global feed active, calibration unproven"
+  },
+  "bot_status_json_2026_10_09": {
+    "evidence": "docs/audits/BOT_STATUS_JSON_2026-10-09.json",
+    "affected_backend_passed": 193,
+    "correction": "Earlier idle status checks did not cover NumPy booleans from active analysis; both status services now publish detached JSON-safe values."
+  },
+  "runtime_footprint_2026_10_09": {
+    "evidence": "docs/audits/RUNTIME_FOOTPRINT_2026-10-09.json",
+    "change": "Frontend watcher exclusions only; no files deleted, backend restart or paper session change."
+  },
+  "intel_mobile_2026_10_09": {
+    "evidence": "docs/audits/INTEL_MOBILE_2026-10-09.json",
+    "change": "Readable per-field funding availability, responsive cards and compact mobile session shortcut; active paper session preserved.",
+    "frontend_tests_passed": 38
+  },
+  "scanner_chart_2026_10_09": {
+    "evidence": "docs/audits/SCANNER_CHART_2026-10-09.json",
+    "change": "Scanner chart dialog with saved plan overlays, explicit market provenance and responsive cards; paper bot uninterrupted.",
+    "frontend_tests_passed": 81,
+    "runtime": "One-target manual LIT scan produced one setup; real desktop/phone-size candles and level overlays checked."
   }
 }

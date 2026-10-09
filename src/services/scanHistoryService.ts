@@ -59,6 +59,8 @@ export interface ScanHistoryEntry {
   timestamp: string;
   mode: string;
   profile: string;
+  exchange?: string;
+  marketType?: string;
   timeframes: string[];
   symbolsScanned: number;
   signalsGenerated: number;

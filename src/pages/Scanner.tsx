@@ -1,9 +1,9 @@
 import { ScannerInputs } from '@/components/hud/ScannerInputs';
 /** Manual scanner: application-owned runs, recorded history and explicit evidence.
- * Price diagrams show plan levels; radar placement is decorative, not market data.
+ * Chart review overlays saved plan levels on source-specific candles; radar is decorative.
  * The selected history receipt owns result counts, timestamps and setup summaries.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Chip,
   CooldownsTile,
@@ -20,6 +20,10 @@ import {
 import { readScore, readDirection, validScore, passesAdmission, admissionLabel, formatScore } from '@/utils/scoreEvidence';
 import { useScanner } from '@/context/ScannerContext';
 import { scanHistoryService, type ScanHistoryEntry } from '@/services/scanHistoryService';
+import { buildSetupChartPlan, formatSetupPrice, type SetupChartPlan } from '@/services/scannerSetup';
+import './Scanner.css';
+
+const ScannerSetupModal = lazy(() => import('@/components/ScannerSetupModal').then(module => ({ default: module.ScannerSetupModal })));
 
 // Categories contain only producer evidence; unavailable is selectable.
 const SETUPS = ['OB+FVG', 'BOS', 'CHoCH', 'LIQ-SWEEP', 'OB-RETEST', 'FVG-FILL', 'BREAKER', 'SMC', 'UNKNOWN'] as const;
@@ -57,6 +61,7 @@ interface CardSignal {
   age: number;
   rationale?: string;
   raw?: unknown;
+  chartPlan: SetupChartPlan;
   // tradeType: backend-emitted scale classification (SWING/INTRADAY/SCALP).
   // Sourced from the scan-history result's `classification` (already produced
   // by convertSignalToScanResult), with `trade_type` and `setup_type` accepted
@@ -81,21 +86,6 @@ function normalizeTradeType(raw: unknown): TradeType | undefined {
   const v = raw.trim().toUpperCase();
   if (v === 'SWING' || v === 'INTRADAY' || v === 'SCALP') return v;
   return undefined;
-}
-
-// Geometry supplied by the plan, not a simulated price chart.
-function MiniChart({ sig }: { sig: CardSignal }) {
-  const levels = [['Stop', sig.sl], ['Entry', sig.entry], ['TP1', sig.tp1], ['TP2', sig.tp2]] as const;
-  const valid = levels.filter(([, value]) => Number.isFinite(value) && value > 0);
-  if (valid.length < 2) return <p>Plan geometry unavailable</p>;
-  const low = Math.min(...valid.map(([, v]) => v));
-  const range = Math.max(...valid.map(([, v]) => v)) - low || 1;
-  return <svg viewBox="0 0 260 76" role="img" aria-label="Plan price levels">
-    {valid.map(([label, value], i) => <g key={label}>
-      <line x1={20 + (value - low) / range * 210} x2={20 + (value - low) / range * 210} y1="6" y2="44" stroke={label === 'Stop' ? 'var(--red-2)' : 'var(--accent)'} />
-      <text x="8" y={55 + (i % 2) * 13} dx={Math.floor(i / 2) * 130} fill="var(--fg-3)" fontSize="9">{label}: {fmtPrice(value)}</text>
-    </g>)}
-  </svg>;
 }
 
 // ─── Convergence/Conflict Mini-Bar (plan §3d P1) ─────────────────────────
@@ -165,7 +155,7 @@ function ConvergenceConflictBar({
 // ─── Signal Card ─────────────────────────────────────────────────────────
 
 export function SignalCard({ sig }: { sig: CardSignal }) {
-  const [expanded, setExpanded] = useState(false);
+  const [chartOpen, setChartOpen] = useState(false);
   const isLong = sig.dir === 'LONG';
   const confCol = 'var(--fg-2)';
   const setupKind: 'blue' | 'purple' | 'amber' | undefined = sig.setup.includes('FVG')
@@ -176,9 +166,8 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
         ? 'amber'
         : undefined;
   return (
-    <div className="pos brackets">
-      <div className="corner-tag tl">// {sig.id.toUpperCase()}</div>
-      <div className="corner-tag tr">
+    <div className="pos brackets scanner-signal-card">
+      <div className="scanner-signal-meta">
         {sig.tf} · {Number.isFinite(sig.age) ? `${sig.age}m ago at page load` : 'time unavailable'}
       </div>
       <div
@@ -192,7 +181,7 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
           flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="scanner-signal-title">
           <Chip kind={isLong ? 'green' : 'red'}>
             {isLong ? '▲' : '▼'} {sig.dir}
           </Chip>
@@ -234,31 +223,23 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
           />
         </div>
       </div>
-      <MiniChart sig={sig} />
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4,1fr)',
-          gap: '8px 10px',
-          marginTop: 10,
-        }}
-      >
+      <div className="scanner-signal-metrics">
         <div className="metric-tile">
           <div className="metric-label">Entry</div>
           <div className="metric-value" style={{ fontSize: 12 }}>
-            {Number.isFinite(sig.entry) ? fmtPrice(sig.entry) : '—'}
+            {Number.isFinite(sig.entry) ? formatSetupPrice(sig.entry) : '—'}
           </div>
         </div>
         <div className="metric-tile">
           <div className="metric-label">Stop</div>
           <div className="metric-value" style={{ fontSize: 12, color: 'var(--red-2)' }}>
-            {Number.isFinite(sig.sl) ? fmtPrice(sig.sl) : '—'}
+            {Number.isFinite(sig.sl) ? formatSetupPrice(sig.sl) : '—'}
           </div>
         </div>
         <div className="metric-tile">
           <div className="metric-label">TP1</div>
           <div className="metric-value" style={{ fontSize: 12, color: 'var(--green-soft)' }}>
-            {Number.isFinite(sig.tp1) ? fmtPrice(sig.tp1) : '—'}
+            {Number.isFinite(sig.tp1) ? formatSetupPrice(sig.tp1) : '—'}
           </div>
         </div>
         <div className="metric-tile">
@@ -299,15 +280,14 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
           </Chip>
         )}
         <span style={{ flex: 1 }} />
-        <button className="btn btn-green" style={{ padding: '4px 10px', fontSize: 10 }} aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>
-          REVIEW SETUP
+        <button className="btn btn-green scanner-review-button" aria-haspopup="dialog" onClick={() => setChartOpen(true)}>
+          REVIEW SETUP · CHART
         </button>
       </div>
-      {expanded && <div style={{ marginTop: 16, overflowWrap: 'anywhere' }}>
-        <p>Scan snapshot for manual review. Check current market prices before trading.</p>
-        <p>{sig.rationale || 'No rationale was supplied with this result.'}</p>
-        <details><summary>Recorded evidence</summary><pre style={{ whiteSpace: 'pre-wrap', fontSize: 11 }}>{JSON.stringify(sig.raw, null, 2)}</pre></details>
-      </div>}
+      {chartOpen && <Suspense fallback={<p role="status">Opening setup chart…</p>}>
+        <ScannerSetupModal plan={sig.chartPlan} symbol={sig.sym} direction={sig.dir}
+          rationale={sig.rationale} onClose={() => setChartOpen(false)} />
+      </Suspense>}
     </div>
   );
 }
@@ -696,7 +676,7 @@ export function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
     const category = <T extends string>(value: unknown, choices: readonly T[]): T =>
       choices.find(choice => choice.toUpperCase() === String(value ?? '').toUpperCase()) ?? ('UNKNOWN' as T);
     const price = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : NaN;
-    const entry: number = price(r.entryZone?.high ?? r.entry ?? r.entry_price);
+    const entry: number = price(r.entryZone?.high ?? r.entry_near ?? r.entry ?? r.entry_price);
     const sl: number = price(r.stopLoss ?? r.stop_loss?.level ?? r.stop_loss ?? r.sl);
     const tp1: number = price(r.takeProfits?.[0] ?? r.targets?.[0]?.level ?? r.tp1);
     const tp2: number = price(r.takeProfits?.[1] ?? r.targets?.[1]?.level ?? r.tp2);
@@ -741,6 +721,7 @@ export function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
       rr,
       age: Math.max(0, Math.floor((Date.now() - Date.parse(r.timestamp || latest.timestamp)) / 60000)),
       rationale: r.rationale, raw: r,
+      chartPlan: buildSetupChartPlan(r, latest),
       tradeType,
       synergyBonus,
       conflictPenalty,
@@ -956,9 +937,9 @@ export function Scanner() {
       </div>
 
       {/* Main 3-col ─────────────────────────────────────────────── */}
-      <div className="layout-grid" style={{ gridTemplateColumns: '260px 1fr 320px' }}>
+      <div className="layout-grid scanner-layout">
         {/* Left rail */}
-        <section className="panel" style={{ position: 'sticky', top: 14, alignSelf: 'start' }}>
+        <section className="panel scanner-filter-panel">
           <SectionHead title="Filters" />
           <FilterRail
             filters={filters}
@@ -982,14 +963,7 @@ export function Scanner() {
               </>
             }
           />
-          <div
-            style={{
-              padding: '14px 18px',
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 12,
-            }}
-          >
+          <div className="scanner-results-grid">
             {filtered.length === 0 && (
               <div
                 style={{

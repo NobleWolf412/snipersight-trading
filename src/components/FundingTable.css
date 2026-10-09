@@ -1,0 +1,66 @@
+.funding-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.funding-table th,
+.funding-table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  vertical-align: top;
+}
+
+.funding-table th:first-child { padding-left: 0; }
+.funding-table td:last-child { padding-right: 0; }
+.funding-table th[scope='row'] { min-width: 145px; }
+.funding-table__label { display: none; }
+.funding-table__status {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #e7bd70;
+}
+.funding-table__missing { color: var(--fg-2, #bbb); }
+
+@media (max-width: 760px) {
+  .funding-table { display: block; }
+  .funding-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .funding-table tbody { display: grid; gap: 12px; }
+  .funding-table tbody tr {
+    display: block;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.025);
+  }
+  .funding-table th[scope='row'] {
+    display: block;
+    min-width: 0;
+    padding: 0 0 10px;
+    margin-bottom: 5px;
+  }
+  .funding-table td {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 7px 0;
+    border: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .funding-table td > :last-child { text-align: right; }
+  .funding-table__label { display: block; color: var(--fg-2, #bbb); }
+}

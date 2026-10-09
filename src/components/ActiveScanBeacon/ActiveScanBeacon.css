@@ -1,0 +1,35 @@
+.active-scan-beacon {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  pointer-events: auto;
+}
+
+.active-scan-beacon__button:focus-visible {
+  outline: 2px solid var(--accent, #00ff9d);
+  outline-offset: 5px;
+  border-radius: 20px;
+}
+
+@media (max-width: 760px) {
+  .active-scan-beacon {
+    inset: auto 0 0;
+    flex-direction: row-reverse;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    background: #10140f;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  .active-scan-beacon__button { min-height: 44px; justify-content: center; }
+  .active-scan-beacon__orb { display: none !important; }
+  .active-scan-beacon__pill { animation: none; }
+  body:has(.active-scan-beacon) .shell main {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+}

@@ -38,6 +38,15 @@ function scanner() {
   return { client, history, owner: new ScanRunService(client as any, history, () => storage) };
 }
 describe('application-owned scan workflow', () => {
+  it('saves chart source from the completed run and its request, preserving contract identity', async () => {
+    const w = scanner();
+    w.client.getScanRun.mockResolvedValue({ data: { run_id: 'r', status: 'completed', created_at: '2026-10-09T12:00:00Z', progress: 1, total: 1,
+      metadata: { exchange: 'bybit' }, signals: [{ symbol: '1000PEPEUSDT', original_symbol: '1000PEPE/USDT:USDT', direction: 'LONG', targets: [] }] } });
+    await w.owner.start(mode, { exchange: 'bybit', market_type: 'swap' }); await flush();
+    const [receipt] = w.history.getAllScans();
+    expect(receipt.exchange).toBe('bybit'); expect(receipt.marketType).toBe('swap');
+    expect(receipt.results[0].original_symbol).toBe('1000PEPE/USDT:USDT');
+  });
   it('does not carry a restored terminal run stop into a new run', async () => {
     const w = scanner();
     storage.setItem(activeKey, JSON.stringify({ runId: 'old', mode, acknowledged: true, cancelRequested: true }));
