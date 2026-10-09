@@ -1,3 +1,5 @@
+import { JournalFilterControls } from './JournalFilters';
+import type { JournalFilters } from '@/services/tradeJournalService';
 /**
  * TradeJournal — Phase 3b sub-step 1
  *
@@ -26,774 +28,25 @@
  * body[data-snapshot-ready="true"] is set after first successful load so
  * the visual capture framework knows when to capture.
  */
-import { useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  Chip,
-  FooterStatus,
-  PageHead,
-  Reticle,
-  SectionHead,
-  TradeHistoryDetailModal,
-  fmtMoney,
+Chip,
+FooterStatus,
+PageHead,
+Reticle,
+SectionHead,
+TradeHistoryDetailModal,
+fmtMoney,
 } from '@/components/hud';
 import {
-  tradeJournalService,
-  type JournalTrade,
-  type JournalAggregate,
-  type JournalFilters,
+tradeJournalService,
+type JournalAggregate,
+type JournalTrade
 } from '@/services/tradeJournalService';
-import { mlService, type MLStatus, type FeatureImportanceItem } from '@/services/mlService';
+import { useEffect,useMemo,useRef,useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { EXIT_REASON_LABELS,EquityCurve,GroupBreakdown,PnLCalendar,StatTile,fmt,fmtDate,type GroupRow } from './TradeJournalViews';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
-
-function fmt(n: number, decimals = 2) {
-  return n.toFixed(decimals);
-}
-
-function fmtDate(iso: string | null) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-const EXIT_REASON_LABELS: Record<string, string> = {
-  target: 'TARGET',
-  stop_loss: 'STOP',
-  stagnation: 'STALE',
-  manual: 'MANUAL',
-  max_hours: 'TIMEOUT',
-};
-
-// ─── StatTile ─────────────────────────────────────────────────────────────
-
-function StatTile({
-  label,
-  value,
-  sub,
-  color,
-  big,
-}: {
-  label: string;
-  value: ReactNode;
-  sub?: ReactNode;
-  color?: string;
-  big?: boolean;
-}) {
-  return (
-    <div className="metric-tile">
-      <div className="metric-label">{label}</div>
-      <div
-        className="metric-value"
-        style={{ color: color || 'var(--fg)', fontSize: big ? 22 : 16 }}
-      >
-        {value}
-      </div>
-      {sub && (
-        <div className="metric-sub" style={{ color: color || 'var(--fg-3)', opacity: 0.7 }}>
-          {sub}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── EquityCurve (equity + drawdown SVG) ──────────────────────────────────
-
-function EquityCurve({
-  equityCurve,
-  initial,
-}: {
-  equityCurve: { time: string; value: number }[];
-  initial: number;
-}) {
-  const W = 800;
-  const H = 180;
-  const padL = 4;
-  const padR = 10;
-  const padT = 10;
-  const padB = 20;
-
-  const { eqPts } = useMemo(() => {
-    let peak = initial;
-    const eqPts = equityCurve.map((p, i) => {
-      const y = initial + p.value;
-      peak = Math.max(peak, y);
-      return { x: i + 1, y, dd: y - peak };
-    });
-    eqPts.unshift({ x: 0, y: initial, dd: 0 });
-    return { eqPts };
-  }, [equityCurve, initial]);
-
-  if (eqPts.length < 2) return null;
-
-  const minY = Math.min(...eqPts.map(p => p.y));
-  const maxY = Math.max(...eqPts.map(p => p.y));
-  const yRng = maxY - minY || 1;
-  const last = eqPts[eqPts.length - 1];
-  const isUp = last.y >= initial;
-  const stroke = isUp ? 'var(--green-soft)' : 'var(--red-2)';
-
-  const xOf = (i: number) => padL + (i / (eqPts.length - 1)) * (W - padL - padR);
-  const yOf = (y: number) => padT + (1 - (y - minY) / yRng) * (H - padT - padB);
-
-  const line = eqPts
-    .map((p, i) => (i ? 'L' : 'M') + xOf(p.x).toFixed(1) + ' ' + yOf(p.y).toFixed(1))
-    .join(' ');
-  const area =
-    line + ` L ${xOf(eqPts.length - 1).toFixed(1)} ${H - padB} L ${padL} ${H - padB} Z`;
-
-  const minDD = Math.min(...eqPts.map(p => p.dd));
-  const ddH = 60;
-  const ddYof = (dd: number) => H + 8 + (-dd / Math.abs(minDD || 1)) * ddH;
-  const ddPath = eqPts
-    .map((p, i) => (i ? 'L' : 'M') + xOf(p.x).toFixed(1) + ' ' + ddYof(p.dd).toFixed(1))
-    .join(' ');
-  const ddArea = ddPath + ` L ${xOf(eqPts.length - 1).toFixed(1)} ${H + 8} L ${padL} ${H + 8} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H + 8 + ddH + 12}`} style={{ width: '100%', height: 'auto' }}>
-      <defs>
-        <linearGradient id="eqg-journal" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={stroke} stopOpacity=".25" />
-          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="ddg-journal" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--red-2)" stopOpacity=".05" />
-          <stop offset="100%" stopColor="var(--red-2)" stopOpacity=".25" />
-        </linearGradient>
-      </defs>
-      {[0, 0.25, 0.5, 0.75, 1].map(g => (
-        <line
-          key={g}
-          x1={padL}
-          x2={W - padR}
-          y1={padT + g * (H - padT - padB)}
-          y2={padT + g * (H - padT - padB)}
-          stroke="rgba(255,255,255,.05)"
-          strokeDasharray="2 3"
-        />
-      ))}
-      <path d={area} fill="url(#eqg-journal)" />
-      <path d={line} stroke={stroke} strokeWidth={1.6} fill="none" />
-      <text
-        x={padL + 4}
-        y={padT + 10}
-        fill="var(--fg-4)"
-        fontSize="9"
-        fontFamily="JetBrains Mono,monospace"
-        letterSpacing=".18em"
-      >
-        EQUITY
-      </text>
-      <text
-        x={W - padR}
-        y={padT + 10}
-        fill={stroke}
-        fontSize="11"
-        fontFamily="JetBrains Mono,monospace"
-        textAnchor="end"
-        fontWeight={700}
-      >
-        {fmtMoney(last.y)}
-      </text>
-      <path d={ddArea} fill="url(#ddg-journal)" />
-      <path d={ddPath} stroke="var(--red-2)" strokeWidth={1.2} fill="none" opacity={0.8} />
-      <text
-        x={padL + 4}
-        y={H + 18}
-        fill="var(--fg-4)"
-        fontSize="9"
-        fontFamily="JetBrains Mono,monospace"
-        letterSpacing=".18em"
-      >
-        DRAWDOWN
-      </text>
-      <text
-        x={W - padR}
-        y={H + 18}
-        fill="var(--red-2)"
-        fontSize="11"
-        fontFamily="JetBrains Mono,monospace"
-        textAnchor="end"
-        fontWeight={700}
-      >
-        {fmtMoney(minDD)}
-      </text>
-    </svg>
-  );
-}
-
-// ─── PnLCalendar ──────────────────────────────────────────────────────────
-
-function PnLCalendar({ trades }: { trades: JournalTrade[] }) {
-  const byDay = useMemo(() => {
-    const map: Record<string, number> = {};
-    trades.forEach(t => {
-      const day = (t.exit_time ?? t.entry_time).slice(0, 10);
-      map[day] = (map[day] ?? 0) + t.pnl;
-    });
-    return map;
-  }, [trades]);
-  const entries = Object.entries(byDay).sort();
-  if (entries.length === 0) {
-    return (
-      <div style={{ fontSize: 11, color: 'var(--fg-4)', fontFamily: 'JetBrains Mono,monospace' }}>
-        // no closed-trade days in window
-      </div>
-    );
-  }
-  const max = Math.max(...entries.map(([, v]) => Math.abs(v))) || 1;
-  return (
-    <div className="journal-calendar-grid">
-      {entries.map(([d, v]) => {
-        const intensity = Math.abs(v) / max;
-        const bg =
-          v >= 0
-            ? `rgba(34,197,94,${0.15 + 0.55 * intensity})`
-            : `rgba(248,113,113,${0.15 + 0.55 * intensity})`;
-        const bd = v >= 0 ? `rgba(34,197,94,.5)` : `rgba(248,113,113,.5)`;
-        return (
-          <div
-            key={d}
-            style={{
-              background: bg,
-              border: `1px solid ${bd}`,
-              borderRadius: 4,
-              padding: '8px 6px',
-              textAlign: 'center',
-            }}
-          >
-            <div
-              className="mono"
-              style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em' }}
-            >
-              {d.slice(5)}
-            </div>
-            <div
-              className="mono"
-              style={{
-                fontSize: 12,
-                fontWeight: 800,
-                color: v >= 0 ? 'var(--green-soft)' : 'var(--red-2)',
-                marginTop: 2,
-              }}
-            >
-              {v >= 0 ? '+' : ''}
-              {v.toFixed(0)}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── GroupBreakdown (per-symbol / per-type bars) ──────────────────────────
-
-type GroupRow = { label: string; trades: number; wins: number; pnl: number; win_rate: number };
-
-function GroupBreakdown({ rows }: { rows: GroupRow[] }) {
-  if (rows.length === 0) {
-    return (
-      <div style={{ fontSize: 11, color: 'var(--fg-4)', fontFamily: 'JetBrains Mono,monospace' }}>
-        // no data
-      </div>
-    );
-  }
-  const max = Math.max(...rows.map(r => Math.abs(r.pnl))) || 1;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {rows.map(g => {
-        const profit = g.pnl >= 0;
-        const w = (Math.abs(g.pnl) / max) * 100;
-        return (
-          <div
-            key={g.label}
-            style={{
-              padding: '10px 12px',
-              border: '1px solid var(--border-soft)',
-              borderRadius: 8,
-              background: 'rgba(0,0,0,.3)',
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: 0,
-                width: w + '%',
-                background: profit ? 'rgba(34,197,94,.05)' : 'rgba(248,113,113,.05)',
-                borderRight: `1px solid ${profit ? 'rgba(34,197,94,.3)' : 'rgba(248,113,113,.3)'}`,
-              }}
-            />
-            <div
-              style={{
-                position: 'relative',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 6,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: 'Share Tech Mono,monospace',
-                  fontSize: 13,
-                  letterSpacing: '.06em',
-                }}
-              >
-                {g.label}
-              </span>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: profit ? 'var(--green-soft)' : 'var(--red-2)',
-                }}
-              >
-                {(profit ? '+' : '') + fmtMoney(g.pnl)}
-              </span>
-            </div>
-            <div
-              style={{
-                position: 'relative',
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontSize: 10,
-                fontFamily: 'JetBrains Mono,monospace',
-                color: 'var(--fg-4)',
-                letterSpacing: '.14em',
-              }}
-            >
-              <span>{g.trades} TRADES</span>
-              <span
-                style={{
-                  color:
-                    g.win_rate >= 60
-                      ? 'var(--green-soft)'
-                      : g.win_rate >= 40
-                      ? 'var(--amber)'
-                      : 'var(--red-2)',
-                }}
-              >
-                WR {g.win_rate.toFixed(0)}%
-              </span>
-              <span>
-                {g.wins}W / {g.trades - g.wins}L
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── MLPanel ──────────────────────────────────────────────────────────────
-// Visual restyle only — train / reset / clear / SHAP behavior unchanged.
-
-function MLPanel() {
-  const [status, setStatus] = useState<MLStatus | null>(null);
-  const [importance, setImportance] = useState<FeatureImportanceItem[]>([]);
-  const [training, setTraining] = useState(false);
-  const [trainMsg, setTrainMsg] = useState<string | null>(null);
-  const [loadingStatus, setLoadingStatus] = useState(true);
-  const [clearing, setClearing] = useState(false);
-  const [clearConfirm, setClearConfirm] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [resetConfirm, setResetConfirm] = useState(false);
-
-  const fetchStatus = async () => {
-    try {
-      const s = await mlService.getStatus();
-      setStatus(s);
-      if (s.trained) {
-        const feats = await mlService.getFeatureImportance();
-        setImportance(feats.slice(0, 12));
-      }
-    } catch {
-      // backend may not be running yet
-    } finally {
-      setLoadingStatus(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchStatus();
-  }, []);
-
-  const handleResetModel = async () => {
-    if (!resetConfirm) {
-      setResetConfirm(true);
-      setTimeout(() => setResetConfirm(false), 4000);
-      return;
-    }
-    setResetConfirm(false);
-    setResetting(true);
-    setTrainMsg(null);
-    try {
-      const result = await mlService.resetModel();
-      setTrainMsg(result.message);
-      setImportance([]);
-      await fetchStatus();
-    } catch (e) {
-      setTrainMsg(e instanceof Error ? e.message : 'Reset failed');
-    } finally {
-      setResetting(false);
-    }
-  };
-
-  const handleClearLogs = async () => {
-    if (!clearConfirm) {
-      setClearConfirm(true);
-      setTimeout(() => setClearConfirm(false), 4000);
-      return;
-    }
-    setClearConfirm(false);
-    setClearing(true);
-    setTrainMsg(null);
-    try {
-      const result = await mlService.clearSessionLogs();
-      setTrainMsg(result.message);
-      await fetchStatus();
-    } catch (e) {
-      setTrainMsg(e instanceof Error ? e.message : 'Clear failed');
-    } finally {
-      setClearing(false);
-    }
-  };
-
-  const handleTrain = async () => {
-    setTraining(true);
-    setTrainMsg(null);
-    try {
-      const result = await mlService.train();
-      setTrainMsg(result.message);
-      await fetchStatus();
-    } catch (e) {
-      setTrainMsg(e instanceof Error ? e.message : 'Training failed');
-    } finally {
-      setTraining(false);
-    }
-  };
-
-  const accuracy = status?.accuracy ?? 0;
-  const accuracyColor =
-    accuracy >= 0.65 ? 'var(--green-soft)' : accuracy >= 0.55 ? 'var(--amber)' : 'var(--red-2)';
-
-  // SHAP bar dimensions
-  const maxImportance = importance.length ? Math.max(...importance.map(i => i.importance)) : 1;
-
-  return (
-    <section className="panel">
-      <SectionHead
-        title="Edge Model"
-        right={
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button
-              className="btn"
-              style={{
-                padding: '4px 10px',
-                fontSize: 10,
-                color: resetConfirm ? 'var(--red-2)' : undefined,
-                borderColor: resetConfirm ? 'rgba(248,113,113,.6)' : undefined,
-              }}
-              disabled={resetting || training || clearing}
-              onClick={handleResetModel}
-              title="Delete trained model — ML gate becomes inactive until retrained"
-            >
-              {resetting ? 'RESETTING…' : resetConfirm ? 'CONFIRM RESET?' : 'RESET MODEL'}
-            </button>
-            <button
-              className="btn"
-              style={{
-                padding: '4px 10px',
-                fontSize: 10,
-                color: clearConfirm ? 'var(--red-2)' : undefined,
-                borderColor: clearConfirm ? 'rgba(248,113,113,.6)' : undefined,
-              }}
-              disabled={clearing || training || resetting}
-              onClick={handleClearLogs}
-              title="Clear all session signal logs (trained model is preserved)"
-            >
-              {clearing ? 'CLEARING…' : clearConfirm ? 'CONFIRM CLEAR?' : 'CLEAR LOGS'}
-            </button>
-            <button
-              className="btn btn-cyan"
-              style={{ padding: '4px 10px', fontSize: 10 }}
-              disabled={training || clearing || resetting}
-              onClick={handleTrain}
-            >
-              {training ? 'TRAINING…' : 'TRAIN MODEL'}
-            </button>
-          </div>
-        }
-      />
-      <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {loadingStatus ? (
-          <div className="mono" style={{ fontSize: 11, color: 'var(--fg-4)' }}>
-            // loading model status…
-          </div>
-        ) : !status ? (
-          <div className="mono" style={{ fontSize: 11, color: 'var(--fg-4)' }}>
-            // backend not reachable
-          </div>
-        ) : (
-          <>
-            <div className="journal-breakdown-meta-grid">
-              <StatTile
-                label="Status"
-                value={status.trained ? 'TRAINED' : 'UNTRAINED'}
-                color={status.trained ? 'var(--green-soft)' : 'var(--fg-3)'}
-              />
-              <StatTile
-                label="Model"
-                value={status.model_type === 'none' ? '—' : status.model_type}
-              />
-              <StatTile
-                label="Samples"
-                value={String(status.n_samples)}
-                sub={`min ${status.min_samples_required}`}
-              />
-              <StatTile
-                label="CV Accuracy"
-                value={status.trained ? `${(accuracy * 100).toFixed(1)}%` : '—'}
-                sub={status.trained ? 'purged walk-fwd' : undefined}
-                color={accuracyColor}
-              />
-            </div>
-
-            {(status as { available_signals?: number }).available_signals != null && (
-              <div
-                style={{
-                  border: '1px solid var(--border-soft)',
-                  borderRadius: 6,
-                  padding: '8px 12px',
-                  background: 'rgba(0,0,0,.3)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontFamily: 'JetBrains Mono,monospace',
-                  fontSize: 11,
-                  color: 'var(--fg-3)',
-                }}
-              >
-                <span>Training data available</span>
-                <span
-                  style={{
-                    color:
-                      ((status as { available_signals?: number }).available_signals ?? 0) >= 10
-                        ? 'var(--green-soft)'
-                        : 'var(--amber)',
-                    fontWeight: 700,
-                  }}
-                >
-                  {(status as { available_signals?: number }).available_signals} signals ·{' '}
-                  {(status as { available_trades?: number }).available_trades ?? 0} trades
-                </span>
-              </div>
-            )}
-
-            {!status.trained &&
-              ((status as { available_signals?: number }).available_signals ?? 0) < 10 && (
-                <div
-                  style={{
-                    border: '1px solid rgba(245,158,11,.3)',
-                    borderRadius: 6,
-                    padding: '8px 12px',
-                    background: 'rgba(245,158,11,.05)',
-                    fontSize: 11,
-                    fontFamily: 'JetBrains Mono,monospace',
-                    color: 'var(--amber)',
-                  }}
-                >
-                  Let the bot run a bit longer — need at least 10 signals to train. Currently have{' '}
-                  {(status as { available_signals?: number }).available_signals ?? 0}.
-                </div>
-              )}
-            {status.trained && accuracy < 0.55 && (
-              <div
-                style={{
-                  border: '1px solid rgba(248,113,113,.3)',
-                  borderRadius: 6,
-                  padding: '8px 12px',
-                  background: 'rgba(248,113,113,.05)',
-                  fontSize: 11,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  color: 'var(--red-2)',
-                }}
-              >
-                Accuracy below 55% — gather more diverse trades before relying on predictions.
-              </div>
-            )}
-            {status.trained && accuracy >= 0.65 && (
-              <div
-                style={{
-                  border: '1px solid rgba(34,197,94,.3)',
-                  borderRadius: 6,
-                  padding: '8px 12px',
-                  background: 'rgba(34,197,94,.05)',
-                  fontSize: 11,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  color: 'var(--green-soft)',
-                }}
-              >
-                Model looks solid. Green bars = conditions that help your win rate. Red = conditions
-                that hurt it.
-              </div>
-            )}
-            {status.trained && accuracy >= 0.55 && accuracy < 0.65 && (
-              <div
-                style={{
-                  border: '1px solid rgba(245,158,11,.3)',
-                  borderRadius: 6,
-                  padding: '8px 12px',
-                  background: 'rgba(245,158,11,.05)',
-                  fontSize: 11,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  color: 'var(--amber)',
-                }}
-              >
-                Moderate accuracy — more trades will sharpen the model. Use feature directions as
-                guidance only.
-              </div>
-            )}
-
-            {trainMsg && (
-              <div
-                style={{
-                  border: '1px solid var(--border-soft)',
-                  borderRadius: 6,
-                  padding: '8px 12px',
-                  background: 'rgba(0,0,0,.3)',
-                  fontSize: 11,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  fontWeight: 700,
-                  color: trainMsg.toLowerCase().includes('success') || trainMsg.toLowerCase().includes('trained')
-                    ? 'var(--green-soft)'
-                    : trainMsg.toLowerCase().includes('no training') || trainMsg.toLowerCase().includes('need')
-                    ? 'var(--amber)'
-                    : 'var(--red-2)',
-                }}
-              >
-                {trainMsg}
-              </div>
-            )}
-
-            {importance.length > 0 && (
-              <div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 8,
-                  }}
-                >
-                  <div
-                    className="mono"
-                    style={{
-                      fontSize: 9,
-                      color: 'var(--fg-4)',
-                      letterSpacing: '.18em',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    // SHAP feature importance
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      fontSize: 9,
-                      fontFamily: 'JetBrains Mono,monospace',
-                      color: 'var(--fg-4)',
-                    }}
-                  >
-                    <span>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          width: 8,
-                          height: 8,
-                          background: 'var(--green-soft)',
-                          marginRight: 4,
-                        }}
-                      />
-                      helps win rate
-                    </span>
-                    <span>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          width: 8,
-                          height: 8,
-                          background: 'var(--red-2)',
-                          marginRight: 4,
-                        }}
-                      />
-                      hurts win rate
-                    </span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {importance.map(item => {
-                    const w = (item.importance / maxImportance) * 100;
-                    const c = item.direction >= 0 ? 'var(--green-soft)' : 'var(--red-2)';
-                    return (
-                      <div
-                        key={item.name}
-                        className="journal-breakdown-row"
-                        style={{
-                          fontFamily: 'JetBrains Mono,monospace',
-                          fontSize: 10,
-                        }}
-                      >
-                        <span style={{ color: 'var(--fg-2)', textAlign: 'right' }}>
-                          {item.name}
-                        </span>
-                        <div
-                          style={{
-                            position: 'relative',
-                            height: 14,
-                            background: 'rgba(0,0,0,.3)',
-                            border: '1px solid var(--border-soft)',
-                            borderRadius: 2,
-                          }}
-                        >
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: 0,
-                              bottom: 0,
-                              left: 0,
-                              width: w + '%',
-                              background: c,
-                              opacity: 0.7,
-                              borderRadius: '0 2px 2px 0',
-                            }}
-                          />
-                        </div>
-                        <span style={{ color: c, fontWeight: 700, textAlign: 'right' }}>
-                          {item.importance.toFixed(3)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </section>
-  );
-}
 
 // ─── Main page ────────────────────────────────────────────────────────────
 
@@ -993,23 +246,6 @@ export function TradeJournal() {
         }
       />
 
-      {/* Tab nav */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
-        <button
-          className="btn"
-          style={{ padding: '6px 14px', fontSize: 10 }}
-          onClick={() => navigate('/training')}
-        >
-          TRAINING GROUND
-        </button>
-        <span
-          className="btn btn-cyan"
-          style={{ padding: '6px 14px', fontSize: 10, cursor: 'default' }}
-        >
-          JOURNAL &amp; ML
-        </span>
-      </div>
-
       {error && (
         <div
           style={{
@@ -1026,6 +262,251 @@ export function TradeJournal() {
           {error}
         </div>
       )}
+
+      {/* Two-column layout: trade log + breakdowns */}
+      <div className="layout-grid">
+        {/* Left col: trade log + calendar */}
+        <div className="col">
+          <section className="panel">
+            <SectionHead
+              title={
+                <>
+                  Trade Log <span style={{ color: 'var(--accent)' }}>{sorted.length}</span>
+                </>
+              }
+              right={
+                <Chip kind="accent">
+                  SORT · {sortKey.toUpperCase()} {sortDir === 'desc' ? '↓' : '↑'}
+                </Chip>
+              }
+            />
+            <JournalFilterControls symbolInput={symbolInput} typeFilter={typeFilter} exitFilter={exitFilter} startDate={startDate} endDate={endDate} setSymbolInput={setSymbolInput} setTypeFilter={setTypeFilter} setExitFilter={setExitFilter} setStartDate={setStartDate} setEndDate={setEndDate} applyFilters={applyFilters} resetFilters={resetFilters} />
+            <label className="journal-sort-control">Sort this page <select value={sortKey} onChange={e=>setSortKey(e.target.value as SortKey)}>{(['exit_time','symbol','pnl','trade_type','exit_reason'] as const).map(key=><option key={key} value={key}>{key.replace('_',' ')}</option>)}</select></label><button className="btn" onClick={()=>setSortDir(value=>value==='asc'?'desc':'asc')}>Order: {sortDir==='asc'?'ascending':'descending'}</button>
+            <div className="journal-pagination">
+              <button className="btn" disabled={loading || !(filters.offset ?? 0)} onClick={() => {
+                const f = { ...filters, offset: Math.max(0, (filters.offset ?? 0) - 200) }; setFilters(f); void load(f);
+              }}>Previous</button>
+              <span>{total ? (filters.offset ?? 0) + 1 : 0}–{Math.min((filters.offset ?? 0) + trades.length, total)} of {total} matching trades · sorting and calendar cover this page</span>
+              <button className="btn" disabled={loading || (filters.offset ?? 0) + trades.length >= total} onClick={() => {
+                const f = { ...filters, offset: (filters.offset ?? 0) + 200 }; setFilters(f); void load(f);
+              }}>Next</button>
+              <button className="btn" disabled={loading} onClick={() => void load(filters)}>Refresh</button>
+            </div>
+            <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+              <div
+                className="journal-trade-header"
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  background: 'var(--card)',
+                  zIndex: 1,
+                  borderBottom: '1px solid var(--border-soft)',
+                }}
+              >
+                <button type="button" className="journal-sort" onClick={() => toggleSort('exit_time')}
+                  style={{
+                    cursor: 'pointer',
+                    color: sortKey === 'exit_time' ? 'var(--accent)' : 'var(--fg-4)',
+                  }}
+                >
+                  TIME
+                  {sortKey === 'exit_time' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                </button>
+                <button type="button" className="journal-sort" onClick={() => toggleSort('symbol')}
+                  style={{
+                    cursor: 'pointer',
+                    color: sortKey === 'symbol' ? 'var(--accent)' : 'var(--fg-4)',
+                  }}
+                >
+                  SYMBOL
+                  {sortKey === 'symbol' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                </button>
+                <span>DIR</span>
+                <button type="button" className="journal-sort" onClick={() => toggleSort('trade_type')}
+                  style={{
+                    cursor: 'pointer',
+                    color: sortKey === 'trade_type' ? 'var(--accent)' : 'var(--fg-4)',
+                  }}
+                >
+                  TYPE
+                  {sortKey === 'trade_type' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                </button>
+                <button type="button" className="journal-sort" onClick={() => toggleSort('pnl')}
+                  style={{
+                    cursor: 'pointer',
+                    color: sortKey === 'pnl' ? 'var(--accent)' : 'var(--fg-4)',
+                  }}
+                >
+                  P&amp;L
+                  {sortKey === 'pnl' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                </button>
+                <span>MFE</span>
+                <span>MAE</span>
+                <button type="button" className="journal-sort" onClick={() => toggleSort('exit_reason')}
+                  style={{
+                    cursor: 'pointer',
+                    color: sortKey === 'exit_reason' ? 'var(--accent)' : 'var(--fg-4)',
+                    textAlign: 'right',
+                  }}
+                >
+                  EXIT
+                  {sortKey === 'exit_reason' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                </button>
+              </div>
+              {loading ? (
+                <div
+                  style={{
+                    padding: '36px 18px',
+                    textAlign: 'center',
+                    color: 'var(--fg-4)',
+                    fontSize: 11,
+                    fontFamily: 'JetBrains Mono,monospace',
+                  }}
+                >
+                  // loading journal…
+                </div>
+              ) : sorted.length === 0 ? (
+                <div
+                  style={{
+                    padding: '36px 18px',
+                    textAlign: 'center',
+                    color: 'var(--fg-4)',
+                    fontSize: 11,
+                    fontFamily: 'JetBrains Mono,monospace',
+                  }}
+                >
+                  {/* 3b.2: empty-state copy differs from the catch-branch
+                      banner above. Here the fetch succeeded but there
+                      are zero closed trades to show — operator needs
+                      to be told what's missing AND how to generate
+                      data (run paper bot or live bot to closure). */}
+                  {total === 0 ? (
+                    <>// no closed trades yet · run the paper bot to start logging</>
+                  ) : (
+                    <>// no trades match the current filters · clear or relax filter set</>
+                  )}
+                </div>
+              ) : (
+                sorted.map(tr => {
+                  const profit = tr.pnl >= 0;
+                  return (
+                    <div
+                      key={tr.trade_id}
+                      className="journal-trade-row"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedTrade(tr)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedTrade(tr);
+                        }
+                      }}
+                      aria-label={`Inspect ${tr.symbol} ${tr.direction} ${tr.trade_type} trade, net P&L ${fmtMoney(tr.pnl)}, exit ${tr.exit_reason}`}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <span data-label="Time" style={{ color: 'var(--fg-3)' }}>{fmtDate(tr.exit_time)}</span>
+                      <span data-label="Symbol"
+                        style={{
+                          color: 'var(--fg)',
+                          fontWeight: 600,
+                          letterSpacing: '.04em',
+                        }}
+                      >
+                        {tr.symbol}
+                      </span>
+                      <span data-label="Direction"
+                        style={{
+                          color:
+                            tr.direction === 'LONG' ? 'var(--green-soft)' : 'var(--red-2)',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {tr.direction === 'LONG' ? '▲L' : '▼S'}
+                      </span>
+                      <span data-label="Trade type" style={{ color: 'var(--fg-2)', fontSize: 10 }}>
+                        {tr.trade_type.toUpperCase()}
+                      </span>
+                      <span data-label="Net P&L"
+                        style={{
+                          color: profit ? 'var(--green-soft)' : 'var(--red-2)',
+                          fontWeight: 800,
+                        }}
+                      >
+                        {(profit ? '+' : '') + fmtMoney(tr.pnl)}
+                        <span
+                          style={{
+                            fontSize: 9,
+                            opacity: 0.6,
+                            marginLeft: 4,
+                            fontWeight: 500,
+                          }}
+                        >
+                          ({fmt(tr.pnl_pct, 2)}%)
+                        </span>
+                      </span>
+                      <span data-label="MFE" style={{ color: 'var(--green-soft)' }}>
+                        +{fmt(tr.max_favorable, 1)}
+                      </span>
+                      <span data-label="MAE" style={{ color: 'var(--red-2)' }}>
+                        -{fmt(tr.max_adverse, 1)}
+                      </span>
+                      <span data-label="Exit"
+                        style={{
+                          color: 'var(--fg-4)',
+                          fontSize: 9,
+                          textAlign: 'right',
+                          letterSpacing: '.1em',
+                        }}
+                      >
+                        {EXIT_REASON_LABELS[tr.exit_reason] ?? tr.exit_reason.toUpperCase()}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          <section className="panel">
+            <SectionHead title="P&L Calendar" right={<Chip>DAILY</Chip>} />
+            <div style={{ padding: '14px 18px' }}>
+              <PnLCalendar trades={trades} />
+            </div>
+          </section>
+        </div>
+
+        {/* Right col: breakdowns + ML */}
+        <div className="col">
+          <section className="panel">
+            <SectionHead
+              title={`Per-${groupBy === 'symbol' ? 'Symbol' : 'Type'} Breakdown`}
+              right={
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className={`btn ${groupBy === 'symbol' ? 'btn-cyan' : ''}`}
+                    style={{ padding: '4px 10px', fontSize: 10 }}
+                    onClick={() => setGroupBy('symbol')}
+                  >
+                    SYMBOL
+                  </button>
+                  <button
+                    className={`btn ${groupBy === 'type' ? 'btn-cyan' : ''}`}
+                    style={{ padding: '4px 10px', fontSize: 10 }}
+                    onClick={() => setGroupBy('type')}
+                  >
+                    TYPE
+                  </button>
+                </div>
+              }
+            />
+            <div style={{ padding: '14px 18px' }}>
+              <GroupBreakdown rows={groupBy === 'symbol' ? symbolRows : typeRows} />
+            </div>
+          </section>
+
+        </div>
+      </div>
 
       {/* Stats command center */}
       {aggregate && (
@@ -1132,355 +613,6 @@ export function TradeJournal() {
           </div>
         </section>
       )}
-
-      {/* Two-column layout: trade log + breakdowns */}
-      <div className="layout-grid">
-        {/* Left col: trade log + calendar */}
-        <div className="col">
-          <section className="panel">
-            <SectionHead
-              title={
-                <>
-                  Trade Log <span style={{ color: 'var(--accent)' }}>{sorted.length}</span>
-                </>
-              }
-              right={
-                <Chip kind="accent">
-                  SORT · {sortKey.toUpperCase()} {sortDir === 'desc' ? '↓' : '↑'}
-                </Chip>
-              }
-            />
-            <div className="journal-filter-row">
-              <input
-                style={{
-                  background: 'rgba(0,0,0,.4)',
-                  border: '1px solid var(--border-soft)',
-                  color: 'var(--fg)',
-                  padding: '6px 10px',
-                  borderRadius: 4,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  fontSize: 10,
-                }}
-                aria-label="Symbol"
-                placeholder="// SYMBOL"
-                value={symbolInput}
-                onChange={e => setSymbolInput(e.target.value.toUpperCase())}
-              />
-              <select
-                style={{
-                  background: 'rgba(0,0,0,.4)',
-                  border: '1px solid var(--border-soft)',
-                  color: 'var(--fg)',
-                  padding: '6px 10px',
-                  borderRadius: 4,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  fontSize: 10,
-                }}
-                aria-label="Trade type"
-                value={typeFilter}
-                onChange={e => setTypeFilter(e.target.value)}
-              >
-                <option value="">// ALL TYPES</option>
-                <option value="scalp">SCALP</option>
-                <option value="intraday">INTRADAY</option>
-                <option value="swing">SWING</option>
-              </select>
-              <select
-                style={{
-                  background: 'rgba(0,0,0,.4)',
-                  border: '1px solid var(--border-soft)',
-                  color: 'var(--fg)',
-                  padding: '6px 10px',
-                  borderRadius: 4,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  fontSize: 10,
-                }}
-                aria-label="Exit reason"
-                value={exitFilter}
-                onChange={e => setExitFilter(e.target.value)}
-              >
-                <option value="">// ALL EXITS</option>
-                <option value="target">TARGET</option>
-                <option value="stop_loss">STOP</option>
-                <option value="stagnation">STALE</option>
-                <option value="manual">MANUAL</option>
-              </select>
-              <input
-                type="date"
-                style={{
-                  background: 'rgba(0,0,0,.4)',
-                  border: '1px solid var(--border-soft)',
-                  color: 'var(--fg)',
-                  padding: '6px 10px',
-                  borderRadius: 4,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  fontSize: 10,
-                }}
-                aria-label="From date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-              />
-              <input
-                type="date"
-                style={{
-                  background: 'rgba(0,0,0,.4)',
-                  border: '1px solid var(--border-soft)',
-                  color: 'var(--fg)',
-                  padding: '6px 10px',
-                  borderRadius: 4,
-                  fontFamily: 'JetBrains Mono,monospace',
-                  fontSize: 10,
-                }}
-                aria-label="To date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-              />
-              <button
-                className="btn btn-cyan"
-                style={{ padding: '6px 10px', fontSize: 10 }}
-                onClick={applyFilters}
-              >
-                APPLY
-              </button>
-              <button
-                className="btn"
-                style={{ padding: '6px 10px', fontSize: 10 }}
-                onClick={resetFilters}
-              >
-                RESET
-              </button>
-            </div>
-            <div className="journal-pagination">
-              <button className="btn" disabled={loading || !(filters.offset ?? 0)} onClick={() => {
-                const f = { ...filters, offset: Math.max(0, (filters.offset ?? 0) - 200) }; setFilters(f); void load(f);
-              }}>Previous</button>
-              <span>{total ? (filters.offset ?? 0) + 1 : 0}–{Math.min((filters.offset ?? 0) + trades.length, total)} of {total} matching trades · sorting and calendar cover this page</span>
-              <button className="btn" disabled={loading || (filters.offset ?? 0) + trades.length >= total} onClick={() => {
-                const f = { ...filters, offset: (filters.offset ?? 0) + 200 }; setFilters(f); void load(f);
-              }}>Next</button>
-              <button className="btn" disabled={loading} onClick={() => void load(filters)}>Refresh</button>
-            </div>
-            <div style={{ maxHeight: 520, overflowY: 'auto' }}>
-              <div
-                className="journal-trade-header"
-                style={{
-                  position: 'sticky',
-                  top: 0,
-                  background: 'var(--card)',
-                  zIndex: 1,
-                  borderBottom: '1px solid var(--border-soft)',
-                }}
-              >
-                <span
-                  onClick={() => toggleSort('exit_time')}
-                  style={{
-                    cursor: 'pointer',
-                    color: sortKey === 'exit_time' ? 'var(--accent)' : 'var(--fg-4)',
-                  }}
-                >
-                  TIME
-                  {sortKey === 'exit_time' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-                </span>
-                <span
-                  onClick={() => toggleSort('symbol')}
-                  style={{
-                    cursor: 'pointer',
-                    color: sortKey === 'symbol' ? 'var(--accent)' : 'var(--fg-4)',
-                  }}
-                >
-                  SYMBOL
-                  {sortKey === 'symbol' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-                </span>
-                <span>DIR</span>
-                <span
-                  onClick={() => toggleSort('trade_type')}
-                  style={{
-                    cursor: 'pointer',
-                    color: sortKey === 'trade_type' ? 'var(--accent)' : 'var(--fg-4)',
-                  }}
-                >
-                  TYPE
-                  {sortKey === 'trade_type' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-                </span>
-                <span
-                  onClick={() => toggleSort('pnl')}
-                  style={{
-                    cursor: 'pointer',
-                    color: sortKey === 'pnl' ? 'var(--accent)' : 'var(--fg-4)',
-                  }}
-                >
-                  P&amp;L
-                  {sortKey === 'pnl' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-                </span>
-                <span>MFE</span>
-                <span>MAE</span>
-                <span
-                  onClick={() => toggleSort('exit_reason')}
-                  style={{
-                    cursor: 'pointer',
-                    color: sortKey === 'exit_reason' ? 'var(--accent)' : 'var(--fg-4)',
-                    textAlign: 'right',
-                  }}
-                >
-                  EXIT
-                  {sortKey === 'exit_reason' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-                </span>
-              </div>
-              {loading ? (
-                <div
-                  style={{
-                    padding: '36px 18px',
-                    textAlign: 'center',
-                    color: 'var(--fg-4)',
-                    fontSize: 11,
-                    fontFamily: 'JetBrains Mono,monospace',
-                  }}
-                >
-                  // loading journal…
-                </div>
-              ) : sorted.length === 0 ? (
-                <div
-                  style={{
-                    padding: '36px 18px',
-                    textAlign: 'center',
-                    color: 'var(--fg-4)',
-                    fontSize: 11,
-                    fontFamily: 'JetBrains Mono,monospace',
-                  }}
-                >
-                  {/* 3b.2: empty-state copy differs from the catch-branch
-                      banner above. Here the fetch succeeded but there
-                      are zero closed trades to show — operator needs
-                      to be told what's missing AND how to generate
-                      data (run paper bot or live bot to closure). */}
-                  {total === 0 ? (
-                    <>// no closed trades yet · run the paper bot to start logging</>
-                  ) : (
-                    <>// no trades match the current filters · clear or relax filter set</>
-                  )}
-                </div>
-              ) : (
-                sorted.map(tr => {
-                  const profit = tr.pnl >= 0;
-                  return (
-                    <div
-                      key={tr.trade_id}
-                      className="journal-trade-row"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedTrade(tr)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setSelectedTrade(tr);
-                        }
-                      }}
-                      aria-label={`Open chart for ${tr.symbol} ${tr.direction} ${tr.trade_type} trade`}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <span style={{ color: 'var(--fg-3)' }}>{fmtDate(tr.exit_time)}</span>
-                      <span
-                        style={{
-                          color: 'var(--fg)',
-                          fontWeight: 600,
-                          letterSpacing: '.04em',
-                        }}
-                      >
-                        {tr.symbol}
-                      </span>
-                      <span
-                        style={{
-                          color:
-                            tr.direction === 'LONG' ? 'var(--green-soft)' : 'var(--red-2)',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {tr.direction === 'LONG' ? '▲L' : '▼S'}
-                      </span>
-                      <span style={{ color: 'var(--fg-2)', fontSize: 10 }}>
-                        {tr.trade_type.toUpperCase()}
-                      </span>
-                      <span
-                        style={{
-                          color: profit ? 'var(--green-soft)' : 'var(--red-2)',
-                          fontWeight: 800,
-                        }}
-                      >
-                        {(profit ? '+' : '') + fmtMoney(tr.pnl)}
-                        <span
-                          style={{
-                            fontSize: 9,
-                            opacity: 0.6,
-                            marginLeft: 4,
-                            fontWeight: 500,
-                          }}
-                        >
-                          ({fmt(tr.pnl_pct, 2)}%)
-                        </span>
-                      </span>
-                      <span style={{ color: 'var(--green-soft)' }}>
-                        +{fmt(tr.max_favorable, 1)}
-                      </span>
-                      <span style={{ color: 'var(--red-2)' }}>
-                        -{fmt(tr.max_adverse, 1)}
-                      </span>
-                      <span
-                        style={{
-                          color: 'var(--fg-4)',
-                          fontSize: 9,
-                          textAlign: 'right',
-                          letterSpacing: '.1em',
-                        }}
-                      >
-                        {EXIT_REASON_LABELS[tr.exit_reason] ?? tr.exit_reason.toUpperCase()}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
-          <section className="panel">
-            <SectionHead title="P&L Calendar" right={<Chip>DAILY</Chip>} />
-            <div style={{ padding: '14px 18px' }}>
-              <PnLCalendar trades={trades} />
-            </div>
-          </section>
-        </div>
-
-        {/* Right col: breakdowns + ML */}
-        <div className="col">
-          <section className="panel">
-            <SectionHead
-              title={`Per-${groupBy === 'symbol' ? 'Symbol' : 'Type'} Breakdown`}
-              right={
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    className={`btn ${groupBy === 'symbol' ? 'btn-cyan' : ''}`}
-                    style={{ padding: '4px 10px', fontSize: 10 }}
-                    onClick={() => setGroupBy('symbol')}
-                  >
-                    SYMBOL
-                  </button>
-                  <button
-                    className={`btn ${groupBy === 'type' ? 'btn-cyan' : ''}`}
-                    style={{ padding: '4px 10px', fontSize: 10 }}
-                    onClick={() => setGroupBy('type')}
-                  >
-                    TYPE
-                  </button>
-                </div>
-              }
-            />
-            <div style={{ padding: '14px 18px' }}>
-              <GroupBreakdown rows={groupBy === 'symbol' ? symbolRows : typeRows} />
-            </div>
-          </section>
-
-          <MLPanel />
-        </div>
-      </div>
 
       <FooterStatus />
 

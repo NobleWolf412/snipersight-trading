@@ -89,7 +89,7 @@ Status: **implemented** = working end to end; **partial** = works with known gap
 | `/bot/setup` | Review risk and start a live or testnet session | Implemented; hard-gated live copy |
 | `/bot/status` | Monitor and control the running session | Implemented |
 | `/training/range` | Configure and run a paper session | Implemented |
-| `/journal` | Review completed execution records; filter and export | Implemented; ML research controls still embedded |
+| `/journal` | Review completed execution records; filter and export | Implemented; research controls live in /training/drills |
 | `/intel` | Market context: regime, mode advice, sessions, funding | Implemented; some fields can be unavailable |
 | `/training` | Hub for learning and research tools | Implemented |
 | `/training/replay` | Step through historical candles with causal evidence | Implemented |
