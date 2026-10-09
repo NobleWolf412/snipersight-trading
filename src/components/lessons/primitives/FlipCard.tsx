@@ -47,7 +47,6 @@ export function FlipCard({
         perspective: 1200,
         cursor: 'pointer',
         height,
-        outline: 'none',
       }}
     >
       <div
@@ -60,10 +59,10 @@ export function FlipCard({
           transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
         }}
       >
-        <FlipFace accent={frontAccent} hintLabel="TAP TO FLIP →">
+        <FlipFace active={!flipped} accent={frontAccent} hintLabel="Flip to reveal the answer">
           {front}
         </FlipFace>
-        <FlipFace accent={backAccent} hintLabel="← TAP TO FLIP BACK" back>
+        <FlipFace active={flipped} accent={backAccent} hintLabel="Flip to show the question" back>
           {back}
         </FlipFace>
       </div>
@@ -72,15 +71,18 @@ export function FlipCard({
 }
 
 interface FlipFaceProps {
+  active: boolean;
   accent: string;
   hintLabel: string;
   back?: boolean;
   children: ReactNode;
 }
 
-function FlipFace({ accent, hintLabel, back, children }: FlipFaceProps) {
+function FlipFace({ active, accent, hintLabel, back, children }: FlipFaceProps) {
   return (
     <div
+      aria-hidden={!active}
+      inert={!active}
       style={{
         position: 'absolute',
         inset: 0,

@@ -370,23 +370,25 @@ export function TradeHistoryRow({ trade }: {
     const fmtP = (p: number) => p < 1 ? p.toFixed(4) : p.toFixed(2);
     return (<div style={{ borderBottom: '1px solid var(--border-soft)', background: open ? 'rgba(0,0,0,.15)' : 'transparent', transition: 'background .15s' }}>
       {/* Collapsed summary row */}
-      <div onClick={() => setOpen((s) => !s)} style={{ display: 'grid', gridTemplateColumns: '90px 64px 1fr 1fr auto', gap: 10, padding: '10px 12px', cursor: 'pointer', alignItems: 'center' }} title="Click to expand autopsy">
+      <button type="button" className="paper-trade-summary" aria-expanded={open}
+        aria-label={`Inspect ${trade.symbol} completed ${trade.direction} trade`}
+        onClick={() => setOpen((s) => !s)} style={{ width: '100%', border: 0, background: 'transparent', color: 'var(--fg)', font: 'inherit', display: 'grid', gridTemplateColumns: '90px 64px 1fr 1fr auto', gap: 10, padding: '10px 12px', cursor: 'pointer', alignItems: 'center', textAlign: 'left' }}>
         <span className="mono" style={{ fontWeight: 700 }}>{trade.symbol}</span>
         <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)' }}>
             {fmtP(trade.entry_price)}<span style={{ color: 'var(--fg-4)' }}> → </span>{fmtP(trade.exit_price)}
           </span>
           {trade.trade_type && (<span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em' }}>{trade.trade_type.toUpperCase()}</span>)}
-        </div>
+        </span>
         <span className="mono" style={{ fontWeight: 700, color: isWin ? 'var(--green)' : 'var(--red)' }}>
           {isWin ? '+' : ''}{fmtCurrency(trade.pnl)} ({fmtPct(trade.pnl_pct, true)})
         </span>
         <ExitBadge reason={trade.exit_reason}/>
-      </div>
+      </button>
 
       {/* Expanded autopsy panel */}
-      {open && (<div style={{ padding: '12px 14px 14px', borderTop: '1px solid var(--border-soft)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+      {open && (<div className="paper-trade-autopsy" style={{ padding: '12px 14px 14px', borderTop: '1px solid var(--border-soft)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
           <div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 8, textTransform: 'uppercase' }}>
               excursion analysis

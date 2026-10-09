@@ -2,9 +2,8 @@
    SniperSight HUD — index.css
    Phase 7 sub-step 5: Tailwind ejected. The `@import "tailwindcss"`
    directive and the `@theme` block (Tailwind v4 utility-generation
-   surface) have been removed. All `:root` design tokens are retained
-   verbatim so any code reading `var(--background)`, `var(--accent)`,
-   `var(--destructive)`, etc. continues to resolve. The shadcn primitive
+   surface) have been removed. Palette tokens and compatibility aliases
+   now live in styles/tokens.css. The shadcn primitive
    set was archived in Phase 6 sub-step 4b — nothing alive consumes
    Tailwind utility classes any more (verified by audit at sub-step 1
    and re-verified at sub-step 5).
@@ -13,8 +12,8 @@
 /* Fonts: prototype uses Share Tech Mono + VT323 + JetBrains Mono + Inter */
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
-/* HUD theme: classes loaded here; token override re-applied at END
-   of file to win cascade against the legacy :root block below. */
+/* Canonical palette first, then shared HUD component rules. Product-specific
+   responsive and focus rules load through main.css. */
 @import "./styles/tokens.css";
 @import "./styles/hud.css";
 

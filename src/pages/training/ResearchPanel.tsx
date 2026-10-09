@@ -100,7 +100,7 @@ export function MLPanel() {
                 fontSize: 10,
                 color: resetConfirm ? 'var(--red-2)' : undefined,
                 borderColor: resetConfirm ? 'rgba(248,113,113,.6)' : undefined,
-            }} disabled={resetting || training || clearing} onClick={handleResetModel} title="Delete trained model — ML gate becomes inactive until retrained">
+            }} disabled={resetting || training || clearing} onClick={handleResetModel} title="Delete trained model. The model is unavailable until retrained.">
               {resetting ? 'RESETTING…' : resetConfirm ? 'CONFIRM RESET?' : 'RESET MODEL'}
             </button>
             <button className="btn" style={{

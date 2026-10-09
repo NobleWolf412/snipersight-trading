@@ -437,7 +437,6 @@ export function TradeJournal() {
                         <span
                           style={{
                             fontSize: 9,
-                            opacity: 0.6,
                             marginLeft: 4,
                             fontWeight: 500,
                           }}

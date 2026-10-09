@@ -170,6 +170,7 @@ export function PositionRow({ position, onClick, }: {
             display: 'grid',
             gridTemplateColumns: OPEN_POS_COLS,
             gap: 10,
+            minHeight: 44,
             padding: '10px 12px',
             borderTop: '1px solid var(--border-soft)',
             alignItems: 'center',

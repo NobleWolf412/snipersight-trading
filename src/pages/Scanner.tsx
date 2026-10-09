@@ -1,6 +1,6 @@
 import { ScannerInputs } from '@/components/hud/ScannerInputs';
 /** Manual scanner: application-owned runs, recorded history and explicit evidence.
- * Chart review overlays saved plan levels on source-specific candles; radar is decorative.
+ * Chart review overlays saved plan levels on source-specific candles.
  * The selected history receipt owns result counts, timestamps and setup summaries.
  */
 import {
@@ -348,6 +348,7 @@ function FilterRail({
             return (
               <button
                 key={d}
+                aria-pressed={active}
                 className={`btn ${cls}`}
                 style={{ padding: '6px 10px', fontSize: 10, flex: 1 }}
                 onClick={() => upd('dir', d)}
@@ -383,21 +384,21 @@ function FilterRail({
             return (
               <button
                 key={tf}
+                aria-pressed={active}
                 className={`btn ${active ? 'btn-cyan' : ''}`}
                 style={{
                   padding: '6px 10px',
                   fontSize: 10,
-                  opacity: inMode ? 1 : 0.4,
-                  cursor: inMode ? 'pointer' : 'help',
+                  cursor: 'pointer',
                 }}
                 title={
                   inMode
                     ? undefined
-                    : `not scanned by current mode — no signals will ever appear at ${tf}`
+                    : `Not scanned by this mode. No matching signals appear at ${tf}.`
                 }
                 onClick={() => toggle('tfs', tf)}
               >
-                {tf}
+                {tf}{!inMode && <span style={{ fontSize: 9, letterSpacing: 0 }}>Outside mode</span>}
               </button>
             );
           })}
@@ -422,8 +423,9 @@ function FilterRail({
             return (
               <button
                 key={s}
+                aria-pressed={active}
                 className={`btn ${active ? 'btn-cyan' : ''}`}
-                style={{ padding: '5px 9px', fontSize: 9 }}
+                style={{ padding: '5px 9px', fontSize: 9, minWidth: 44 }}
                 onClick={() => toggle('setups', s)}
               >
                 {s}
@@ -452,6 +454,7 @@ function FilterRail({
             return (
               <button
                 key={r}
+                aria-pressed={active}
                 className={`btn ${active ? kind : ''}`}
                 style={{ padding: '6px 10px', fontSize: 10, flex: 1 }}
                 onClick={() => toggle('regimes', r)}

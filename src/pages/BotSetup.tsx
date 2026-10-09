@@ -417,6 +417,7 @@ export function BotSetup() {
                   borderRadius: 6,
                   marginBottom: 12,
                   cursor: 'pointer',
+                  minHeight: 44,
                 }}
               >
                 <input
@@ -675,9 +676,11 @@ export function BotSetup() {
                     background: 'rgba(0,0,0,.3)',
                   }}
                 >
-                  <div
+                  <label
+                    htmlFor={`live-${k}`}
                     className="mono"
                     style={{
+                      display: 'block',
                       fontSize: 9,
                       color: 'var(--fg-4)',
                       letterSpacing: '.16em',
@@ -686,8 +689,9 @@ export function BotSetup() {
                     }}
                   >
                     {label}
-                  </div>
+                  </label>
                   <input
+                    id={`live-${k}`}
                     type="number"
                     min={0}
                     value={val}
@@ -861,9 +865,11 @@ export function BotSetup() {
             />
 
             <div style={{ marginTop: 12 }}>
-              <div
+              <label
+                htmlFor="live-custom-symbols"
                 className="mono"
                 style={{
+                  display: 'block',
                   fontSize: 9,
                   color: 'var(--fg-4)',
                   letterSpacing: '.18em',
@@ -871,9 +877,10 @@ export function BotSetup() {
                   marginBottom: 6,
                 }}
               >
-                // CUSTOM SYMBOLS · OVERRIDES BUCKETS
-              </div>
+                Custom symbols (override categories)
+              </label>
               <input
+                id="live-custom-symbols"
                 type="text"
                 placeholder="BTC/USDT, ETH/USDT, ..."
                 value={config.symbols.join(', ')}

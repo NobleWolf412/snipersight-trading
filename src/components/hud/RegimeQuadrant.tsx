@@ -28,7 +28,6 @@ const PAD_T = 16;
 const PAD_B = 36;
 
 const COLOR_DOT = '#22d3ee';
-const COLOR_DOT_GLOW = 'rgba(34,211,238,.45)';
 const COLOR_GHOST = '#a78bfa';
 const COLOR_GRID = 'var(--border-soft)';
 const COLOR_TEXT = 'var(--fg-3)';
@@ -164,9 +163,8 @@ export function RegimeQuadrant({
               y={cy}
               fontSize={11}
               fontFamily="Share Tech Mono,monospace"
-              fill={q.color}
+              fill={isActive ? q.color : 'var(--fg-2)'}
               textAnchor="middle"
-              opacity={isActive ? 1 : 0.4}
               letterSpacing="0.14em"
             >
               {q.label}
@@ -255,11 +253,7 @@ export function RegimeQuadrant({
           </g>
         )}
 
-        {/* Primary symbol dot with glow */}
-        <circle cx={dotX} cy={dotY} r={12} fill={COLOR_DOT_GLOW} opacity={0.6}>
-          <animate attributeName="r" from={8} to={16} dur="1.8s" repeatCount="indefinite" />
-          <animate attributeName="opacity" from={0.6} to={0} dur="1.8s" repeatCount="indefinite" />
-        </circle>
+        {/* Current observed regime point */}
         <circle cx={dotX} cy={dotY} r={5} fill={COLOR_DOT} stroke="#ffffff" strokeWidth={1} />
         <text
           x={dotX + 10}

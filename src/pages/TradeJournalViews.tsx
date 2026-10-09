@@ -30,7 +30,7 @@ export function StatTile({ label, value, sub, color, big, }: {
       <div className="metric-value" style={{ color: color || 'var(--fg)', fontSize: big ? 22 : 16 }}>
         {value}
       </div>
-      {sub && (<div className="metric-sub" style={{ color: color || 'var(--fg-3)', opacity: 0.7 }}>
+      {sub && (<div className="metric-sub" style={{ color: 'var(--fg-2)' }}>
           {sub}
         </div>)}
     </div>);
@@ -132,9 +132,8 @@ export function PnLCalendar({ trades }: {
     return (<div className="journal-calendar-grid">
       {entries.map(([d, v]) => {
             const intensity = Math.abs(v) / max;
-            const bg = v >= 0
-                ? `rgba(34,197,94,${0.15 + 0.55 * intensity})`
-                : `rgba(248,113,113,${0.15 + 0.55 * intensity})`;
+            const tint = v >= 0 ? 'var(--green-soft)' : 'var(--red-2)';
+            const bg = `color-mix(in oklch, ${tint} ${8 + 10 * intensity}%, var(--bg-2))`;
             const bd = v >= 0 ? `rgba(34,197,94,.5)` : `rgba(248,113,113,.5)`;
             return (<div key={d} style={{
                     background: bg,
@@ -143,7 +142,7 @@ export function PnLCalendar({ trades }: {
                     padding: '8px 6px',
                     textAlign: 'center',
                 }}>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em' }}>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--fg)', letterSpacing: '.1em' }}>
               {d.slice(5)}
             </div>
             <div className="mono" style={{

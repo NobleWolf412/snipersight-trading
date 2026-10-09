@@ -779,7 +779,7 @@ export function SetupPanel({ defaultSymbol, defaultMode, defaultDays, loading, o
       <Field label={`WINDOW (1-${MAX_WINDOW_DAYS}d)`}>
         <input type="number" min={1} max={MAX_WINDOW_DAYS} value={days} onChange={(e) => setDays(Math.max(1, Math.min(MAX_WINDOW_DAYS, parseInt(e.target.value, 10) || 1)))} style={{ ...inputStyle, width: 72 }}/>
       </Field>
-      <button className="btn btn-cyan" onClick={handleLoad} disabled={loading || !symbol} style={{ minHeight: 36, padding: '0 18px' }}>
+      <button className="btn btn-cyan" onClick={handleLoad} disabled={loading || !symbol} style={{ minHeight: 44, padding: '0 18px' }}>
         {loading ? 'LOADING…' : '◢ LOAD SESSION'}
       </button>
     </div>);
@@ -809,7 +809,7 @@ export const inputStyle: CSSProperties = {
     borderRadius: 3,
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: 13,
-    minHeight: 36,
+    minHeight: 44,
 };
 // ---------------------------------------------------------------------------
 // Main page

@@ -212,15 +212,22 @@ export function KillZoneClock({
                 strokeLinecap="butt"
                 opacity={opacity}
               />
+              <rect
+                x={cx + rArc * Math.cos((a0 + a1) / 2) - (z.label.length * 5.2 + 8) / 2}
+                y={cy + rArc * Math.sin((a0 + a1) / 2) - 8}
+                width={z.label.length * 5.2 + 8}
+                height={16}
+                rx={3}
+                fill="var(--bg-2)"
+              />
               <text
                 x={cx + rArc * Math.cos((a0 + a1) / 2)}
                 y={cy + rArc * Math.sin((a0 + a1) / 2) + 3}
                 fontSize={8}
-                fontFamily="Share Tech Mono,monospace"
-                fill={z.color}
+                fontFamily="JetBrains Mono,monospace"
+                fill="var(--fg)"
                 textAnchor="middle"
                 fontWeight={z.id === activeZone?.id ? 700 : 400}
-                opacity={z.id === activeZone?.id ? 1 : 0.7}
                 letterSpacing="0.1em"
               >
                 {z.label}

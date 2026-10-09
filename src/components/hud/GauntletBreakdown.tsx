@@ -705,7 +705,8 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
                 </button>
               )}
             </div>
-            <table className="mono" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <div role="region" aria-label="Signal pipeline evidence" tabIndex={0} style={{ overflowX: 'auto' }}>
+            <table className="mono" style={{ minWidth: 760, width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
               <thead>
                 <tr
                   style={{
@@ -734,17 +735,16 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
                   return (
                     <tr
                       key={`${s.symbol}-${s.timestamp}-${i}`}
-                      onClick={clickable && s.id ? () => onSignalClick!(s.id!) : undefined}
                       style={{
                         borderTop: '1px dashed var(--border-soft)',
-                        cursor: clickable ? 'pointer' : 'default',
                       }}
-                      title={clickable ? 'Open pipeline tracer' : undefined}
                     >
                       <td style={{ padding: '6px 0', color: 'var(--fg-4)', fontSize: 10 }}>
                         {fmtTime(s.timestamp)}
                       </td>
-                      <td style={{ fontWeight: 700 }}>{s.symbol}</td>
+                      <td style={{ fontWeight: 700 }}>{clickable && s.id ?
+                        <button type="button" className="btn" aria-label={`Inspect ${s.symbol} ${s.direction ?? 'UNKNOWN'} pipeline evidence`}
+                          onClick={() => onSignalClick!(s.id!)}>{s.symbol}</button> : s.symbol}</td>
                       <td style={{ color: 'var(--fg-3)' }}>{s.timeframe ?? '—'}</td>
                       <td
                         style={{
@@ -808,6 +808,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}

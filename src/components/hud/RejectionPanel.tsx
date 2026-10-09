@@ -345,6 +345,7 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
                 key={cat.key}
                 onClick={() => setExpandedKey(isOpen ? null : cat.key)}
                 disabled={disabled}
+                aria-expanded={isOpen}
                 title={cat.description}
                 style={{
                   background: 'none',
@@ -352,8 +353,7 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
                   padding: 0,
                   cursor: disabled ? 'default' : 'pointer',
                   opacity: disabled ? 0.45 : 1,
-                  outline: isOpen ? '1px solid var(--accent)' : 'none',
-                  outlineOffset: 2,
+                  boxShadow: isOpen ? '0 0 0 1px var(--accent)' : undefined,
                   borderRadius: 4,
                 }}
               >
