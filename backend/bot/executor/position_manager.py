@@ -18,6 +18,7 @@ Features:
 
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field
+from copy import deepcopy
 from decimal import Decimal, localcontext
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -81,6 +82,7 @@ class PositionState:
     remaining_quantity: float
     stop_loss: float
     targets: List[Target]
+    strategy: dict = field(default_factory=dict)
     targets_hit: List[Target] = field(default_factory=list)
     status: PositionStatus = PositionStatus.OPEN
     unrealized_pnl: float = 0.0
@@ -451,6 +453,7 @@ class PositionManager:
 
         position = PositionState(
             position_id=position_id,
+            strategy=deepcopy(_meta.get("strategy", {})),
             symbol=trade_plan.symbol,
             direction=trade_plan.direction,
             entry_price=entry_price,
@@ -458,7 +461,7 @@ class PositionManager:
             remaining_quantity=quantity,
             stop_loss=trade_plan.stop_loss.level,
             targets=sorted(
-                trade_plan.targets.copy(),
+                deepcopy(trade_plan.targets),
                 key=lambda t: t.level if trade_plan.direction == "LONG" else -t.level,
             ),
             status=PositionStatus.OPEN,

@@ -49,6 +49,21 @@ export interface ScannerConfig {
   indicators: Record<string, boolean>;
 }
 
+export interface ScannerRecommendation {
+  status: 'available' | 'stand_aside' | 'unavailable';
+  mode: string | null;
+  reason: string;
+  reason_code?: string;
+  warning: string | null;
+  confidence: string;
+  recommended_confluence?: number | null;
+  timestamp?: string;
+  expires_at?: string;
+  reference_timeframe?: string;
+  policy_version?: string;
+  regime?: { composite?: string; trend?: string; volatility?: string };
+}
+
 export interface ScannerMode {
   name: string;
   description: string;
@@ -563,14 +578,7 @@ class ApiClient {
   }
 
   async getScannerRecommendation() {
-    return this.request<{
-      mode: string;
-      reason: string;
-      warning: string | null;
-      confidence: string;
-      recommended_confluence?: number;
-      regime?: any;
-    }>('/scanner/recommendation');
+    return this.request<ScannerRecommendation>('/scanner/recommendation');
   }
 
   async getSignals(params?: {
@@ -1189,6 +1197,8 @@ class ApiClient {
 // ---------------------------------------------------------------------------
 
 export interface PaperTradingConfigRequest {
+  selection_mode?: 'fixed' | 'adaptive';
+  allowed_modes?: string[];
   exchange?: string;
   sniper_mode?: string;
   initial_balance?: number;

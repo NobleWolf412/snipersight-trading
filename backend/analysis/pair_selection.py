@@ -3,9 +3,9 @@
 - Uses adapters' `get_top_symbols` for ranked candidates
 - Robust stablecoin-base exclusion
 - Leverage-aware perp detection (adapter-first, heuristic fallback)
-- Majors, memes, alts bucket selection with curated majors semantics
+- Strict majors, memes, alts inclusion using the shared classifier
 - Safe fallback behavior when adapter data is unavailable
-- Uses SymbolClassifier for accurate category detection (CoinGecko + heuristics)
+- Uses SymbolClassifier's cached categories or offline heuristics
 
 Selection is direction-agnostic — it runs BEFORE scoring assigns long/short
 to a candidate. There is no per-symbol id at this layer; the rollup
@@ -36,10 +36,10 @@ Selection ordering (within selected list)
 ────────────────────────────────────────────────────────────────────────
 `selected` preserves the adapter's ranking, modulated by bucket priority:
   majors bucket first, then meme bucket, then alt bucket
-  (only for buckets whose toggle is ON). Backfill draws from `all_symbols`
-in adapter order. Stable across cycles iff the adapter's ranking is
-stable. The `dropped` list, for limit_exhausted entries, follows the
-same adapter order.
+  (only for buckets whose toggle is ON). Disabled categories are never backfilled.
+All toggles off includes every eligible category in adapter order. The limit is
+a maximum, not a target. Each candidate is classified once. The `dropped` list,
+for limit_exhausted entries, follows adapter order.
 
 ────────────────────────────────────────────────────────────────────────
 Restart semantics — in-memory only
@@ -51,6 +51,7 @@ for the observability surfaces this module backs today.
 """
 
 import time
+from copy import deepcopy
 from collections import deque
 from threading import Lock
 from typing import Any, Deque, Dict, List, Optional, Protocol, Set, Tuple
@@ -58,6 +59,7 @@ from loguru import logger
 
 from backend.analysis.symbol_classifier import (
     get_classifier,
+    SymbolCategory,
     HEURISTIC_MAJORS,
 )
 
@@ -176,11 +178,10 @@ def _is_perp_with_fallback(adapter: SupportsTopSymbols, symbol: str) -> bool:
     Emits a debug log when heuristic fallback is used.
     """
     try:
-        if hasattr(adapter, "is_perp") and adapter.is_perp(symbol):  # type: ignore[attr-defined]
-            return True
-    except Exception:
-        # Continue to heuristic on adapter failures
-        pass
+        if hasattr(adapter, "is_perp"):
+            return bool(adapter.is_perp(symbol))
+    except Exception as exc:
+        logger.warning("Perp metadata unavailable for {}: {}; using notation fallback", symbol, exc)
 
     sym_u = symbol.upper()
     heuristic = (":USDT" in sym_u) or ("-SWAP" in sym_u) or ("PERP" in sym_u)
@@ -215,7 +216,7 @@ def _is_perp_with_fallback(adapter: SupportsTopSymbols, symbol: str) -> bool:
 #
 # Threading: written from sync paths inside async scan loops, read from
 # FastAPI handlers (which can land on threadpool workers). threading.Lock
-# is correct — works from both contexts. Reads return shallow copies so
+# is correct — works from both contexts. Reads return detached copies so
 # the caller can mutate without racing the writer.
 #
 # Restart semantics: in-memory only. A restart drops history.
@@ -226,24 +227,24 @@ _snapshot_history: Deque[Dict[str, Any]] = deque(maxlen=_HISTORY_SIZE)
 
 
 def get_latest_snapshot() -> Optional[Dict[str, Any]]:
-    """Return a shallow copy of the most recent snapshot, or None."""
+    """Return a detached copy of the most recent snapshot, or None."""
     with _snapshot_lock:
         if not _snapshot_history:
             return None
-        return dict(_snapshot_history[-1])
+        return deepcopy(_snapshot_history[-1])
 
 
 def get_snapshot_history(n: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Return the last `n` snapshots (oldest-first). If `n` is None, returns
-    every snapshot in the buffer. Each entry is a shallow copy.
+    every snapshot in the buffer. Each entry is a detached copy.
     """
     with _snapshot_lock:
         if not _snapshot_history:
             return []
         if n is None or n >= len(_snapshot_history):
-            return [dict(s) for s in _snapshot_history]
-        return [dict(s) for s in list(_snapshot_history)[-n:]]
+            return deepcopy(list(_snapshot_history))
+        return deepcopy(list(_snapshot_history)[-n:])
 
 
 def history_size() -> int:
@@ -254,7 +255,7 @@ def history_size() -> int:
 
 def _write_snapshot(snap: Dict[str, Any]) -> None:
     with _snapshot_lock:
-        _snapshot_history.append(snap)
+        _snapshot_history.append(deepcopy(snap))
 
 
 def clear_snapshot() -> None:
@@ -684,228 +685,132 @@ def _select_symbols_impl(
     leverage: Optional[int] = None,
     market_type: Optional[str] = None,
 ) -> Tuple[List[str], List[Dict[str, str]]]:
-    """Internal: selection with drop tracking.
+    """Select at most limit candidates from enabled categories, with one drop reason each.
 
-    Returns (selected, dropped). `dropped` is a list of dicts shaped
-    {"symbol": str, "reason": str} where reason is one of:
-      - "stable_base"      : base normalized as a stablecoin
-      - "non_perp"         : leverage>1 / non-spot market and not a perp
-      - "bucket_excluded"  : in fetched list but no enabled bucket would
-                             include it (toggles excluded its category)
-      - "limit_exhausted"  : passed all filters but selection cap was
-                             reached before its turn
+    All toggles off retains the legacy meaning of all eligible categories.
+    Initial adapter failure/empty results use the default pool through the same
+    filters. Once excluded, a candidate can never be reintroduced.
     """
+    if limit < 0:
+        raise ValueError("universe limit must be non-negative")
 
+    all_symbols: List[str] = []
+    if limit:
+        try:
+            try:
+                all_symbols = adapter.get_top_symbols(
+                    n=min(limit * 3, 50), quote_currency="USDT", market_type=market_type
+                )
+            except TypeError:
+                # Compatibility with adapters without the market_type keyword.
+                all_symbols = adapter.get_top_symbols(
+                    n=min(limit * 3, 50), quote_currency="USDT"
+                )
+        except Exception as exc:
+            logger.warning("Universe ranking failed for {}: {}", type(adapter).__name__, exc)
+        if not all_symbols:
+            logger.warning(
+                "Universe ranking empty for {}; filtering default fallback candidates",
+                type(adapter).__name__,
+            )
+            all_symbols = DEFAULT_FALLBACK.copy()
+
+    # Count exact symbol identities once, preserving adapter ordering and spelling.
+    original = list(dict.fromkeys(all_symbols))
+    all_symbols = original.copy()
     dropped: List[Dict[str, str]] = []
 
-    try:
-        all_symbols = adapter.get_top_symbols(
-            n=min(limit * 3, 50), quote_currency="USDT", market_type=market_type
-        )
-    except TypeError:
-        # Fallback for adapters that might not accept market_type yet
-        all_symbols = adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency="USDT")
-    except Exception:
-        all_symbols = []
-
-    if not all_symbols:
-        all_symbols = DEFAULT_FALLBACK.copy()
-
-    fetched_count = len(all_symbols)
-    # Snapshot the original fetched set up-front so the mass-conservation
-    # assertion at the end can prove every input symbol is accounted for
-    # — either in `selected` (after possible fallback substitution) or in
-    # `dropped` with a reason. Future filters that silently swallow a
-    # symbol will trip this assertion in tests instead of vanishing.
-    _original_fetched: List[str] = list(all_symbols)
-
-    # Stage 0: stale-symbol auto-drop (no_data persistence guard).
-    # Symbols that have failed data fetch >= _NO_DATA_DROP_THRESHOLD consecutive
-    # cycles get excluded here — see record_no_data_failure / is_symbol_stale
-    # for the counter logic. First-match precedence: a stale symbol is dropped
-    # with reason 'stale_no_data' and never seen by stable_base/non_perp/etc.
-    # downstream filters, so the rest of the waterfall reasoning is unchanged.
-    after_stale: List[str] = []
-    for s in all_symbols:
-        if is_symbol_stale(s):
-            dropped.append({"symbol": s, "reason": "stale_no_data"})
-        else:
-            after_stale.append(s)
-    all_symbols = after_stale
-
-    # Stage 1: stablecoin-base exclusion (track drops)
-    after_stable: List[str] = []
-    for s in all_symbols:
-        if _is_stable_base(s):
-            dropped.append({"symbol": s, "reason": "stable_base"})
-        else:
-            after_stable.append(s)
-    all_symbols = after_stable
-
-    # Stage 2: leverage-aware perp filter (track drops)
+    # First failing filter owns the drop reason.
+    filters = [
+        ("stale_no_data", is_symbol_stale),
+        ("stable_base", _is_stable_base),
+    ]
     if (leverage or 1) > 1 and market_type != "spot":
-        perp_symbols: List[str] = []
-        for s in all_symbols:
-            if _is_perp_with_fallback(adapter, s):
-                perp_symbols.append(s)
+        filters.append(("non_perp", lambda s: not _is_perp_with_fallback(adapter, s)))
+    for reason, rejects in filters:
+        surviving: List[str] = []
+        for symbol in all_symbols:
+            if rejects(symbol):
+                dropped.append({"symbol": symbol, "reason": reason})
             else:
-                dropped.append({"symbol": s, "reason": "non_perp"})
-        if perp_symbols:
-            all_symbols = perp_symbols
+                surviving.append(symbol)
+        all_symbols = surviving
+
+    majors_list: List[str] = []
+    memes_list: List[str] = []
+    alts_list: List[str] = []
+    for symbol in all_symbols:
+        category = _classifier.classify(symbol)
+        if category == SymbolCategory.MAJOR:
+            majors_list.append(symbol)
+        elif category == SymbolCategory.MEME:
+            memes_list.append(symbol)
         else:
-            # Fallback perp-filter — these don't count as drops since the
-            # filter found zero perps and we're substituting the entire pool.
-            fallback_perps = [s for s in DEFAULT_FALLBACK if _is_perp_with_fallback(adapter, s)]
-            all_symbols = fallback_perps if fallback_perps else DEFAULT_FALLBACK.copy()
-            logger.debug(
-                "leverage > 1 but adapter/perp heuristics returned empty; using fallback set"
-            )
+            alts_list.append(symbol)
 
-    # Curated majors when present; preserves ranking order.
-    proportional = max(1, int(len(all_symbols) * 0.2))
-    top_k = max(3, min(10, proportional))
-    majors_present = [s for s in all_symbols[:top_k] if s in HARDCODED_MAJORS]
-    if majors_present:
-        majors_list = majors_present
+    if not any((majors, altcoins, meme_mode)):
+        eligible = all_symbols
     else:
-        majors_list = [s for s in all_symbols[:top_k]]
+        eligible = (
+            (majors_list if majors else [])
+            + (memes_list if meme_mode else [])
+            + (alts_list if altcoins else [])
+        )
+        enabled = set(eligible)
+        dropped.extend(
+            {"symbol": symbol, "reason": "bucket_excluded"}
+            for symbol in all_symbols if symbol not in enabled
+        )
 
-    # Meme and alt derivations
-    meme_set = {s for s in all_symbols if _is_meme_symbol(s)}
-    memes_list = [s for s in all_symbols if s in meme_set]
-    alts_list = [s for s in all_symbols if s not in majors_list and s not in meme_set]
-
-    # Stage 3: bucket inclusion (track drops for symbols whose bucket is OFF)
-    buckets: List[List[str]] = []
-    enabled_buckets: List[str] = []
-    if majors:
-        buckets.append(majors_list)
-        enabled_buckets.append("majors")
-    if meme_mode:
-        buckets.append(memes_list)
-        enabled_buckets.append("memes")
-    if altcoins:
-        buckets.append(alts_list)
-        enabled_buckets.append("alts")
-
-    if not buckets:
-        # No toggles → everything is eligible. No bucket exclusion drops.
-        buckets = [all_symbols]
-    else:
-        # Compute the union of enabled buckets; anything in all_symbols
-        # but not in the union is dropped as bucket_excluded.
-        union: set = set()
-        for b in buckets:
-            union.update(b)
-        for s in all_symbols:
-            if s not in union:
-                dropped.append({"symbol": s, "reason": "bucket_excluded"})
-
-    # Stage 4: greedy fill, track limit_exhausted drops
-    selected: List[str] = []
-    for bucket in buckets:
-        for s in bucket:
-            if len(selected) >= limit:
-                break
-            if s not in selected:
-                selected.append(s)
-        if len(selected) >= limit:
-            break
-
-    if len(selected) < limit:
-        for s in all_symbols:
-            if len(selected) >= limit:
-                break
-            if s not in selected:
-                selected.append(s)
-
-    # Anything that survived all filters but didn't make the final cut
-    # is recorded as limit_exhausted. Compute by set difference.
+    selected = eligible[:limit]
     selected_set = set(selected)
-    already_dropped = {d["symbol"] for d in dropped}
-    for s in all_symbols:
-        if s not in selected_set and s not in already_dropped:
-            dropped.append({"symbol": s, "reason": "limit_exhausted"})
+    eligible_set = set(eligible)
+    dropped.extend(
+        {"symbol": symbol, "reason": "limit_exhausted"}
+        for symbol in all_symbols
+        if symbol in eligible_set and symbol not in selected_set
+    )
 
-    selected = selected[:limit]
-
-    # ── Mass-conservation invariant ──────────────────────────────────────
-    # Every symbol from the original fetched pool must be accounted for:
-    # either it survived to `selected` or it was dropped with a reason.
-    # The non-perp-fallback path can substitute the entire pool with
-    # DEFAULT_FALLBACK; in that case every original symbol is already
-    # in `dropped` as non_perp before substitution, so this still holds.
-    #
-    # Future filters that silently swallow a symbol will trip this
-    # assertion at the source instead of vanishing into a stats mismatch.
-    _selected_set = set(selected)
-    _dropped_set = {d["symbol"] for d in dropped}
-    _unaccounted = [s for s in _original_fetched if s not in _selected_set and s not in _dropped_set]
-    if _unaccounted:
-        # Loud failure. Aborting selection is preferable to returning a
-        # silently-incomplete universe to the scanner.
+    dropped_set = {row["symbol"] for row in dropped}
+    if (
+        len(selected_set) != len(selected)
+        or len(dropped_set) != len(dropped)
+        or selected_set & dropped_set
+        or selected_set | dropped_set != set(original)
+    ):
         raise AssertionError(
-            f"pair_selection mass conservation breach: "
-            f"{len(_unaccounted)} symbols vanished from fetched={len(_original_fetched)} "
-            f"(selected={len(selected)}, dropped={len(dropped)}). "
-            f"First few missing: {_unaccounted[:5]}"
+            f"pair_selection mass conservation breach: fetched={len(original)} "
+            f"selected={len(selected)} dropped={len(dropped)}"
         )
 
-    # Selection summary log (unchanged behaviour, plus drop counts)
-    try:
-        fetched_cnt = fetched_count
-        majors_cnt = len(majors_list) if majors else 0
-        memes_cnt = len(memes_list) if meme_mode else 0
-        alts_cnt = len(alts_list) if altcoins else 0
-        # Per-reason breakdown for the log line
-        reason_counts: Dict[str, int] = {}
-        for d in dropped:
-            reason_counts[d["reason"]] = reason_counts.get(d["reason"], 0) + 1
-        logger.info(
-            "selection adapter=%s limit=%s leverage=%s market=%s toggles majors=%s memes=%s alts=%s fetched=%s final=%s dropped=%s drop_reasons=%s buckets majors=%s memes=%s alts=%s examples majors=%s memes=%s alts=%s",
-            adapter.__class__.__name__,
-            limit,
-            (leverage or 1),
-            market_type,
-            int(majors),
-            int(meme_mode),
-            int(altcoins),
-            fetched_cnt,
-            len(selected),
-            len(dropped),
-            reason_counts,
-            majors_cnt,
-            memes_cnt,
-            alts_cnt,
-            ",".join(majors_list[:3]),
-            ",".join(memes_list[:3]),
-            ",".join(alts_list[:3]),
-        )
-    except Exception:
-        # Logging must never break selection
-        pass
+    reason_counts: Dict[str, int] = {}
+    for row in dropped:
+        reason_counts[row["reason"]] = reason_counts.get(row["reason"], 0) + 1
+    logger.info(
+        "selection adapter={} limit={} leverage={} market={} "
+        "toggles majors={} memes={} alts={} fetched={} final={} dropped={} drop_reasons={}",
+        type(adapter).__name__, limit, leverage or 1, market_type,
+        majors, meme_mode, altcoins, len(original), len(selected), len(dropped), reason_counts,
+    )
 
-    # Persist the snapshot for /api/scanner/universe
     try:
         _write_snapshot({
             "ts": time.time(),
-            "selected": list(selected),
-            "dropped":  list(dropped),
-            "fetched":  fetched_count,
-            "limit":    limit,
+            "selected": selected,
+            "dropped": dropped,
+            "fetched": len(original),
+            "limit": limit,
             "leverage": int(leverage or 1),
             "market_type": market_type,
-            "toggles":  {
+            "toggles": {
                 "majors": bool(majors),
                 "altcoins": bool(altcoins),
                 "meme_mode": bool(meme_mode),
             },
-            "adapter":  adapter.__class__.__name__,
+            "adapter": type(adapter).__name__,
         })
-    except Exception as e:
-        # Snapshot write failure must not block selection.
-        logger.warning(f"pair_selection snapshot write failed: {e}")
-
+    except Exception as exc:
+        logger.warning("pair_selection snapshot write failed: {}", exc)
     return selected, dropped
 
 

@@ -15,7 +15,7 @@
  *   CRITICAL_TF   — rejectionSummary.by_reason.missing_critical_tf + details
  *   FEATURES      — rejectionSummary.features_breakdown (indicator_failures +
  *                   smc_rejections counts + samples) — backend extension A
- *   CONFLUENCE    — rejectionSummary.by_reason.low_confluence + details
+ *   CONFLUENCE    — numeric cutoff and evidence-requirement failures + details
  *   PLANNER       — rejectionSummary.by_reason.no_trade_plan +
  *                   .risk_validation, merged + details
  *
@@ -180,13 +180,15 @@ function buildFeatures(entry: ScanHistoryEntry): Category {
 }
 
 function buildConfluence(entry: ScanHistoryEntry): Category {
-  const sub = pickSingleReason(entry.rejectionSummary, 'low_confluence');
+  const subBuckets = ['low_confluence', 'evidence_requirements']
+    .map(reason => pickSingleReason(entry.rejectionSummary, reason))
+    .filter(bucket => bucket.count > 0);
   return {
     key: 'CONFLUENCE',
     label: 'CONFLUENCE',
-    description: 'score gate · below min_confluence_score',
-    totalCount: sub.count,
-    subBuckets: sub.count > 0 ? [sub] : [],
+    description: 'numeric cutoff and required setup evidence',
+    totalCount: subBuckets.reduce((total, bucket) => total + bucket.count, 0),
+    subBuckets,
   };
 }
 
@@ -196,16 +198,26 @@ function buildPlanner(entry: ScanHistoryEntry): Category {
   //   risk_validation  — plan rejected by risk manager / late price check
   const plannerSub = pickSingleReason(entry.rejectionSummary, 'no_trade_plan');
   const riskSub = pickSingleReason(entry.rejectionSummary, 'risk_validation');
+  const revalidationSub = pickSingleReason(entry.rejectionSummary, 'post_plan_revalidation');
   const subBuckets: CategorySubBucket[] = [];
   if (plannerSub.count > 0) subBuckets.push(plannerSub);
   if (riskSub.count > 0) subBuckets.push(riskSub);
+  if (revalidationSub.count > 0) subBuckets.push(revalidationSub);
   return {
     key: 'PLANNER',
     label: 'PLANNER',
     description: 'trade-plan construction · risk gate',
-    totalCount: plannerSub.count + riskSub.count,
+    totalCount: plannerSub.count + riskSub.count + revalidationSub.count,
     subBuckets,
   };
+}
+
+export function failureSampleText(sample: RejectionSampleRecord): string {
+  const reason = typeof sample.reason === 'string' ? sample.reason
+    : typeof sample.error === 'string' ? sample.error : '';
+  const timeframe = typeof sample.timeframe === 'string' ? sample.timeframe : '';
+  const stage = typeof sample.stage === 'string' ? sample.stage : '';
+  return [timeframe || stage, reason].filter(Boolean).join(' · ');
 }
 
 export function buildCategories(entry: ScanHistoryEntry): Category[] {
@@ -220,7 +232,7 @@ export function buildCategories(entry: ScanHistoryEntry): Category[] {
   const mapped = new Set(categories.filter(c => c.key !== 'UNIVERSE' && c.key !== 'FEATURES')
     .flatMap(c => c.subBuckets.map(bucket => bucket.reason)));
   const other = Object.entries(summary.by_reason ?? {})
-    .filter(([reason, count]) => count > 0 && !mapped.has(reason))
+    .filter(([reason, count]) => count > 0 && reason !== 'features' && !mapped.has(reason))
     .map(([reason]) => pickSingleReason(summary, reason));
   categories.push({ key: 'OTHER', label: 'OTHER GATES / ERRORS',
     description: 'Other recorded run rejection reasons',
@@ -255,6 +267,7 @@ const REASON_PRETTY: Record<string, string> = {
   indicator_failures: 'INDICATOR COMPUTE FAIL',
   smc_rejections: 'SMC PATTERN MISSED',
   low_confluence: 'BELOW MIN SCORE',
+  evidence_requirements: 'REQUIRED EVIDENCE NOT MET',
   no_trade_plan: 'PLAN UNAVAILABLE',
   risk_validation: 'RISK GATE',
 };
@@ -454,9 +467,9 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
                                 / ≥ {s.threshold}
                               </span>
                             )}
-                            {s.reason && s.reason !== sub.reason && (
+                            {failureSampleText(s) && failureSampleText(s) !== sub.reason && (
                               <span style={{ color: 'var(--fg-4)', marginLeft: 6 }}>
-                                · {s.reason}
+                                · {failureSampleText(s)}
                               </span>
                             )}
                           </li>

@@ -88,7 +88,8 @@ def test_orchestrator_passes_replay_timestamp_into_smc():
     engine._check_critical_timeframes = lambda data: []
     engine.regime_detector = None
     engine.indicator_service = SimpleNamespace(compute=lambda data: make_indicators(), diagnostics={})
-    engine.smc_service = SimpleNamespace(detect=Mock(side_effect=ValueError('stop after clock inspection')))
+    engine.smc_service = SimpleNamespace(detect=Mock(side_effect=ValueError('stop after clock inspection')),
+                                         diagnostics={'smc_rejections': []})
     data = MultiTimeframeData(symbol='BTC/USDT', timeframes={'1h': candles()})
     engine.process_symbol_for_replay('BTC/USDT', data, AS_OF, 'test', 0, 'session')
     assert engine.smc_service.detect.call_args.kwargs.get('as_of') == AS_OF

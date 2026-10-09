@@ -65,6 +65,7 @@ export type GauntletStage =
   | 'COOLDOWN'
   // post-scoring / planner
   | 'CONFLUENCE'
+  | 'EVIDENCE_REQUIREMENTS'
   | 'NO_TRADE_PLAN'
   | 'RISK_VALIDATION'
   | 'ML_GATE'
@@ -101,6 +102,7 @@ const STAGES: Record<GauntletStage, StageMeta> = {
   COOLDOWN:          { group: 'PRE-SCORE',  label: 'COOLDOWN',          hint: 'Symbol just lost / recently rejected' },
   // POST-SCORE
   CONFLUENCE:        { group: 'POST-SCORE', label: 'CONFLUENCE',        hint: 'Score < mode min_confluence_score' },
+  EVIDENCE_REQUIREMENTS: { group: 'POST-SCORE', label: 'EVIDENCE REQUIREMENTS', hint: 'Required setup evidence failed; the numeric score may still meet its cutoff' },
   NO_TRADE_PLAN:     { group: 'POST-SCORE', label: 'NO TRADE PLAN',     hint: 'Planner couldn\u2019t build entry/stop/TP' },
   RISK_VALIDATION:   { group: 'POST-SCORE', label: 'RISK VALIDATION',   hint: 'R:R below min, or stops too wide/tight' },
   ML_GATE:           { group: 'POST-SCORE', label: 'ML GATE',           hint: 'Edge model said skip' },
@@ -123,7 +125,7 @@ const PRE_SCORE_STAGES: GauntletStage[] = [
   'BTC_IMPULSE', 'CONFLICT_DENSITY', 'COOLDOWN',
 ];
 const POST_SCORE_STAGES: GauntletStage[] = [
-  'CONFLUENCE', 'NO_TRADE_PLAN', 'RISK_VALIDATION', 'ML_GATE',
+  'CONFLUENCE', 'EVIDENCE_REQUIREMENTS', 'NO_TRADE_PLAN', 'RISK_VALIDATION', 'ML_GATE',
 ];
 const EXECUTION_STAGES: GauntletStage[] = [
   'REGIME_VETO', 'MAX_POSITIONS', 'HAS_POSITION', 'PENDING_ORDER',
@@ -155,10 +157,11 @@ export function classifyStage(signal: SignalLogEntry): GauntletStage {
   if (rt === 'cooldown_active')     return 'COOLDOWN';
   if (rt === 'missing_critical_tf') return 'MISSING_TF';
   if (rt === 'no_data')              return 'NO_DATA';
-  if (rt === 'no_trade_plan')        return 'NO_TRADE_PLAN';
+  if (rt === 'no_trade_plan' || rt === 'post_plan_revalidation')        return 'NO_TRADE_PLAN';
   if (rt === 'risk_validation')      return 'RISK_VALIDATION';
   if (rt === 'ml_gate')              return 'ML_GATE';
   if (rt === 'low_confluence')       return 'CONFLUENCE';
+  if (rt === 'evidence_requirements') return 'EVIDENCE_REQUIREMENTS';
   if (rt === 'regime_veto')          return 'REGIME_VETO';
   if (rt === 'max_positions')        return 'MAX_POSITIONS';
   if (rt === 'has_position')         return 'HAS_POSITION';
@@ -169,6 +172,7 @@ export function classifyStage(signal: SignalLogEntry): GauntletStage {
   if (rt === 'errors')               return 'EXEC_ERROR';
 
   // Fallback substring scan (older entries may lack reason_type).
+  if (r.includes('evidence requirements')) return 'EVIDENCE_REQUIREMENTS';
   if (r.includes('structural anchor') || r.includes('quality structural')) return 'STRUCTURAL_ANCHOR';
   if (r.includes('regime is') || (r.includes('rejected') && r.includes('choch'))) return 'REGIME_ALIGNMENT';
   if (r.includes('btc in opposing') || r.includes('opposing strong impulse')) return 'BTC_IMPULSE';
@@ -196,6 +200,11 @@ export function classifyStage(signal: SignalLogEntry): GauntletStage {
 type Action = { msg: string; cta: string; href: string };
 
 const ACTION_MAP: Partial<Record<GauntletStage, Action>> = {
+  EVIDENCE_REQUIREMENTS: {
+    msg: 'Required setup evidence failed. Inspect the recorded missing requirements; lowering the score cutoff does not satisfy them.',
+    cta: 'Inspect Scanner evidence',
+    href: '/scanner',
+  },
   CONFLUENCE: {
     msg: 'Logged scores did not meet the selected threshold. Inspect factors and rejected cases.',
     cta: 'Open Scanner modes',
@@ -739,7 +748,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
                       <td style={{ color: 'var(--fg-3)' }}>{s.timeframe ?? '—'}</td>
                       <td
                         style={{
-                          color: s.direction === 'LONG' ? 'var(--green-soft)' : 'var(--red-2)',
+                          color: s.direction === 'LONG' ? 'var(--green-soft)' : s.direction === 'SHORT' ? 'var(--red-2)' : 'var(--fg-3)',
                           fontWeight: 700,
                           fontSize: 10,
                           letterSpacing: '.12em',

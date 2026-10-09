@@ -37,7 +37,10 @@ from backend.engine.replay_engine import (
     get_replay_engine,
 )
 
+from backend.shared.async_worker import SerializedWorker
+
 router = APIRouter(tags=["Replay"])
+_replay_worker = SerializedWorker()
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +173,26 @@ def _session_to_create_response(session: ReplaySession) -> CreateSessionResponse
     )
 
 
+def _load_response(engine, req):
+    session = engine.load_session(
+        symbol=req.symbol, mode_name=req.mode,
+        window_start=req.window_start, window_end=req.window_end,
+    )
+    try:
+        return _session_to_create_response(session)
+    except Exception:
+        engine.end_session(session.session_id)
+        raise
+
+
+def _jump_response(engine, session_id, max_lookahead):
+    step, bars = engine.jump_to_next_signal(session_id, max_lookahead=max_lookahead)
+    return JumpToSignalResponse(
+        found=bool(step and step.signal_fired), bars_advanced=bars,
+        step=_step_to_response(session_id, step) if step else None,
+    )
+
+
 def _engine_or_500():
     """Wrap get_replay_engine to convert RuntimeError into a clear HTTP 503."""
     try:
@@ -193,11 +216,9 @@ async def create_session(req: CreateSessionRequest) -> CreateSessionResponse:
     the frontend can render the scrub bar before any step is taken."""
     engine = _engine_or_500()
     try:
-        session = engine.load_session(
-            symbol=req.symbol,
-            mode_name=req.mode,
-            window_start=req.window_start,
-            window_end=req.window_end,
+        response = await _replay_worker.run(
+            _load_response, engine, req,
+            on_abandon=lambda result: engine.end_session(result.session_id),
         )
     except ValueError as e:
         # Window-cap exceeded, unknown mode, no data fetched, etc.
@@ -207,25 +228,19 @@ async def create_session(req: CreateSessionRequest) -> CreateSessionResponse:
         raise HTTPException(status_code=500, detail=f"Session load failed: {e}")
     logger.info(
         "Replay session created: id={} symbol={} mode={} bars={}",
-        session.session_id, session.symbol, session.mode_name, session.total_bars,
+        response.session_id, response.symbol, response.mode, response.total_bars,
     )
-    return _session_to_create_response(session)
+    return response
 
 
 @router.get("/api/replay/sessions/{session_id}", response_model=SessionStatusResponse)
 async def get_session_status(session_id: str) -> SessionStatusResponse:
     engine = _engine_or_500()
-    session = engine.get_session(session_id)
-    if session is None:
+    try:
+        status = await _replay_worker.run(engine.session_status, session_id)
+    except KeyError:
         raise HTTPException(status_code=404, detail=f"session {session_id} not found or expired")
-    return SessionStatusResponse(
-        session_id=session.session_id,
-        symbol=session.symbol,
-        mode=session.mode_name,
-        current_index=session.step_index,
-        total_bars=session.total_bars,
-        tf_step=session.tf_step,
-    )
+    return SessionStatusResponse(**status)
 
 
 @router.post(
@@ -238,12 +253,14 @@ async def step_session(session_id: str, req: StepRequest) -> StepResponse:
     is instant; deeper scrub recomputes from window_start (slow)."""
     engine = _engine_or_500()
     try:
-        step = engine.step(session_id, n=req.n)
+        response = await _replay_worker.run(
+            lambda: _step_to_response(session_id, engine.step(session_id, n=req.n))
+        )
     except KeyError:
         raise HTTPException(status_code=404, detail=f"session {session_id} not found or expired")
     except IndexError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return _step_to_response(session_id, step)
+    return response
 
 
 @router.post(
@@ -259,14 +276,9 @@ async def jump_to_next_signal(
     cursor without losing the operator's place."""
     engine = _engine_or_500()
     try:
-        step, bars = engine.jump_to_next_signal(session_id, max_lookahead=req.max_lookahead)
+        return await _replay_worker.run(_jump_response, engine, session_id, req.max_lookahead)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"session {session_id} not found or expired")
-    if step is None:
-        return JumpToSignalResponse(found=False, bars_advanced=bars, step=None)
-    return JumpToSignalResponse(
-        found=step.signal_fired, bars_advanced=bars, step=_step_to_response(session_id, step)
-    )
 
 
 @router.delete(
@@ -275,7 +287,7 @@ async def jump_to_next_signal(
 )
 async def delete_session(session_id: str) -> DeleteSessionResponse:
     engine = _engine_or_500()
-    removed = engine.end_session(session_id)
+    removed = await _replay_worker.run(engine.end_session, session_id)
     if not removed:
         # Idempotent: 404 only if the session id is meaningful but missing.
         # Frontend Esc-handler may call delete twice; treat as success.

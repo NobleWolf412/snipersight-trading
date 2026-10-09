@@ -6,7 +6,9 @@ to prevent regime flip-flopping.
 """
 
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from dataclasses import replace
 import logging
 import math
 import numpy as np
@@ -14,6 +16,7 @@ import numpy as np
 from backend.shared.models.regime import MarketRegime, RegimeDimensions, SymbolRegime
 from backend.shared.models.data import MultiTimeframeData
 from backend.shared.models.indicators import IndicatorSet
+from backend.analysis.regime_inputs import validate_regime_candles
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,8 @@ class RegimeDetector:
         # Cache for performance (Gap #4)
         self._global_regime_cache = None
         self._global_regime_cache_time = None
+        self._global_regime_cache_key = None
+        self._last_confirmation_evidence = None
         self._global_regime_ttl = 300  # 5 minutes for BTC global regime
 
         self._symbol_regime_cache = {}  # {symbol: (regime, timestamp)}
@@ -103,6 +108,8 @@ class RegimeDetector:
         self,
         btc_data: MultiTimeframeData,
         btc_indicators: IndicatorSet,
+        dominance=None,
+        confirmed=True,
     ) -> MarketRegime:
         """
         Detect global market regime from BTC as market leader.
@@ -115,24 +122,31 @@ class RegimeDetector:
             MarketRegime with all dimensions analyzed
         """
 
-        # Check cache (Gap #4)
-        if self._global_regime_cache is not None and self._global_regime_cache_time is not None:
-            age = (datetime.utcnow() - self._global_regime_cache_time).total_seconds()
-            if age < self._global_regime_ttl:
-                logger.debug(f"🗄️ Returning cached global regime (age={age:.1f}s)")
-                return self._global_regime_cache
+        # Global context always means daily BTC, regardless of the selected mode.
+        daily = btc_data.timeframes.get("1d")
+        daily_indicator = btc_indicators.by_timeframe.get("1d")
+        if daily is None or daily_indicator is None or len(daily) < 50:
+            raise ValueError("REGIME_INPUT_UNAVAILABLE: daily BTC history is required")
+        evidence_id = validate_regime_candles(daily, 24, datetime.now(timezone.utc))
+        cache_key = (evidence_id, tuple(float(daily[column].iloc[-1]) for column in ("high", "low", "close", "volume")))
+        if (self._global_regime_cache is not None and self._global_regime_cache_key == cache_key
+                and self._global_regime_cache_time is not None
+                and (datetime.utcnow() - self._global_regime_cache_time).total_seconds() < self._global_regime_ttl):
+            return self._confirmed_view(self._global_regime_cache) if confirmed else self._global_regime_cache
+        daily_data = SimpleNamespace(timeframes={"1d": daily})
+        daily_indicators = SimpleNamespace(by_timeframe={"1d": daily_indicator})
 
         # 1. Trend Regime (HTF structure + MA slope)
-        trend, trend_score = self._detect_trend(btc_data)
+        trend, trend_score, _ = RegimeDetector().analyze_timeframe_trend(daily, "1d")
 
         # 2. Volatility Regime (ATR-based)
-        volatility, vol_score = self._detect_volatility(btc_indicators)
+        volatility, vol_score = self._detect_volatility(daily_indicators)
 
         # 3. Liquidity Regime (volume-based)
-        liquidity, liq_score = self._detect_liquidity(btc_data)
+        liquidity, liq_score = self._detect_liquidity(daily_data)
 
         # 4. Risk Appetite (simplified - would use BTC.D, USDT.D)
-        risk_appetite, risk_score = self._detect_risk_appetite()
+        risk_appetite, risk_score = self._detect_risk_appetite(dominance)
 
         # 5. Derivatives (placeholder - needs funding rate data)
         derivatives, deriv_score = "balanced", 50.0
@@ -161,7 +175,7 @@ class RegimeDetector:
             dimensions=dimensions,
             composite=composite,
             score=score,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             trend_score=trend_score,
             volatility_score=vol_score,
             liquidity_score=liq_score,
@@ -170,9 +184,10 @@ class RegimeDetector:
         )
 
         # Apply hysteresis to prevent flip-flopping
-        regime = self._apply_hysteresis(regime)
+        self._apply_hysteresis(regime, evidence_id=evidence_id)
 
         # Cache result (Gap #4)
+        self._global_regime_cache_key = cache_key
         self._global_regime_cache = regime
         self._global_regime_cache_time = datetime.utcnow()
 
@@ -205,7 +220,7 @@ class RegimeDetector:
             self._pending_regime or "None", self._pending_count, self._confirmation_required,
         )
 
-        return regime
+        return self._confirmed_view(regime) if confirmed else regime
 
     def detect_symbol_regime(
         self,
@@ -325,132 +340,15 @@ class RegimeDetector:
         from backend.strategy.smc.swing_structure import detect_swing_structure
         from backend.shared.config.smc_config import scale_lookback
 
-        if df is None or len(df) < 50:
-            return "sideways", 50.0, "Insufficient data"
-
-        # === 1. Calculate ADX for secondary confirmation ===
-        adx_value = None
-        adx_diagnostic = {}  # Track WHY ADX might fail
-
-        try:
-            # Diagnostic: Check input data quality
-            df_len = len(df)
-            has_required_cols = all(col in df.columns for col in ["high", "low", "close"])
-
-            if not has_required_cols:
-                logger.warning(
-                    f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Missing required columns. Have: {df.columns.tolist()}"
-                )
-                adx_diagnostic["reason"] = "missing_columns"
-                raise ValueError(f"Missing required columns for ADX calculation")
-
-            logger.debug(
-                f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Starting calculation with {df_len} bars"
-            )
-
-            # Calculate ADX manually (14-period standard)
-            df_copy = df.copy()
-
-            # True Range
-            df_copy["tr"] = df_copy.apply(
-                lambda row: max(
-                    row["high"] - row["low"],
-                    (
-                        abs(row["high"] - df_copy["close"].shift(1).loc[row.name])
-                        if row.name > df_copy.index[0]
-                        else row["high"] - row["low"]
-                    ),
-                    (
-                        abs(row["low"] - df_copy["close"].shift(1).loc[row.name])
-                        if row.name > df_copy.index[0]
-                        else row["high"] - row["low"]
-                    ),
-                ),
-                axis=1,
-            )
-
-            # Diagnostic: Check TR calculation
-            tr_valid_count = df_copy["tr"].notna().sum()
-            logger.debug(
-                f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: TR calculated, {tr_valid_count}/{df_len} valid values"
-            )
-
-            # +DM and -DM
-            df_copy["plus_dm"] = df_copy["high"].diff()
-            df_copy["minus_dm"] = -df_copy["low"].diff()
-            df_copy["plus_dm"] = df_copy.apply(
-                lambda row: (
-                    row["plus_dm"] if row["plus_dm"] > row["minus_dm"] and row["plus_dm"] > 0 else 0
-                ),
-                axis=1,
-            )
-            df_copy["minus_dm"] = df_copy.apply(
-                lambda row: (
-                    row["minus_dm"]
-                    if row["minus_dm"] > row["plus_dm"] and row["minus_dm"] > 0
-                    else 0
-                ),
-                axis=1,
-            )
-
-            # Smoothed averages (14-period)
-            period = 14
-            df_copy["atr14"] = df_copy["tr"].rolling(period).mean()
-            df_copy["plus_di"] = 100 * (
-                df_copy["plus_dm"].rolling(period).mean() / df_copy["atr14"]
-            )
-            df_copy["minus_di"] = 100 * (
-                df_copy["minus_dm"].rolling(period).mean() / df_copy["atr14"]
-            )
-
-            # Diagnostic: Check DI values
-            plus_di_final = (
-                df_copy["plus_di"].iloc[-1] if not df_copy["plus_di"].isna().all() else None
-            )
-            minus_di_final = (
-                df_copy["minus_di"].iloc[-1] if not df_copy["minus_di"].isna().all() else None
-            )
-            plus_di_str = f"{plus_di_final:.1f}" if plus_di_final is not None else "N/A"
-            minus_di_str = f"{minus_di_final:.1f}" if minus_di_final is not None else "N/A"
-            logger.debug(
-                f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: +DI={plus_di_str}, -DI={minus_di_str}"
-            )
-
-            # DX and ADX
-            df_copy["dx"] = (
-                100
-                * abs(df_copy["plus_di"] - df_copy["minus_di"])
-                / (df_copy["plus_di"] + df_copy["minus_di"] + 1e-10)
-            )
-            df_copy["adx"] = df_copy["dx"].rolling(period).mean()
-
-            # Extract final ADX value
-            adx_value = df_copy["adx"].iloc[-1]
-
-            # Diagnostic: Check if ADX is valid
-            if adx_value is None or (
-                isinstance(adx_value, float) and (adx_value != adx_value)
-            ):  # NaN check
-                logger.warning(
-                    f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Calculated ADX is None/NaN. DX series has {df_copy['dx'].notna().sum()} valid values"
-                )
-                adx_diagnostic["reason"] = "nan_result"
-                adx_diagnostic["dx_valid_count"] = df_copy["dx"].notna().sum()
-                adx_value = None
-            else:
-                logger.info(f"✅ ADX [{timeframe_label}]: {adx_value:.1f} (valid calculation)")
-                adx_diagnostic["reason"] = "success"
-                adx_diagnostic["value"] = adx_value
-
-        except Exception as e:
-            error_type = type(e).__name__
-            logger.warning(
-                f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Calculation FAILED with {error_type}: {str(e)[:100]}"
-            )
-            logger.debug(f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Full error: {e}", exc_info=True)
-            adx_diagnostic["reason"] = f"exception_{error_type}"
-            adx_diagnostic["error"] = str(e)[:200]
-            adx_value = None
+        if df is None or len(df) < 50 or not all(c in df for c in ("high", "low", "close")):
+            raise ValueError(f"REGIME_INPUT_UNAVAILABLE: insufficient {timeframe_label} history")
+        values = df[["high", "low", "close"]].to_numpy(dtype=float)
+        if not np.isfinite(values).all() or (values <= 0).any() or (values[:, 0] < values[:, 1]).any():
+            raise ValueError(f"REGIME_INPUT_UNAVAILABLE: invalid {timeframe_label} prices")
+        from backend.indicators.momentum import compute_adx
+        adx_value, _, _ = compute_adx(df)
+        if adx_value is None or not math.isfinite(adx_value):
+            raise ValueError(f"REGIME_INPUT_UNAVAILABLE: invalid {timeframe_label} ADX")
 
         # === 2. Swing Structure Detection (50-bar lookback) ===
         try:
@@ -622,29 +520,7 @@ class RegimeDetector:
                 f"🔍 Swing Structure DIAGNOSTIC [{timeframe_label}]: Full error", exc_info=True
             )
 
-            # Fallback to simple MA slope
-            if df.empty or "close" not in df:
-                return "sideways", 50.0, "Insufficient Data"
-
-            df_copy = df.copy()
-            df_copy["ma20"] = df_copy["close"].rolling(20).mean()
-
-            if df_copy["ma20"].iloc[-10:].isna().all():
-                return "sideways", 50.0, "Insufficient Data"
-
-            slope = (
-                (df_copy["ma20"].iloc[-1] - df_copy["ma20"].iloc[-10])
-                / df_copy["ma20"].iloc[-10]
-                * 100
-            )
-
-            if slope > 3:
-                return "up", 70.0, "Momentum Divergence"
-            elif slope < -3:
-                # §10 bull/bear symmetry: down=70 mirrors up=70 above.
-                return "down", 70.0, "Momentum Breakdown"
-            else:
-                return "sideways", 50.0, "Flat Structure"
+            raise ValueError(f"REGIME_INPUT_UNAVAILABLE: {timeframe_label} trend calculation failed") from e
 
     def _detect_trend(self, data: MultiTimeframeData):
         """
@@ -666,7 +542,7 @@ class RegimeDetector:
             htf = list(data.timeframes.keys())[0]
 
         if not htf:
-            return "sideways", 50.0
+            raise ValueError("REGIME_INPUT_UNAVAILABLE: no trend timeframe")
 
         df = data.timeframes[htf]
         # Unpack 3 values, return 2 for compatibility with existing callers
@@ -781,19 +657,20 @@ class RegimeDetector:
 
         Returns: (liquidity_label, score)
         """
-        tfs = sorted(data.timeframes.keys())
-        if not tfs:
-            return "healthy", 60.0
-
-        df = data.timeframes[tfs[0]]
-        if len(df) < 20:
-            return "healthy", 60.0
-
-        # Compare recent volume to average
-        avg_vol = df["volume"].tail(20).mean()
-        recent_vol = df["volume"].tail(5).mean()
-
-        ratio = recent_vol / avg_vol if avg_vol > 0 else 1.0
+        tf = _highest_duration_tf(data.timeframes)
+        if tf is None:
+            raise ValueError("REGIME_INPUT_UNAVAILABLE: missing volume history")
+        df = data.timeframes[tf]
+        if len(df) < 25 or "volume" not in df:
+            raise ValueError("REGIME_INPUT_UNAVAILABLE: insufficient volume history")
+        volume = df["volume"].tail(25).to_numpy(dtype=float)
+        if not np.isfinite(volume).all() or (volume < 0).any():
+            raise ValueError("REGIME_INPUT_UNAVAILABLE: invalid volume history")
+        avg_vol = volume[:-5].mean()
+        recent_vol = volume[-5:].mean()
+        if avg_vol <= 0:
+            raise ValueError("REGIME_INPUT_UNAVAILABLE: no historical participation")
+        ratio = recent_vol / avg_vol
 
         if ratio < 0.5:
             return "thin", 40.0
@@ -802,7 +679,7 @@ class RegimeDetector:
         else:
             return "heavy", 65.0
 
-    def _detect_risk_appetite(self) -> tuple[str, float]:
+    def _detect_risk_appetite(self, dominance=None) -> tuple[str, float]:
         """
         Detect risk appetite using REAL dominance data with PROPER thresholds.
 
@@ -816,7 +693,7 @@ class RegimeDetector:
         try:
             from backend.analysis.dominance_service import get_dominance_for_macro
 
-            btc_dom, alt_dom, stable_dom = get_dominance_for_macro()
+            btc_dom, alt_dom, stable_dom = dominance if dominance is not None else get_dominance_for_macro()
 
             logger.info(
                 f"Risk Appetite: BTC.D={btc_dom:.1f}%, Alt.D={alt_dom:.1f}%, Stable.D={stable_dom:.1f}%"
@@ -881,6 +758,8 @@ class RegimeDetector:
     def _generate_composite_label(self, dim: RegimeDimensions) -> str:
         """Generate composite regime label from dimensions."""
 
+        if dim.volatility == "chaotic":
+            return "chaotic_volatile"
         if dim.trend == "sideways" and dim.risk_appetite == "risk_off":
             return "choppy_risk_off"
         elif dim.trend in ["strong_up", "up"] and dim.risk_appetite == "risk_on":
@@ -916,7 +795,19 @@ class RegimeDetector:
 
         return max(0.0, min(100.0, score))
 
-    def _apply_hysteresis(self, new_regime: MarketRegime) -> MarketRegime:
+    def _confirmed_view(self, observed):
+        """Confirm structural trend only; fresh volatility/risk must never be hidden."""
+        if self._confirmed_regime is None:
+            return observed
+        dims = replace(observed.dimensions, trend=self._confirmed_regime.dimensions.trend)
+        trend_score = self._confirmed_regime.trend_score
+        return replace(observed, dimensions=dims, trend_score=trend_score,
+                       composite=self._generate_composite_label(dims),
+                       score=trend_score * .3 + observed.volatility_score * .2
+                       + observed.liquidity_score * .2 + observed.risk_score * .2
+                       + observed.derivatives_score * .1)
+
+    def _apply_hysteresis(self, new_regime: MarketRegime, evidence_id=None) -> MarketRegime:
         """
         Apply hysteresis with confirmation counter to prevent regime flip-flopping.
 
@@ -926,6 +817,13 @@ class RegimeDetector:
         3. If new regime differs, increment pending counter
         4. Only switch when pending counter reaches confirmation_required
         """
+        if evidence_id is not None:
+            # Global callers supply canonical UTC close times. A replayed or
+            # regressed observation cannot advance structural confirmation.
+            if self._last_confirmation_evidence is not None and evidence_id <= self._last_confirmation_evidence:
+                return self._confirmed_regime or new_regime
+            self._last_confirmation_evidence = evidence_id
+
         # First regime - accept and confirm immediately
         if self._confirmed_regime is None:
             self._confirmed_regime = new_regime
@@ -939,7 +837,7 @@ class RegimeDetector:
             return new_regime
 
         # Same as confirmed - reset any pending transition
-        if new_regime.composite == self._confirmed_regime.composite:
+        if new_regime.dimensions.trend == self._confirmed_regime.dimensions.trend:
             if self._pending_regime is not None:
                 logger.info(
                     "📊 REGIME STABLE: %s (pending %s cancelled after %d readings)",
@@ -958,7 +856,7 @@ class RegimeDetector:
             return new_regime
 
         # Different from confirmed - check if continuing pending or starting new
-        if self._pending_regime == new_regime.composite:
+        if self._pending_regime == new_regime.dimensions.trend:
             # Same as pending - increment counter
             self._pending_count += 1
             logger.info(
@@ -994,7 +892,7 @@ class RegimeDetector:
                 new_regime.composite,
                 self._confirmation_required
             )
-            self._pending_regime = new_regime.composite
+            self._pending_regime = new_regime.dimensions.trend
             self._pending_count = 1
             
             # Keep history

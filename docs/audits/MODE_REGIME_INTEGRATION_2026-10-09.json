@@ -1,0 +1,501 @@
+{
+  "date": "2026-10-09",
+  "status": "offline_implementation_and_verification_complete",
+  "scope": "Regime validity, authoritative scanner recommendation, consistent fixed playbooks and opt-in adaptive simulated-paper routing; ML excluded",
+  "decision": "backend/diagnostics/decisions/2026-10-09__mode-regime-integration.md",
+  "baseline": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-base-fxapvm7k",
+  "baseline_kind": "pre-batch working tree including earlier authorized edits; not Git HEAD",
+  "versions": {
+    "regime": "daily-regime-v2",
+    "recommendation": "mode-routing-v1",
+    "playbook": "fixed-playbook-v1",
+    "score_model": "family-evidence-v2"
+  },
+  "mode_gates": {
+    "overwatch": 75,
+    "strike": 65,
+    "surgical": 70,
+    "stealth": 65
+  },
+  "behavior_changes": [
+    "Global regime uses verified completed daily BTC candles. Shared validation rejects malformed, stale, forming and gapped input before cache reuse.",
+    "Shared Wilder ADX seeds/smoothing and simultaneous directional-move ties replace inconsistent implementations.",
+    "Display and advice share one daily observation with named4h/weekly context, source close times and bounded expiry; missing inputs are unavailable, not STEALTH.",
+    "Weekly advice requires fresh weekly evidence. Directional routing is symmetric and constrained by allowed modes; high volatility/thin liquidity abstains.",
+    "Fixed scanner/paper/live applies one complete selected playbook before indicators/planning: MACD, SMC, timeframe roles, VAP, planner overrides, qualification gate.",
+    "Bot restrictions cannot waive the mode minimum, under either legacy or thesis policy. Paper can halve size between qualified floor and stricter full-size gate.",
+    "STEALTH cross-profile cascade disabled while preserving no-swing restriction; deleted unused legacy recommendation function after consumer check.",
+    "Adaptive simulated paper only; initial mode immediate, changes require two increasing4h observations. Missing/unsuitable inputs wait while position monitoring continues.",
+    "Plans, signal logs, active positions, checkpoints and completed records retain originating strategy provenance; cross-mode incoming plans cannot replace pending/open trades.",
+    "Separate bot/scanner choices in UI. Recommendation expires/refreshes and applies only when the user chooses it."
+  ],
+  "blast_radius": {
+    "inputs": "OHLCV ingestion -> shared regime validation -> indicator service/ADX -> daily detector + weekly/4h matrix -> cached advice",
+    "scanner": "API routes/ScannerService -> apply_mode -> worker serialization -> gates/scorer/planner -> API/UI evidence",
+    "paper": "Paper request -> selection validation -> fixed/shared adaptive selector -> apply_mode -> core -> gate/sizing -> executor/manager -> checkpoint/journal/UI",
+    "live": "Live request -> fixed-only validation before credentials -> selected playbook -> admission gate -> existing live lifecycle/execution",
+    "state": "Engine structural trend confirmation is private; advice source owned by SerializedWorker; adaptive pending selection is session-local; existing trade provenance is detached.",
+    "rollback": "Coordinate backend/frontend policy rollback from pre-batch snapshot. Preserve histories and strategy keys; do not roll back unrelated prior working-tree changes."
+  },
+  "independent_reviews": {
+    "regime_design_review": {
+      "final": "No remaining blockers by source inspection; no tests run by reviewer.",
+      "resolved": [
+        "daily vs weekly reference mismatch",
+        "unavailable fallback advice",
+        "ADX tie/seeding differences",
+        "fresh risk hidden by confirmation",
+        "expiry/source validity",
+        "weekly-source validation",
+        "repeated/regressed daily and4h confirmations"
+      ]
+    },
+    "mode_consistency_review": {
+      "final": "No further blocking defects found by source inspection; no tests run by reviewer.",
+      "resolved": [
+        "forced STEALTH/fusion",
+        "canonical planner aliases",
+        "gate normalization",
+        "paper qualified floor and full-size separation",
+        "React stale dependencies",
+        "zone/trigger ingestion and consumer wiring",
+        "VAP fixed horizon",
+        "safe planner override types",
+        "no accidental STEALTH swing enablement",
+        "strategy log/position/completion propagation"
+      ],
+      "correction": "Nested-entry helper is executed for OVERWATCH/STEALTH, not SURGICAL; the earlier SURGICAL1m warning described helper fallback inconsistency, not a demonstrated executed nested-entry bug."
+    }
+  },
+  "test_expectation_changes": [
+    "Thesis positive handoff fixture now uses qualified75 instead of bypassed40; rejected40 direction/score evidence retained.",
+    "Balanced/aggressive bot floor is clamped to selected-mode minimum; original numerical policy resolver tests remain.",
+    "Fixed raw SHORT tape qualifies numerically but bot rejects target-distance/RR cap after fixed VAP changes geometry. No tape, score or cap tuned to obtain a pass.",
+    "Direct planner failure injection replaces disabled cascade injection; one terminal event retains precise post_plan_revalidation reason.",
+    "Real paper target ladder may take several monitor ticks; execution receipt/accounting assertions remain.",
+    "Lifecycle fixtures provide valid typed configs; bounded event wait avoids indefinite hangs. Isolated source-extraction fixtures updated for new imported helpers.",
+    "JSON round-trip assertion accounts for tuple-to-list serialization without changing provenance content."
+  ],
+  "verification": {
+    "backend_manifest": {
+      "path": "backend/diagnostics/offline_checks.json",
+      "sha256": "3b97567034d25468285c9368022b53ddd468afc53a090d2dee72139b97ac9cc7",
+      "test_files": 110,
+      "unique_collected_tests": 2439,
+      "disposition": "All selected tests passed after fixes and targeted reruns. Not all repository tests; not one all-green monolithic run.",
+      "coverage_accounting": "Complement passed2404 and deselected35 raw workflow tests. Joined workflow run included all35 plus86 overlapping tests;115 passed and6 failed. All6 failures were confined to assertion/schema expectations and passed in12-test targeted rerun. Production Python sources were unchanged between these final runs; only test fixtures/expectations were corrected."
+    },
+    "backend_complement": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-complement-passed.txt",
+      "sha256": "530bed5c25d7293e50a56ff6a32c96f6f5da1a51b0bf2026c3282dfb6d5a190c",
+      "results": [
+        "[offline] seven guard-denial checks passed",
+        "2404 passed, 35 deselected, 359 warnings in 78.58s (0:01:18)",
+        "[offline] blocked operations: ['os.mkdir outside fixture directory', 'subprocess.Popen']"
+      ]
+    },
+    "joined_workflow_before_final_assertion_repairs": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-workflow-final.txt",
+      "sha256": "ad5a4e7bf090665b62afbbf49c5875d4b2986161ee63f5e67bb90d9021f7b14a",
+      "results": [
+        "[offline] seven guard-denial checks passed",
+        "2026-10-09 09:15:08.758 | INFO     | backend.data.ingestion_pipeline:parallel_fetch:276 - Parallel fetch complete: 3 succeeded, 0 failed",
+        "2026-10-09 09:15:20.523 | INFO     | backend.data.ingestion_pipeline:parallel_fetch:276 - Parallel fetch complete: 3 succeeded, 0 failed",
+        "2026-10-09 09:16:32.816 | INFO     | backend.data.ingestion_pipeline:parallel_fetch:276 - Parallel fetch complete: 3 succeeded, 0 failed",
+        "2026-10-09 09:16:44.074 | INFO     | backend.data.ingestion_pipeline:parallel_fetch:276 - Parallel fetch complete: 3 succeeded, 0 failed",
+        "2026-10-09 09:16:54.216 | INFO     | backend.data.ingestion_pipeline:parallel_fetch:276 - Parallel fetch complete: 3 succeeded, 0 failed",
+        "2026-10-09 09:17:04.033 | INFO     | backend.data.ingestion_pipeline:parallel_fetch:276 - Parallel fetch complete: 3 succeeded, 0 failed",
+        "6 failed, 115 passed, 2318 deselected, 70 warnings in 300.53s (0:05:00)",
+        "[offline] blocked operations: ['subprocess.Popen']"
+      ]
+    },
+    "final_workflow_repairs": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-workflow-repair.txt",
+      "sha256": "1070e44993b961d91d89dc032d37f434738e24e06b2535888952fa31c1ef39ef",
+      "results": [
+        "[offline] seven guard-denial checks passed",
+        "12 passed, 2427 deselected, 24 warnings in 136.18s (0:02:16)",
+        "[offline] blocked operations: ['subprocess.Popen']"
+      ]
+    },
+    "new_regime_and_paper_cases": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-new-tests.txt",
+      "sha256": "de8c219f7c4b43b270d501df5c646e81b86172b3627936129291584119f2faf6",
+      "results": [
+        "[offline] seven guard-denial checks passed",
+        "61 passed, 2378 deselected, 20 warnings in 10.19s",
+        "[offline] blocked operations: ['subprocess.Popen']"
+      ]
+    },
+    "universe_fixture_repair": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-universe-final.txt",
+      "sha256": "9d47dabca4fd0848814453587f765ca9e23e8f289997b69b7bcfd9f5a7ea36ea",
+      "results": [
+        "[offline] seven guard-denial checks passed",
+        "14 passed, 2425 deselected in 8.51s",
+        "[offline] blocked operations: ['subprocess.Popen']"
+      ]
+    },
+    "frontend": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-ui-final.txt",
+      "sha256": "c7018d4fba6330000dc521257ae78c41698b099a13f01f278e15dd913af9fa67",
+      "results": [
+        " Test Files  3 passed (3)",
+        "      Tests  45 passed (45)"
+      ]
+    },
+    "final_card_copy": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-card-final.txt",
+      "sha256": "36848fe7f8a1cbd83a864ab18832a791da4067d93287884a4ae66f3be57dfada",
+      "results": [
+        " Test Files  1 passed (1)",
+        "      Tests  5 passed (5)"
+      ]
+    },
+    "typescript": {
+      "command": "node_modules/.bin/tsc --noEmit",
+      "exit_code": 0,
+      "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-ts-final.txt"
+    },
+    "contracts": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-contracts.txt",
+      "sha256": "5b62ec1fe483f0e02f6a2004af4b993d23c41e37c36b5d55e525eac3adf2ad15",
+      "results": [
+        "[offline] seven guard-denial checks passed",
+        "=== RESULT: DRIFT/INCOMPLETE (6 changes) ===",
+        "[offline] blocked operations: ['socket.bind', 'socket.getaddrinfo', 'subprocess.Popen']"
+      ]
+    },
+    "smoke": {
+      "path": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-smoke.txt",
+      "sha256": "851608f8d1c959f9cd65c28c065236ac3514a67bb64788afa5a1105e548e4d4d",
+      "results": [
+        "[offline] seven guard-denial checks passed",
+        "=== RESULT: DRIFT (5 changes) ===",
+        "[offline] blocked operations: ['socket.bind']"
+      ]
+    },
+    "earlier_attempts": [
+      {
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-backend.txt",
+        "result": "Stopped owned test runner after lifecycle fixture awaited event that validation prevented."
+      },
+      {
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-mode-regime-backend-v2.txt",
+        "result": "41failed/2375passed. Includes outdated policy/AST fixtures and source-inspection failures while source was still changing; superseded by stable-source final runs."
+      }
+    ],
+    "syntax_and_reference_checks": "Changed Python parsed, audit JSON parsed, local links in current map/decision/discovery resolved, and recorded source hashes match."
+  },
+  "contract_disposition": {
+    "contracts": "Intentional drift:6 JSONL writer changes (implementation hashes and one additional strategy key for paper/live signal logs and CompletedTrade). API/telemetry/pipeline inventories clean; inventories do not fully inspect request/response models.",
+    "smoke": "Intentional5 drifts: three gate changes already from previous score-policy batch, plus STEALTH cascade disabled and allowed trade types excludes swing.",
+    "baseline_updates": "None. Existing contract/smoke baselines retained."
+  },
+  "limitations": [
+    "Offline synthetic paper fixtures establish software behavior, not forward profitability, optimal recommendation routing or calibrated win probabilities.",
+    "Global daily ATR cutoffs, intraday planner volatility bands and representative signal frequency remain uncalibrated.",
+    "Existing fixed-profile pullback/backing heuristics are not fully consolidated into timeframe-role fields; nested triggers are not mandatory for every fallback setup.",
+    "Policy provenance is not a full historical replay snapshot of all inputs/planner/management settings.",
+    "Serialized inline worker fixtures do not certify actual process spawning/concurrency, exchange fills, live startup or automatic restart.",
+    "Frontend checks use static rendered markup and pure freshness tests, not a browser/mobile interaction session.",
+    "No service restart, deployment, bot startup, credential access, real orders, ML implementation/training or historical record rewrite performed for this batch.",
+    "Runtime protected hashes were captured for the final verification phase, not at batch start; external running processes may write runtime data.",
+    "The legacy composite regime score retains a neutral derivatives contribution because no verified derivatives feed exists. The UI marks derivatives unavailable and new mode routing uses measured trend/volatility/participation dimensions rather than this composite score."
+  ],
+  "checklist": {
+    "scope_intent": "Current request and pre-batch baseline recorded.",
+    "fundamentals": "Callers, units, candle-close time, source freshness, declared timeframe roles and canonical mode aliases checked.",
+    "contracts_ownership": "Core/API/UI/advice/bot/position/journal consumers traced; deliberate shape drift recorded without baseline replacement.",
+    "behavioral_evidence": "All2439 selected backend tests covered after targeted repairs;45 frontend tests, final5-test card rerun and TypeScript pass. Contracts/smoke show documented deliberate drift.",
+    "accounting_diagnosability": "Existing execution accounting untouched; provenance additive; unknown results remain unknown.",
+    "safe_verification": "Guarded runner only; denial checks and blocked operations retained in logs.",
+    "trading_assumptions": "Routing/gates explicitly uncalibrated; adaptive limited to simulated paper.",
+    "reviewable_completion": "Independent source reviews closed; implementation and final evidence recorded; forward-paper performance remains a separate acceptance requirement."
+  },
+  "changed_files": {
+    "backend/analysis/mode_recommendation.py": {
+      "before_sha256": null,
+      "after_sha256": "90a356e0c764b38d3f7c9f41712b0481966bf86f2a71248e533caf5cbc215e8d"
+    },
+    "backend/analysis/regime_detector.py": {
+      "before_sha256": "4a4b440f08bdb1d41782994d8a1a92d5272c5fd8e9cc7907665a437a95dbfb43",
+      "after_sha256": "5a5bc6c49de25d11998569ad8fb2bb41715a0d61db0ddb0db6e301a2b91c429e"
+    },
+    "backend/analysis/regime_inputs.py": {
+      "before_sha256": null,
+      "after_sha256": "d5a1c281d683ed1d5740d7461854ec8697cc01f2ed642472702f79e7e12158fe"
+    },
+    "backend/api_server.py": {
+      "before_sha256": "5284dde246d2ef03ebf0a7ecf878777fc39b06e73fd37dce6576fec2f7bba131",
+      "after_sha256": "b3933afb28d291abca4fbed9742c6ebe661a532ada5aad338cace1592a6f2583"
+    },
+    "backend/bot/executor/position_manager.py": {
+      "before_sha256": "ef116a309cd8bcc93d96399066e75a142172f2e6366d5ea615acd06b4fa63918",
+      "after_sha256": "3fa9a7a68d86c29a0134e37359bfeeb36852cea2b18943008cdc18d707a6c6b9"
+    },
+    "backend/bot/live_trading_service.py": {
+      "before_sha256": "9cd259052e46619c708e3c331876b513dbffcb254fd75ad0e3f94944eda25745",
+      "after_sha256": "43692e84efede59418b94ddbdda1a0790cac00ddc53d8e54fd9c49c620f55c02"
+    },
+    "backend/bot/paper_trading_service.py": {
+      "before_sha256": "9aa662327dba0cbf8c59926ce412de0d2d6c064ae56c12d990a6f1cd5c4f9c9b",
+      "after_sha256": "a5eec2ca433d7c6ad3124c8e805fd47ebb6ebf35fe5b4e8eea37f39c2267c596"
+    },
+    "backend/diagnostics/decisions/2026-10-09__mode-regime-integration.md": {
+      "before_sha256": null,
+      "after_sha256": "e6e09840f4da4ffd2a8e21f88e8a052c80fa885d20351e09c56fbc41e6d67152"
+    },
+    "backend/diagnostics/offline_checks.json": {
+      "before_sha256": "ac09e22533449ac98bc66ba89292dd9e07a9bb92341fad835b48253a3a576957",
+      "after_sha256": "3b97567034d25468285c9368022b53ddd468afc53a090d2dee72139b97ac9cc7"
+    },
+    "backend/engine/orchestrator.py": {
+      "before_sha256": "c51dd06dd1418717173882e0f568a56b643548a3f6de501b9119596c88c0fc9d",
+      "after_sha256": "4e08112e73556b310adab2d704bec3e65fefda0d1e9a9bc91f05c49a59f61ff2"
+    },
+    "backend/indicators/momentum.py": {
+      "before_sha256": "5a34656ecf000278ef1f364cca37e383e0bbbe1b241cc17ecba4ce72faa71339",
+      "after_sha256": "b900e53892799785179f2045004a34a1b005af740e86f194a6ab6522a12021d7"
+    },
+    "backend/routers/scanner.py": {
+      "before_sha256": "7d2db7478cec074e3dfae17ea9e97fa7eb5886f535d66c75bdf300262a15f973",
+      "after_sha256": "dcd0f646173f3207bc600078ba4b731291ad4d65f751813b0bad93820d166151"
+    },
+    "backend/services/indicator_service.py": {
+      "before_sha256": "dc3ebcc5180a76b5db0d3fd6bb9119a7bc944720d9fb7a1a190487615e16e49c",
+      "after_sha256": "dab9d44a8d47607a135a7b68553d804a63b620006e81e71aecb4548e141c52a6"
+    },
+    "backend/services/market_regime_service.py": {
+      "before_sha256": "3c94c5483da60cb9cc50124094f6a05a47d7ef399ee658ecf5911d9a07b7cb29",
+      "after_sha256": "c856525e7f0a478bf9c3e3c71fee2b15d56401d54cb70d948ebcb47fc035a8f8"
+    },
+    "backend/services/scanner_service.py": {
+      "before_sha256": "d0f75183d1273ea34139b5e0560231ab1d3aacf439f9dbc2dc796641b5e4c629",
+      "after_sha256": "527f93aac9ae36c29813226fc1e7cdc3f50f35e84a4254e0048b56fd13f9f7a9"
+    },
+    "backend/shared/config/defaults.py": {
+      "before_sha256": "0196e71874483288ba3e7ae1b969be1de7dadfb17f777e43c8a12f5b467a96c7",
+      "after_sha256": "5dab1ddde39c8409d7acefd4e2bd566b360d1ea09e0330f54898fb12d2cacf0b"
+    },
+    "backend/shared/config/live_trading_config.py": {
+      "before_sha256": "26005fc33e134e54d8d8a2796861e4869c3b8dcd59598a07df58ef82da282708",
+      "after_sha256": "6a4ea69abe6d29394d74fd639716bc4fe35edb0da4c2e9990c193b84ad15cc1d"
+    },
+    "backend/shared/config/planner_config.py": {
+      "before_sha256": "400bd6557411937799bb301acf43d3b2d12bfd3202038e7593dc027a67b5dc99",
+      "after_sha256": "453f71254e9ce38366df22f3c87f9d2caba119bd02ff461a06529fb8abbb43a6"
+    },
+    "backend/shared/config/scanner_modes.py": {
+      "before_sha256": "00b45917bc58b9e93719e170167e493a1a4e9692ce7c1641a78bd85f72b256f1",
+      "after_sha256": "99d0eb4e4eef731d7c833597facdd4af4cdcb71de4372ac0170a8bf05e66fc84"
+    },
+    "backend/shared/config/strategy_policy.py": {
+      "before_sha256": null,
+      "after_sha256": "1f02a2d19d7a4a8d05a44272653a21e5a0a7a82a1bc5042c4ce5ec182c1a67a6"
+    },
+    "backend/strategy/planner/planner_service.py": {
+      "before_sha256": "30c92ed6b294074e0048964137fcfae6e0b088495bac7ed9fe9ca2215402f51b",
+      "after_sha256": "7c58460dccc900f0e00ec159cf418f9acaae48428149421f65e0dca03659b7aa"
+    },
+    "backend/strategy/planner/regime_engine.py": {
+      "before_sha256": "dbce73428c8e6cb791c19227946285ce7e2bbd67b6672bfdc41bbdd9a2c5d384",
+      "after_sha256": "2a83ca5be19510f516f4c48d20f34e4738f2472975222998b592ae14053c6426"
+    },
+    "backend/tests/integration/test_core_workflow.py": {
+      "before_sha256": "cb0ec21996aceb12b000049f3d5dae25a99a591049556ec0e0a8dec1acf8a74f",
+      "after_sha256": "42407d58fcc486fba24f31e2f60a14056dd760ddb7b768ec50800b4d6e60a1d2"
+    },
+    "backend/tests/integration/test_paper_workflow.py": {
+      "before_sha256": "a015af1968f3d75d7bff545d3359dd387a699dca5180c245356141e0f9c5c40e",
+      "after_sha256": "293e26aa452976b5ee03a624e008fdc9aa3257ba713988c00811ec5312ff43ea"
+    },
+    "backend/tests/integration/test_scan_rejection_evidence.py": {
+      "before_sha256": "134134693252fda20982f98e213461c5ea6fd9dae41e75ca426a655e4e3e6cc2",
+      "after_sha256": "babb1dbbaf332a63cd759c383f5f4d1bb67826b181646df9a08703fb3383baa4"
+    },
+    "backend/tests/integration/test_scoring_direction_handoff.py": {
+      "before_sha256": "7868b99479cd6084926a9efa2518975081e933c4e66f5603612a9c82800e1e89",
+      "after_sha256": "b547796f41a39a5aa53a406f8ecee9d76f737eb26cb49576f59b5e1e48e22940"
+    },
+    "backend/tests/unit/test_decision_evidence_labels.py": {
+      "before_sha256": "ee8646cee62fdbeef5a3e237449079ba9a7ad69ebfe1828d014ffd38daae29fd",
+      "after_sha256": "06a2f0ef5ec260facdcd33cd456348b532ab5ecfb21ec9a11648a53464ff7e04"
+    },
+    "backend/tests/unit/test_decision_input_cohesion.py": {
+      "before_sha256": "409d40ab08625e30c72374535a3b7f0a7d0655ee15ca21ec6941703ddbaa483a",
+      "after_sha256": "75e184d73fd3c411cd888efea9e722cc21d8b2e297ed9e8122cf925210957fe8"
+    },
+    "backend/tests/unit/test_ev_none_plan_reason_mask.py": {
+      "before_sha256": "4c6627621a1842b2fb6cabe180553c7925ad3bc4530155a4f540284b376af5a0",
+      "after_sha256": "57951d62ce85b51d65e117a5fc7319de3e4ed868953f7c62d62651631b314552"
+    },
+    "backend/tests/unit/test_execution_journal.py": {
+      "before_sha256": "f501381b596fef6c139a2cd99ccb38e081b3620b66ce87618e2cd8281b55251c",
+      "after_sha256": "a94722ca6b25b3db0767b2c57c02916bf96baf493a0222a3c49c2dbafe1f7845"
+    },
+    "backend/tests/unit/test_exit_receipts.py": {
+      "before_sha256": "f8d44b44e22cd6052ae78198381d64946b332d71d7a923aab8fc16d1feb42882",
+      "after_sha256": "f537f966d40317aa1746accb5ceee6d1ea1a08264c05ea5f8f0e755fa3a0bb77"
+    },
+    "backend/tests/unit/test_live_lifecycle.py": {
+      "before_sha256": "241fb618c83d18a84362b4179a12cefbe3a4ccf4236c6a03854d6e24d43b8853",
+      "after_sha256": "6712d5f7ee735f21646ed4ae2be879a7df1424f59cbf07ce3d5768e71b39f0be"
+    },
+    "backend/tests/unit/test_live_reconciliation.py": {
+      "before_sha256": "cac723a6fd51cd35611a13117d634b3d2126861b242ea9cbf86bde2fd3661a58",
+      "after_sha256": "3b3347650ecc09a8786166b9fd13bb66dd0e8fa12110ab5fe2dfd7b050d58f2a"
+    },
+    "backend/tests/unit/test_market_regime_ownership.py": {
+      "before_sha256": "6efda95e94aef43bc03ef0410f3ffa449f9f0b2d7b754dc0de762544fbcd4626",
+      "after_sha256": "5365d515870eb49562506e366644ea2c727730ef846e4cf221784213e1e1890d"
+    },
+    "backend/tests/unit/test_mode_regime_policy.py": {
+      "before_sha256": null,
+      "after_sha256": "9ff60f047fa148631b417d7cd9ab242f2179b6d89a4ebd8308121e884ab0ef35"
+    },
+    "backend/tests/unit/test_sensitivity_contract.py": {
+      "before_sha256": "47d74d17e8f92e44a6cf1f8770e3846a8050c32484678d6b4f89781d5b7b9efb",
+      "after_sha256": "bdc67c1dc693d1b3a849053b1975157be7055e7414266b2ee1a477bc8a7b56d9"
+    },
+    "backend/tests/unit/test_universe_consumers.py": {
+      "before_sha256": "b45769d1bbeed0c61a48faf2ae6480841fcb19f9347996c32b343e9cc16d77cf",
+      "after_sha256": "b4f0142d06541f1710693b6b678d061aad9f56b4f3eb0bee2003cc3c09c23ffc"
+    },
+    "docs/ARCHITECTURE_INDEX.md": {
+      "before_sha256": "b0072372591d0c7a5285d625eb070cea654aafa513dc622f84a7cb9e5849e64c",
+      "after_sha256": "ea53744c51d6ba9ef1289a68be8dd96780e50845acb9385265ac93ec27ece531"
+    },
+    "src/components/hud/BotStrategySettings.tsx": {
+      "before_sha256": null,
+      "after_sha256": "b1be4b145986cb340995d6ceaff2d659620fd64428ebcc6a39794010099bd94f"
+    },
+    "src/components/hud/ScannerModePicker.policy.test.tsx": {
+      "before_sha256": null,
+      "after_sha256": "e53840568f6d006eedf9c5341f363d0516bb998d13cf9b82c6d853616319b4a2"
+    },
+    "src/components/hud/ScannerModePicker.tsx": {
+      "before_sha256": "1f6bf60acadf97df6694504178d5c1d228bc82d3cbfe97d70a7e92400cbb84a0",
+      "after_sha256": "fe6f8c303543873edcebf89770b4d64a850eb0d5bfc9beb2c482b545fff53732"
+    },
+    "src/context/ScannerContext.tsx": {
+      "before_sha256": "f3bfcea7e9d5389f45cec85a2d7e2748e8479b4d83cbfd370b33b9ffbaa0a502",
+      "after_sha256": "bd3eb183d5c4a2c48ce911256b2f63ecb2463db1b02b34343bb2813d7994e23c"
+    },
+    "src/hooks/useMarketRegime.ts": {
+      "before_sha256": "732f1ac6b2e69a5c1cd941e2104f23ede0d2b7b524f905712e7eca588a462c48",
+      "after_sha256": "04cc141b8fa2e1a58464bf9085add00e491c10e02df926f0c72eccba962b8bcf"
+    },
+    "src/hooks/useScannerRecommendation.ts": {
+      "before_sha256": null,
+      "after_sha256": "1c50f24840935b867636c04116cb21d2e7d3bbc1dc71218e8a3f374fedd13088"
+    },
+    "src/pages/BotSetup.tsx": {
+      "before_sha256": "4f47352e0323937ed8149566d33c8d18707b802a066e1441a80d28110394b3f8",
+      "after_sha256": "018d5a8894d2fb947fa7195eaa0c37e28ccd8ba9b90770e231bb24107bfaf3a5"
+    },
+    "src/pages/Intel.tsx": {
+      "before_sha256": "802b2409df671ee32e14ad4e7090c27a2fa5db1eca4c31581dc090ac36812cc0",
+      "after_sha256": "7727ed5c7fffd11b333c630178b1d5bb2d00a7ef741f52b227c76da93371a8e9"
+    },
+    "src/pages/training/RangeBot.tsx": {
+      "before_sha256": "b0b3ad73544bf6fe62a91034bf4566432c016a61a2388c0ee7baa3077091d237",
+      "after_sha256": "1d3aae55788b7d908d0fa5b7f290c562aad2a212e4bc8299ae304f8a5c89337e"
+    },
+    "src/services/liveTradingService.ts": {
+      "before_sha256": "9534bed09e62f112ca4702416fcae9aed9a8290d1f6ffece31c880ce6a5b7255",
+      "after_sha256": "c5e7a8a4e58f67d12d53b3e2fe4ae366954949b57b0b59a64cec6b849e46d0ea"
+    },
+    "src/services/paperTradingService.ts": {
+      "before_sha256": "ae204ed80152fdc94133a8e855589383bd83f357487b309808cfd916545d54ba",
+      "after_sha256": "518bfe7409f557d7035832a031a62341529212c0815515f73ba313a69354abee"
+    },
+    "src/utils/api.ts": {
+      "before_sha256": "818f1543695fdbc37e64d61dc25da047c4150c6a90d383c971acca81bb247241",
+      "after_sha256": "60c6bdf766645b08de57a5c7be81006f73f2198c84d36e7e8140f01cabf12dc4"
+    },
+    "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": {
+      "before_sha256": "67adec2f7065b7e5da0f421be34005fd5364977d1d3650657038a8cee165c4fe",
+      "after_sha256": "9950f1dbddd86ecdec81363fdd3db4b8288cf0462bd09dbf5461dba4b5aa0f7e"
+    },
+    "docs/audits/SYSTEM_DISCOVERY_2026-10-07_evidence.json": {
+      "before_sha256": "a7f58be201c4aa654b1a780b600102d2c4a29fe71fdba30b409f58c2ef7c96e4",
+      "after_sha256": "5b29ef89e5990a799f7fbacbf6dc2386b983481f4eec61e164fa7e4acd5d73c6"
+    },
+    "docs/audits/SYSTEM_DISCOVERY_2026-10-07_coverage.json": {
+      "before_sha256": "ae7883d5612d8c378c24d86da478a3d8ed13b11b9afd280420961002a23c4aec",
+      "after_sha256": "52a3a8d8aab025c612ba869c278aebd2d12f0f0a3748f3f58c14d7dac4fba211"
+    }
+  },
+  "removed_symbols": [
+    {
+      "path": "backend/strategy/planner/regime_engine.py",
+      "symbol": "get_mode_recommendation",
+      "reason": "Unused conflicting advice policy; former test replaced with fixed-mode isolation; primary policy is backend/analysis/mode_recommendation.py."
+    }
+  ],
+  "completed_at_utc": "2026-10-09T13:23:24.254516+00:00",
+  "protected_files_final_phase": [
+    {
+      "path": "backend/cache/trade_journal.jsonl",
+      "before": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "after": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T13:23:24.254516+00:00"
+    },
+    {
+      "path": "backend/cache/telemetry.db",
+      "before": "38214c240f9daa1c2bd15b7801813e0715a14608bf5e9884d7719c3d1ff99beb",
+      "after": "d9a4777b358f6fe5517061aa597afacc949a41c7d2931fce135550c28ead2771",
+      "unchanged": false,
+      "observed_at_utc": "2026-10-09T13:23:24.254516+00:00"
+    },
+    {
+      "path": "backend/diagnostics/pipeline_smoke_golden.json",
+      "before": "826ef04eb1c92d5b3171cd42affc5ab84738fd9d64aba0fedd1d39fcef53980b",
+      "after": "826ef04eb1c92d5b3171cd42affc5ab84738fd9d64aba0fedd1d39fcef53980b",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T13:23:24.254516+00:00"
+    },
+    {
+      "path": "backend/diagnostics/contracts/api_contracts.json",
+      "before": "19794ce65158ea2c76ac9119eff24a9ebb4dcec9b89345699f71086423c261cd",
+      "after": "19794ce65158ea2c76ac9119eff24a9ebb4dcec9b89345699f71086423c261cd",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T13:23:24.254516+00:00"
+    },
+    {
+      "path": "backend/diagnostics/contracts/db_contracts.json",
+      "before": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      "after": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T13:23:24.254516+00:00"
+    },
+    {
+      "path": "backend/diagnostics/contracts/pipeline_contracts.json",
+      "before": "a4037b29ac1572df37e70bb8e3b728407536c57e9c8c009bc47c1f3f4a12e819",
+      "after": "a4037b29ac1572df37e70bb8e3b728407536c57e9c8c009bc47c1f3f4a12e819",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T13:23:24.254516+00:00"
+    },
+    {
+      "path": "backend/diagnostics/contracts/telemetry_contracts.json",
+      "before": "f21fbe98d4cf9f2dd18026b623bd0b4f821f022abf6f870a3fb5eb15b2ba9eef",
+      "after": "f21fbe98d4cf9f2dd18026b623bd0b4f821f022abf6f870a3fb5eb15b2ba9eef",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T13:23:24.254516+00:00"
+    }
+  ],
+  "final_run_changed_python_files": [
+    "backend/tests/integration/test_core_workflow.py",
+    "backend/tests/integration/test_scan_rejection_evidence.py",
+    "backend/tests/unit/test_universe_consumers.py"
+  ],
+  "documentation_updated": [
+    "docs/ARCHITECTURE_INDEX.md",
+    "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md",
+    "docs/audits/SYSTEM_DISCOVERY_2026-10-07_evidence.json",
+    "docs/audits/SYSTEM_DISCOVERY_2026-10-07_coverage.json"
+  ],
+  "protected_files_interpretation": "Trade journal and recorded contract/smoke baselines unchanged during final checks. Runtime telemetry.db hash changed while pre-existing application processes were running. Writer attribution is not established. All application tests used guards denying external-store writes; no database restoration or history rewrite attempted."
+}

@@ -124,6 +124,7 @@ class ScannerService:
         exchange_adapters: Dict[str, Any],
         log_handler=None,
         orchestrator_lock=None,
+        regime_reader=None,
     ):
         """
         Initialize the scanner service.
@@ -137,6 +138,7 @@ class ScannerService:
         self._orchestrator_lock = orchestrator_lock if orchestrator_lock is not None else threading.Lock()
         self._exchange_adapters = exchange_adapters
         self._log_handler = log_handler
+        self._regime_reader = regime_reader
         # Do not fill the shared thread pool with workers waiting for one engine.
         self._worker_slots = asyncio.Semaphore(1)
 
@@ -313,7 +315,7 @@ class ScannerService:
                 except ValueError as e:
                     raise ValueError(f"Invalid mode: {e}") from e
 
-                effective_min = params["min_score"] if params["min_score"] > 0 else mode.min_confluence_score
+                effective_min = max(params["min_score"], mode.min_confluence_score)
 
                 # Apply mode to orchestrator
                 self._orchestrator.apply_mode(mode)
@@ -428,117 +430,15 @@ class ScannerService:
         return transform_trade_plans_to_signals(trade_plans, mode, adapter)
 
     async def get_global_regime_recommendation(self) -> Dict[str, Any]:
-        """
-        Fetch BTC data and detect global regime to recommend scanner mode.
-        """
-        from backend.analysis.regime_detector import get_regime_detector
-        from backend.strategy.planner.regime_engine import get_mode_recommendation
-        from backend.analysis.dominance_service import get_current_dominance
-
-        try:
-            # 1. Fetch BTC Data (Market Leader)
-            # Use Phemex as reliable default for BTC data
-            exchange_key = "phemex"
-            if exchange_key not in self._exchange_adapters:
-                # Fallback to first available
-                exchange_key = list(self._exchange_adapters.keys())[0]
-
-            adapter = self._exchange_adapters[exchange_key]()
-            pipeline = IngestionPipeline(adapter)
-
-            # Fetch BTC/USDT data (HTF needed for regime)
-            # Standardizing on BTC/USDT perps or spot
-            symbol = "BTC/USDT"
-            btc_data = await asyncio.to_thread(
-                pipeline.fetch_multi_timeframe, symbol, ["1w", "1d", "4h", "1h", "15m"]
-            )
-
-            if not btc_data or not btc_data.timeframes:
-                return {
-                    "mode": "stealth",
-                    "reason": "Market data unavailable.",
-                    "warning": "Could not fetch BTC data for analysis.",
-                    "confidence": "low",
-                }
-
-            # 2. Calculate Indicators (ATR for volatility)
-            # Use local IndicatorService to compute required metrics
-            from backend.services.indicator_service import IndicatorService
-
-            ind_service = IndicatorService()
-            btc_indicators = ind_service.compute(btc_data)
-
-            # 3. Detect Global Regime
-            detector = get_regime_detector()
-            regime = detector.detect_global_regime(btc_data, btc_indicators)
-
-            # 4. Get Recommendation
-            rec = get_mode_recommendation(
-                btc_trend=regime.dimensions.trend,
-                btc_volatility=regime.dimensions.volatility,
-                risk_appetite=regime.dimensions.risk_appetite,
-            )
-
-            # 5. Build Market Matrix
-            matrix = {}
-            for tf_label in ["1w", "1d", "4h"]:
-                if tf_label in btc_data.timeframes:
-                    # Use the new exposed method method
-                    trend_lbl, tr_score, tr_desc = detector.analyze_timeframe_trend(
-                        btc_data.timeframes[tf_label], tf_label
-                    )
-
-                    # Map trend to color
-                    color = "gray"
-                    if "strong_up" in trend_lbl:
-                        color = "bright-green"
-                    elif "up" in trend_lbl:
-                        color = "green"
-                    elif "strong_down" in trend_lbl:
-                        color = "bright-red"
-                    elif "down" in trend_lbl:
-                        color = "red"
-                    elif "sideways" in trend_lbl:
-                        color = "yellow"
-
-                    matrix[tf_label] = {
-                        "trend": trend_lbl.replace("_", " ").title(),
-                        "context": tr_desc,
-                        "score": tr_score,
-                        "color": color,
-                    }
-
-            # Add regime details to response for frontend display
-            # Add regime details to response
-            rec["regime"] = {
-                "trend": regime.dimensions.trend,
-                "volatility": regime.dimensions.volatility,
-                "risk": regime.dimensions.risk_appetite,
-                "score": regime.score,
-                "composite": regime.composite,
-            }
-
-            # 6. Add Dominance Data
-            dom = get_current_dominance()
-            if dom:
-                rec["dominance"] = {
-                    "btc": dom.btc_dom,
-                    "alt": dom.alt_dom,
-                    "stable": dom.stable_dom,
-                }
-
-            rec["matrix"] = matrix
-
-            return rec
-
-        except Exception as e:
-            logger.error("Failed to generate regime recommendation: %s", e)
-            return {
-                "mode": "stealth",
-                "reason": "Analysis failed.",
-                "warning": str(e),
-                "confidence": "low",
-            }
+        """Recommend a mode using a private fixed-source market context."""
+        if self._regime_reader is None:
+            from backend.services.market_regime_service import MarketRegimeService
+            factory = self._exchange_adapters.get("phemex")
+            if factory is None:
+                from backend.analysis.mode_recommendation import unavailable_recommendation
+                return unavailable_recommendation("Market reader is not configured.")
+            self._regime_reader = MarketRegimeService(factory)
+        return await self._regime_reader.get_recommendation()
 
 
 # Singleton instance
@@ -551,12 +451,13 @@ def get_scanner_service() -> Optional[ScannerService]:
 
 
 def configure_scanner_service(
-    orchestrator, exchange_adapters: Dict[str, Any], log_handler=None, orchestrator_lock=None
+    orchestrator, exchange_adapters: Dict[str, Any], log_handler=None, orchestrator_lock=None,
+    regime_reader=None,
 ) -> ScannerService:
     """Configure the service with the same ownership lock as synchronous callers."""
     global _scanner_service
     _scanner_service = ScannerService(
         orchestrator=orchestrator, exchange_adapters=exchange_adapters,
-        log_handler=log_handler, orchestrator_lock=orchestrator_lock,
+        log_handler=log_handler, orchestrator_lock=orchestrator_lock, regime_reader=regime_reader,
     )
     return _scanner_service

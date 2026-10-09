@@ -400,6 +400,11 @@ EXCHANGE_ADAPTERS = {
     "bitget": lambda: BitgetAdapter(testnet=False),  # Bot-friendly
 }
 
+from backend.services.market_regime_service import MarketRegimeService
+
+# Display contexts own lazy adapter/services independently of scanner configuration.
+market_regime_service = MarketRegimeService(EXCHANGE_ADAPTERS["phemex"])
+
 # Default to Phemex (no geo-blocking)
 exchange_adapter = PhemexAdapter(testnet=False)
 
@@ -407,7 +412,7 @@ exchange_adapter = PhemexAdapter(testnet=False)
 default_config = ScanConfig(
     profile="stealth",  # Default scanner mode
     timeframes=("1h", "4h", "1d"),
-    min_confluence_score=70.0,
+    min_confluence_score=get_mode('stealth').min_confluence_score,
     max_risk_pct=2.0,
 )
 orchestrator = Orchestrator(
@@ -451,6 +456,7 @@ configure_replay_router(exchange_adapter=orchestrator.exchange_adapter)
 scanner_service = configure_scanner_service(
     orchestrator=orchestrator, exchange_adapters=EXCHANGE_ADAPTERS,
     log_handler=scan_job_log_handler, orchestrator_lock=orchestrator_lock,
+    regime_reader=market_regime_service,
 )
 
 app.include_router(scanner_router)
@@ -1177,7 +1183,9 @@ class PaperTradingConfigRequest(BaseModel):
     """Request model for paper trading configuration."""
 
     exchange: str = "phemex"
-    sniper_mode: str = "strike"  # Match service default (strike is better for bots)
+    sniper_mode: str = "stealth"
+    selection_mode: str = Field(default="fixed", pattern="^(fixed|adaptive)$")
+    allowed_modes: List[str] = Field(default_factory=lambda: ["strike", "surgical", "stealth"])
     initial_balance: float = Field(default=10000.0, ge=100, le=1000000)
     risk_per_trade: float = Field(default=2.0, ge=0.1, le=10)
     max_positions: int = Field(default=3, ge=1, le=10)
@@ -1234,6 +1242,8 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
         paper_config = PaperTradingConfig(
             exchange=config.exchange,
             sniper_mode=config.sniper_mode,
+            selection_mode=config.selection_mode,
+            allowed_modes=config.allowed_modes,
             initial_balance=config.initial_balance,
             risk_per_trade=config.risk_per_trade,
             max_positions=config.max_positions,
@@ -1879,74 +1889,18 @@ async def get_candles(
 
 @app.get("/api/market/regime")
 async def get_market_regime(
-    symbol: Optional[str] = Query(
-        None,
-        description="Optional symbol for symbol-specific regime (returns global + symbol context)",
-    )
+    symbol: Optional[str] = Query(None, description="Reserved symbol hint; this endpoint returns global market context")
 ):
-    """
-    Get current market regime, optionally for a specific symbol.
-
-    Analyzes BTC/USDT market data to determine regime state across
-    trend, volatility, liquidity, risk appetite, and derivatives dimensions.
-    If symbol is provided, returns global regime with symbol-specific context.
-
-    Returns:
-        MarketRegime with composite label, score, and dimension breakdown
-    """
-    # Check cache first (1 minute TTL)
-    cache_key = f"regime:{symbol or 'global'}"
-    cached = REGIME_CACHE.get(cache_key)
-    if cached:
-        logger.debug("Returning cached regime data for %s", cache_key)
-        return cached
+    """Read private global market context, independent of the scanner's mode/source."""
+    from backend.services.market_regime_service import MarketRegimeUnavailable
 
     try:
-        # Detect global regime via orchestrator
-        regime = orchestrator._detect_global_regime()
-
-        if not regime:
-            raise HTTPException(status_code=503, detail="Market regime unavailable: required inputs could not be verified")
-
-        # Get dominance data
-        try:
-            btc_dom, alt_dom, stable_dom = get_dominance_for_macro()
-        except Exception as dom_err:
-            logger.warning("Dominance fetch failed: %s", dom_err)
-            raise HTTPException(status_code=503, detail="Current dominance unavailable") from dom_err
-
-        result = {
-            "composite": regime.composite,
-            "score": regime.score,
-            "dimensions": {
-                "trend": regime.dimensions.trend,
-                "volatility": regime.dimensions.volatility,
-                "liquidity": regime.dimensions.liquidity,
-                "risk_appetite": regime.dimensions.risk_appetite,
-                "derivatives": regime.dimensions.derivatives,
-            },
-            "trend_score": regime.trend_score,
-            "volatility_score": regime.volatility_score,
-            "liquidity_score": regime.liquidity_score,
-            "risk_score": regime.risk_score,
-            "derivatives_score": regime.derivatives_score,
-            "dominance": {
-                "btc_d": round(btc_dom, 2),
-                "alt_d": round(alt_dom, 2),
-                "stable_d": round(stable_dom, 2),
-            },
-            "timestamp": regime.timestamp.isoformat(),
-        }
-
-        # Cache the result
-        REGIME_CACHE.set(cache_key, result)
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Market regime detection failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"Regime detection error: {str(e)}") from e
+        return await market_regime_service.get_global()
+    except MarketRegimeUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Market regime detection failed")
+        raise HTTPException(status_code=500, detail=f"Regime detection error: {exc}") from exc
 
 
 @app.get("/api/market/fear-greed")
@@ -3097,6 +3051,7 @@ class LiveTradingConfigRequest(BaseModel):
     """Request model for live trading configuration."""
     exchange: str = "phemex"
     sniper_mode: str = "stealth"
+    selection_mode: str = Field(default="fixed", pattern="^fixed$")
     risk_per_trade: float = Field(default=1.0, ge=0.1, le=5.0)
     max_positions: int = Field(default=3, ge=1, le=10)
     leverage: int = Field(default=1, ge=1, le=20)
@@ -3165,6 +3120,7 @@ async def start_live_trading(config: LiveTradingConfigRequest):
         live_config = LiveTradingConfig(
             exchange=config.exchange,
             sniper_mode=config.sniper_mode,
+            selection_mode=config.selection_mode,
             risk_per_trade=config.risk_per_trade,
             max_positions=config.max_positions,
             leverage=config.leverage,

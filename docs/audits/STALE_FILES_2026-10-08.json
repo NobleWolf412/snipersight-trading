@@ -1,0 +1,346 @@
+{
+  "date": "2026-10-08",
+  "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+  "authorization": "User: 'Ok. Also any other stale files, delete' following review of stale rubric. Scope: confirmed obsolete project documentation and agent guidance, not runtime-code cleanup.",
+  "deleted": [
+    {
+      "path": "ARCHITECTURE.md",
+      "reason": "Superseded preimplementation blueprint; obsolete mode/endpoints. Current navigation is docs/ARCHITECTURE_INDEX.md.",
+      "sha256_before": "b1045bc45ac5a883ffc49d8b17d8f3ac47d1651c074bcba17a792843520f1118"
+    },
+    {
+      "path": "PROJECT_STRUCTURE.md",
+      "reason": "Superseded blueprint maps nonexistent root module layout; actual code lives under backend/.",
+      "sha256_before": "ee7c8c28a7dad72a6ab4056abb7fb0d7d8e8ccdea13c13330cb740028f68a082"
+    },
+    {
+      "path": "QUICKSTART.md",
+      "reason": "Duplicate outdated startup/testing guide; current package scripts use API 8001 and current offline checks require isolation.",
+      "sha256_before": "f8db70977beb9a0843dd100d5a94aa8829d41560f8d236e6898b2efd2b7c7417"
+    },
+    {
+      "path": "SETUP_INSTRUCTIONS.md",
+      "reason": "One-off failed-installer conversation artifact, not project setup instructions.",
+      "sha256_before": "3116031e926697ddfd8b7db00457403ee05dba94d504e8cb77271a10040618d1"
+    },
+    {
+      "path": "SECURITY.md",
+      "reason": "GitHub-owned-repository template incorrectly directs this project's security reports to GitHub.",
+      "sha256_before": "eb1c24cee565c870da0717981474268978200a4daf580752d57d78ba78eb3c95"
+    },
+    {
+      "path": "docs/API_ADDITIONS.md",
+      "reason": "Instructions to add cycle endpoints already implemented; old adapter implementation no longer matches.",
+      "sha256_before": "29507df3b4889e958f693d6160f2d1476a307c9fb8abbb3078a717c0e85f0beb"
+    },
+    {
+      "path": "docs/api_contract.md",
+      "reason": "False universal JWT/session authentication and obsolete route/response contracts.",
+      "sha256_before": "b15d2552212f9ac35a24571b54cf35a2977cee6451bfd8e330e11a51b4f15290"
+    },
+    {
+      "path": "docs/exchange_profiles.md",
+      "reason": "Documents nonexistent ExchangeProfile/ProfileCapabilities/ProfileRegistry and /api/profiles.",
+      "sha256_before": "2e408b9008e3668c935ec66de6b62daf0534f804a9053d904a79a29df064cd25"
+    },
+    {
+      "path": "docs/INTEGRATION_GUIDE.md",
+      "reason": "Nonexistent backend.api entrypoint, wrong frontend port and obsolete direct scan API.",
+      "sha256_before": "37e3172268cba695b3f99f1273e492b66d5eb0c9efb68fd461e7d7d4a6d289f8"
+    },
+    {
+      "path": "docs/security.md",
+      "reason": "Hypothetical JWT/RBAC/encryption presented as established protections, unsupported by current API.",
+      "sha256_before": "86e03fac1d00789ea9e0b857655fe64f0901a86b8214a20eab0b6a755853cf99"
+    },
+    {
+      "path": "docs/WALLET_AUTHENTICATION.md",
+      "reason": "Claims authentication/KV and active archived wallet-gating UI; provider still mounts but public account selection is not authentication.",
+      "sha256_before": "b4d37a1bc3f217e6051ca533022d10fa53d1d0d4831a89b4b9549daf010c72eb"
+    },
+    {
+      "path": "docs/sniper_ui_theme.md",
+      "reason": "Superseded prescriptive Recon/Extraction Point/Force Multiplier vocabulary; retain active PRODUCT.md and DESIGN.md.",
+      "sha256_before": "f3600756bba7d08b03b05c48e046f601ccf43e05c5ff42ae12aa2dded6edb0e6"
+    },
+    {
+      "path": ".claude/ROUTER.md",
+      "reason": "Tool-specific fixed routing, missing slash commands and obsolete numbered rule references.",
+      "sha256_before": "fb4fc4ffa02ea94e395afabe6460d90df578ff0af105371954f45f4058da78e6"
+    },
+    {
+      "path": ".claude/hooks/verbatim_paste_enforcer.py",
+      "reason": "Retired transcript-heading gate tests formatting tokens instead of review evidence; registration removed with file.",
+      "sha256_before": "e4bc22dbdee7891e2bbcd38e4f252b801240ee4520befd84f8341388e0eb7e81"
+    },
+    {
+      "path": ".claude/hooks/symmetry_guard_reminder.py",
+      "reason": "Retired hook requires old numbered standing-fix rulebook and verbatim protocol; directional review retained in refreshed checklist/agent.",
+      "sha256_before": "008e113f656d20dfc76e0ff8d01e63688f89b1faae46f670fc4ae2640ab2f89d"
+    },
+    {
+      "path": ".codex/hooks/verbatim_paste_enforcer.py",
+      "reason": "Retired transcript-heading gate tests formatting tokens instead of review evidence; registration removed with file.",
+      "sha256_before": "e4bc22dbdee7891e2bbcd38e4f252b801240ee4520befd84f8341388e0eb7e81"
+    },
+    {
+      "path": ".codex/hooks/symmetry_guard_reminder.py",
+      "reason": "Retired hook requires old numbered standing-fix rulebook and verbatim protocol; directional review retained in refreshed checklist/agent.",
+      "sha256_before": "008e113f656d20dfc76e0ff8d01e63688f89b1faae46f670fc4ae2640ab2f89d"
+    },
+    {
+      "path": ".claude/skills/autopsy/SKILL.md",
+      "reason": "Retired entry playbook delegates to removed obsolete forensic suite and assumes journal/telemetry completeness and fixed mode semantics.",
+      "sha256_before": "505123a83d616f32428a6974caeffb0e7c01209a7e1dc60bab35b6b47d87475a"
+    },
+    {
+      "path": ".claude/skills/confluence-trace/SKILL.md",
+      "reason": "Retired forensic playbook assumes obsolete one-direction scoring and fixed cascade/weight semantics; mirrored helper path is missing.",
+      "sha256_before": "fbfabb719fceae273cbbf59936663232f9c0d2363fb2718e81a5eb26a0656cb5"
+    },
+    {
+      "path": ".claude/skills/rejection-survey/SKILL.md",
+      "reason": "Retired forensic playbook maps planner revalidation to execution and risk validation to planning; assumes outdated stage/count semantics.",
+      "sha256_before": "cc4fb9babef9bdc7d9d8d18da2ded40689a9d96c370d3bf2330bb6da86f36549"
+    },
+    {
+      "path": ".claude/skills/scan-autopsy/SKILL.md",
+      "reason": "Retired forensic playbook maps planner revalidation to execution and risk validation to planning; assumes outdated stage/count semantics.",
+      "sha256_before": "657a516a8bdf0f0dafe9cee0400d133be55a04e9159b1e437a0fb7583378f618"
+    },
+    {
+      "path": ".claude/skills/trade-autopsy/SKILL.md",
+      "reason": "Retired forensic playbook infers bugs from absent telemetry and classifies wins/losses using unsupported fixed confidence cutoffs ('luck or undervalued setup'); mirrored helper path missing.",
+      "sha256_before": "4e08b1865b6701bc4a529229ab6b84b101f18b06421e5c9514abd22a35e40348"
+    },
+    {
+      "path": ".claude/skills/triage/SKILL.md",
+      "reason": "Retired mandatory question gate and unavailable command routing conflicts with authorized autonomous work.",
+      "sha256_before": "dbc68d88ba636f78fd908cd808c0753ef67fda82323b6ccb2f69b6a5a0d30d59"
+    },
+    {
+      "path": ".agents/skills/autopsy/SKILL.md",
+      "reason": "Retired entry playbook delegates to removed obsolete forensic suite and assumes journal/telemetry completeness and fixed mode semantics.",
+      "sha256_before": "e68433b72ccba74ee94c55045cc7d7292c4414c9d70279f63aeeff0c734ab594"
+    },
+    {
+      "path": ".agents/skills/confluence-trace/SKILL.md",
+      "reason": "Retired forensic playbook assumes obsolete one-direction scoring and fixed cascade/weight semantics; mirrored helper path is missing.",
+      "sha256_before": "5a4874eb99c6e7bbe8fc374e4f4a17cc373d411bc3dab5e0ae1a7bcd26caa9ca"
+    },
+    {
+      "path": ".agents/skills/rejection-survey/SKILL.md",
+      "reason": "Retired forensic playbook maps planner revalidation to execution and risk validation to planning; assumes outdated stage/count semantics.",
+      "sha256_before": "d6207435896f91fc72e920d7cd514d00c26ea18a2cc2040fd34c327432c6968f"
+    },
+    {
+      "path": ".agents/skills/scan-autopsy/SKILL.md",
+      "reason": "Retired forensic playbook maps planner revalidation to execution and risk validation to planning; assumes outdated stage/count semantics.",
+      "sha256_before": "3dd9e99a8157968b48fe4c12759f19be381c1358f63ec1abc7f5e2d43a1ff987"
+    },
+    {
+      "path": ".agents/skills/trade-autopsy/SKILL.md",
+      "reason": "Retired forensic playbook infers bugs from absent telemetry and classifies wins/losses using unsupported fixed confidence cutoffs ('luck or undervalued setup'); mirrored helper path missing.",
+      "sha256_before": "c6d69999ea0248be13095968345e9c1168518e8116c6a82944b181c2c0476f02"
+    },
+    {
+      "path": ".agents/skills/triage/SKILL.md",
+      "reason": "Retired mandatory question gate and unavailable command routing conflicts with authorized autonomous work.",
+      "sha256_before": "a495d17512b51db1bcf514682b415efb16b79557a2f0aea17ff6eba9127f589a"
+    }
+  ],
+  "updated": [
+    {
+      "path": "AGENTS.md",
+      "sha256_before": "d74b9c3c7b0b83b2c125f385cab233eb73667ab338fb211f5e91ec6a379d6fa9",
+      "sha256_after": "09684343e014b1d053e4c7566d86464dd8318d46e6d967455d176c21e16d2b16"
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256_before": "00e6ad648a6d3a8d22a5740d1f5971fedd6e977ce66f1d75b0715a0aca9f8513",
+      "sha256_after": "62e65cb7091b31c18a727b26444b494f1e35d76345713683692917bad7f64a8d"
+    },
+    {
+      "path": "README.md",
+      "sha256_before": "3e16d1ccf5ed77e30bf0089099247b421ce6ac599e1eeaa68c93c3b1418f4cc9",
+      "sha256_after": "45a892ce35b3847bbab91460ca267d9e15939e4efbe86881638a0795c1e22ed9"
+    },
+    {
+      "path": ".claude/AUDIT_RUBRIC.md",
+      "sha256_before": "69855843c4f371b5ebbfde32788df2a585782de6f20c45dd42dfc01e691ba72f",
+      "sha256_after": "fc4e9e7e0ca4cd10420060ac25b8101de8e0716862d1623e2c4eb71d978f4403"
+    },
+    {
+      "path": ".claude/settings.json",
+      "sha256_before": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7",
+      "sha256_after": "a94af704d8b6b479044f02289873adbc41155557108bece863e24ee4712187d4"
+    },
+    {
+      "path": ".codex/hooks.json",
+      "sha256_before": "376441a3d6346e6a045bfe942c1a175edd44bd29675f5a7682e653c4ad241821",
+      "sha256_after": "124d5ff9d59f88e4895a40b2d44ec6b335a3ebf68524ae8e2c9fe3b67e0f86e7"
+    },
+    {
+      "path": ".claude/skills/README.md",
+      "sha256_before": "68acfaaed9c6197ab69fba7ea73d08f40f9abbe4da6f5f40cdedddc396663f54",
+      "sha256_after": "521e348c69f682b5d58a0a882491f6a25d81745f916f7b255a9eda3496172f5d"
+    },
+    {
+      "path": ".claude/skills/contract-check/SKILL.md",
+      "sha256_before": "eb0f7826949d549d95f4a8da8bb5f4ef9bd6f05e721ebbdafd7148b6e39e9f81",
+      "sha256_after": "5aace14a0f6a51af6e69e5409e8a7360177b493423f5d7f2dc8dc9d5ed016ec8"
+    },
+    {
+      "path": ".claude/skills/tune-confluence-weights/SKILL.md",
+      "sha256_before": "c40dec37d313858a6f0160759eeab6e6ca0ff6daa23a89ed5c6f99f4d2f96d19",
+      "sha256_after": "914832551ceccc895ebe95cbee5b682fe8b18a038393acca001f92e54668b946"
+    },
+    {
+      "path": ".agents/skills/contract-check/SKILL.md",
+      "sha256_before": "a99c53a008b599e574edafc8477f70f4a02f273a28679b18a6d6c33b6f63dd5b",
+      "sha256_after": "5aace14a0f6a51af6e69e5409e8a7360177b493423f5d7f2dc8dc9d5ed016ec8"
+    },
+    {
+      "path": ".agents/skills/tune-confluence-weights/SKILL.md",
+      "sha256_before": "6c2b68399df29a73742631674d47aa5cbf9ff6fe8a20327858eb65b9681c2478",
+      "sha256_after": "914832551ceccc895ebe95cbee5b682fe8b18a038393acca001f92e54668b946"
+    },
+    {
+      "path": ".claude/agents/adversarial-review.md",
+      "sha256_before": "45486173fea62b6490d9233d0758f86e56e33e6086e803b6b9f7c6499f8af971",
+      "sha256_after": "3f5644e953972f7d208c07e94d0b6fe9373e7f56abe2211769840d6ae84f5651"
+    },
+    {
+      "path": ".codex/agents/adversarial-review.toml",
+      "sha256_before": "01cd119f88c40662df531a21f4797fbaa3fd0d085206cbc0ed4deafe41f8e105",
+      "sha256_after": "818aab13df766733d427de679cf01c59cf0265f9d8f2b9f5477cb5a928e6b26e"
+    },
+    {
+      "path": ".claude/agents/backend-integrity.md",
+      "sha256_before": "ddd1050a85817c8a8e320e066fb398e5346bbb6e8784f526ef07b4fc96fef414",
+      "sha256_after": "2e65daf59c9f3ffe03a96f82cd45c8ba438cd38b55327f1e82503be0eceaa18b"
+    },
+    {
+      "path": ".codex/agents/backend-integrity.toml",
+      "sha256_before": "3611a00338f1df7b9d8adfc772742553e234aeca0171a9daeef31e0a64e7ded4",
+      "sha256_after": "ffaec2f3f1479df7c27fcb289fe1c327be5755891b7e796e217ecf69cccf0755"
+    },
+    {
+      "path": ".claude/agents/rejection-forensics.md",
+      "sha256_before": "0dfe0f0ed658ffb063d0faa69c5459065eb63da4c2fffe338fda4cb6bbf7daba",
+      "sha256_after": "ffca6fbbdd9efcdc9f06f8bc54579ec823aa52fecb00f0197429291da0339ba1"
+    },
+    {
+      "path": ".codex/agents/rejection-forensics.toml",
+      "sha256_before": "2cb0f5eaf50c307cc4d2e553228b2ce522919a4dd284d33e563087ba54c6f80c",
+      "sha256_after": "6196e6b23c85e5a2b45a89fa1921006cd3e80423c913824cacaff6a90aa47c2d"
+    },
+    {
+      "path": ".claude/agents/repo-janitor.md",
+      "sha256_before": "1432406e8a61b8c2fc594825fda5ddb4eaa8e98f7e3918284d0b4878cef67c35",
+      "sha256_after": "f4606c5ebeb02af729cd1d843c5386e501e1ead68919757aa62f95c413af55dd"
+    },
+    {
+      "path": ".codex/agents/repo-janitor.toml",
+      "sha256_before": "d74846c1cbf49d613c0050b4d429dddb559839c97cb8bbab835d2b57587bc9d2",
+      "sha256_after": "e64d5da85660037a8f1378963653188415445a79ea08563ecd73e46fc66d4570"
+    },
+    {
+      "path": ".claude/agents/symmetry-guard.md",
+      "sha256_before": "8481783d98887132edf0225482cbc79038a953ac3f10f914bfcf1515c0b5a649",
+      "sha256_after": "0b4fa7fdba81210bae3fb2ae7a182dc25c4b696dd0e15fe891451f69cc1ca9b7"
+    },
+    {
+      "path": ".codex/agents/symmetry-guard.toml",
+      "sha256_before": "a441587c0de66fc59d3848d6a6a4b835538461e4b0faa704b6a185998ca2a501",
+      "sha256_after": "39e73d859d8ac032a087393558832bea73d61b36695e9377e4d6440e695cbb8f"
+    },
+    {
+      "path": "PRODUCT.md",
+      "sha256_before": "40514773d04947421dcee494c66d4a0b64a419423d35598ae2223e21e0b639aa",
+      "sha256_after": "d1eb39cf59f4ab498749acf45c722a4f2a7e9c0428db1bda46a8b9cd8d3c5308"
+    },
+    {
+      "path": "docs/SMC_PIPELINE_REFACTOR.md",
+      "sha256_before": "58c0a627f53321271840f12b62513f831721f8cae2cdcf305b1307527754919f",
+      "sha256_after": "951009ea155a659d29a730b8d4303144089632fc2460ca8d358681c0cb4ef5ee"
+    },
+    {
+      "path": "docs/CYCLE_TRANSLATION_SYSTEM.md",
+      "sha256_before": "d31a42a40a05a759f469e58c103925eb79c2fca86a9bb704b3f4f25ed19af79b",
+      "sha256_after": "b6c6d2cc9cfcd2d1e6dc864f131f83aee1d2cb038450fdea7b53db8fddbc0fb5"
+    },
+    {
+      "path": "docs/TELEMETRY_GUIDE.md",
+      "sha256_before": "ae2924d462758aeec181fb84d817dcc368f86586e6ec7e6609158fe49ab0dfc2",
+      "sha256_after": "56ba81ad0d3bb052df70ec638f2a11024223e9029991832bfaf033622d149136"
+    },
+    {
+      "path": "docs/ARCHITECTURE_INDEX.md",
+      "sha256_before": "adfc6229286716497e130f6aa8e9e4c90ea5c645d6c1c2eb1de64f05c3bf6ec3",
+      "sha256_after": "50816ea21635621028c07491e233464ffc1ce5462c49fe4f6bac000a3c304467"
+    },
+    {
+      "path": "backend/diagnostics/session_debrief.py",
+      "sha256_before": "30ae98b09b65a2bbc908b60d7da30efec4117b284ea5b671073dd9e148646b55",
+      "sha256_after": "8961255678eb7f412c4af28d9957a0e5fa074882fad4d77e6e255957d3f67e16",
+      "scope": "Operator suggestions/help/docstrings only; AST unchanged apart from string constants."
+    },
+    {
+      "path": "backend/diagnostics/autopsy_report.py",
+      "sha256_before": "b5221e95f579ce86e831953af31cae8a205da395fc76a34bfabbc308041bbef6",
+      "sha256_after": "92d52c8458ae80ca615e97970cef6bacb31cf7837f7b13f259b971c045053a83",
+      "scope": "Operator suggestions/help/docstrings only; AST unchanged apart from string constants."
+    }
+  ],
+  "retained": [
+    "Application source, tests, real telemetry/journals, contract baselines and all preexisting implementation changes.",
+    "Audit/decision history and archives, including original mistaken rubric-path claims as historical evidence.",
+    "DESIGN.md and generic UI/design/graph skills; age/duplication is not proof of staleness.",
+    "SMC and cycle proposals retained with historical banners; partially stale telemetry guide explicitly labelled and its tested existence preserved.",
+    "State helper and its tests, weight verifier, pre-commit typecheck; functional utilities retained without claiming calibration.",
+    "Serena/graphify settings and MCP config; only retired-hook registrations removed from modified settings."
+  ],
+  "rubric_correction": "Previous review looked for .Codex/AUDIT_RUBRIC.md. The historical rubric existed at .claude/AUDIT_RUBRIC.md and was last changed in Git on 2026-05-28. It has now been rewritten for current evidence-based review; prior raw reports remain unchanged.",
+  "recovery": {
+    "exact_pre_edit_backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-stale-cleanup-c774be0e08554ec680dce90e5407c2de",
+    "backup_manifest": "manifest.json",
+    "preserved_application_hashes": "preserved_application_hashes.json",
+    "notes": "Includes untracked local instructions. Restore only intended individual paths; do not overwrite later work."
+  },
+  "verification": {
+    "preserved_application_test_history_files": 931,
+    "deleted_files": 29,
+    "hook_config_delta": "only 2 retired registrations removed from each config; remaining hooks identical",
+    "agent_toml_and_mirrors": "5 valid matching role pairs",
+    "retained_project_skill_mirrors": "2 matching pairs",
+    "git_head": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/cache/telemetry.db": "e4bb384bd13ef92dce31bcd7e7c21e44b8293c415a951f21b5764966fc7fd910"
+    },
+    "diagnostic_text_only": [
+      "backend/diagnostics/session_debrief.py",
+      "backend/diagnostics/autopsy_report.py"
+    ],
+    "diagnostic_logic_check": "Both complete ASTs match pre-cleanup files after normalizing string constants. No calculation, branch, signature or field change.",
+    "local_document_links": "85 checked by independent reviewer; all resolve",
+    "diff_check": "clean"
+  },
+  "review": {
+    "status": "PASS for scoped cleanup; initial findings resolved",
+    "initial_findings": [
+      "Active diagnostic suggestions still recommended removed skills; corrected in two text-only source edits.",
+      "Trade-autopsy deletion rationale overstated source wording; corrected.",
+      "Architecture-index source hash required refresh; corrected."
+    ],
+    "final_report": "Verdict: PASS for the scoped cleanup; initial findings resolved.\n\nVerified:\n- All 29 deletions have matching recoverable backups; all 28 updated-file hashes match the final manifest.\n- Active diagnostic suggestions now reference available investigation tools or recorded lifecycle evidence.\n- Both diagnostic files retain identical syntax trees after normalizing string constants; calculations, branches, signatures and fields remain unchanged.\n- The other 931 protected application, test and history files remain byte-identical.\n- Both hook configurations preserve unrelated settings and registrations; exactly two retired registrations were removed from each.\n- Five agent definition pairs and two retained skill pairs match; TOML parses successfully.\n- All 85 checked local Markdown links resolve; Git whitespace checks pass.\n- Deletion rationale and architecture-index metadata corrections are accurate.\n\nNo accidental removal of a current runtime asset found. Replacement guidance distinguishes implemented behavior, historical assumptions and verified evidence.\n\nLimits: source/configuration/reference review only; no application imports, runtime execution or tests. Retained diagnostic heuristics still need separate validation. This verdict does not certify every remaining repository file as current."
+  },
+  "limits": [
+    "Documentation/tooling cleanup, not proof every repository file is current.",
+    "Remaining historical source comments may name deleted blueprints as provenance; active navigation is redirected.",
+    "Application tests not rerun: 931 application/test/history files are byte-identical; 2 diagnostic files change only operator suggestions/help/docstrings (AST check).",
+    "Diagnostic anomaly thresholds/heuristics are retained, not newly validated; the former fixed-mode policy claim is now labelled as a legacy report heuristic."
+  ],
+  "disposition": "Local changes; no commit, push, deployment or runtime process started."
+}

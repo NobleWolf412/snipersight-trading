@@ -56,7 +56,9 @@ def test_worker_syncs_current_regime_onto_orchestrator():
     try:
         mock_orch = MagicMock()
         mock_orch._process_symbol.return_value = ("plan", None)
-        cfg = SimpleNamespace()              # stand-in config object
+        cfg = SimpleNamespace(profile='stealth_balanced', min_confluence_score=70., min_rr_ratio=1.5)
+        mock_orch.config = SimpleNamespace()
+        mock_orch.scanner_mode = 'scanner_mode'
         sentinel_regime = object()           # identity check — was never assigned pre-fix
 
         orch_mod._WORKER_ORCHESTRATOR = mock_orch
@@ -73,7 +75,8 @@ def test_worker_syncs_current_regime_onto_orchestrator():
         assert mock_orch.current_regime is sentinel_regime  # propagated (was None pre-fix)
         assert mock_orch.macro_context == "macro_ctx"        # still synced
         assert mock_orch.scanner_mode == "scanner_mode"      # still synced
-        assert result == ("plan", None)
+        assert result[:2] == ("plan", None)
+        assert all(not rows for rows in result[2].values())
         mock_orch._process_symbol.assert_called_once()
     finally:
         orch_mod._WORKER_ORCHESTRATOR = saved_orch

@@ -118,7 +118,7 @@ def test_drop_reason_bucket_excluded():
     adapter = DummyAdapter([
         "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT",
         "DOGE/USDT", "SHIB/USDT", "PEPE/USDT",  # memes
-        "ADA/USDT", "AVAX/USDT", "LINK/USDT",   # alts
+        "FOO/USDT", "BAR/USDT", "BAZ/USDT",   # offline heuristic alts
     ])
 
     # Majors+memes ON, alts OFF -> alts should be bucket_excluded
@@ -126,8 +126,7 @@ def test_drop_reason_bucket_excluded():
         adapter, limit=20, majors=True, altcoins=False, meme_mode=True,
     )
     excluded = {d["symbol"] for d in dropped if d["reason"] == "bucket_excluded"}
-    # ADA and LINK are clearly alts and not memes/majors-curated
-    assert "ADA/USDT" in excluded or "AVAX/USDT" in excluded or "LINK/USDT" in excluded
+    assert excluded == {"FOO/USDT", "BAR/USDT", "BAZ/USDT"}
 
 
 def test_drop_reason_limit_exhausted():
@@ -234,10 +233,8 @@ def test_snapshot_returns_copy_not_reference():
     snap1 = get_latest_snapshot()
     snap1["selected"].append("HACKED/USDT")
     snap2 = get_latest_snapshot()
-    # The selected list itself is shared by reference (shallow copy of dict);
-    # this is a shallow-copy contract. Documented: callers wanting deep
-    # immutability must copy.deepcopy themselves.
-    # But the OUTER dict mutation should not propagate:
+    assert snap2["selected"] == ["BTC/USDT"]
+    # Neither nested nor outer mutations may propagate:
     snap1["new_field"] = "leak"
     assert "new_field" not in (snap2 or {})
 
@@ -285,9 +282,8 @@ def test_mass_conservation_invariant_holds_normal_path():
         assert s in selected_set or s in dropped_set, f"{s} vanished"
 
 
-def test_mass_conservation_invariant_holds_under_perp_fallback():
-    """When non_perp fallback substitutes the pool, every original symbol
-    must still be accounted for (as non_perp drops)."""
+def test_mass_conservation_invariant_holds_when_no_perps_survive():
+    """Every original candidate remains a non_perp drop, with no substitution."""
     adapter = DummyAdapter(
         symbols=["FOO/USDT", "BAR/USDT", "BAZ/USDT"],  # none are perps
         perps=set(),
@@ -297,29 +293,14 @@ def test_mass_conservation_invariant_holds_under_perp_fallback():
         leverage=10, market_type="swap",
     )
     dropped_set = {d["symbol"] for d in dropped}
+    assert selected == []
     for s in ["FOO/USDT", "BAR/USDT", "BAZ/USDT"]:
         assert s in dropped_set
 
 
-def test_mass_conservation_assertion_fires_on_synthetic_breach(monkeypatch):
-    """If a future change ever silently swallows a symbol, the assertion
-    must trip. Inject a breach by monkeypatching the function to skip an
-    intermediate stage."""
-    from backend.analysis import pair_selection
+def test_mass_conservation_accounts_for_all_eligible_symbols():
+    from backend.analysis.pair_selection import _select_symbols_impl as real_impl
 
-    real_impl = pair_selection._select_symbols_impl
-
-    def buggy_impl(adapter, limit, majors, altcoins, meme_mode, leverage=None, market_type=None):
-        # Call real impl but force a missing symbol by tampering with selected.
-        # We exercise the mass-conservation guard from the outside by
-        # crafting a minimal stub that mimics the breach shape.
-        selected = ["BTC/USDT"]
-        dropped = []  # nothing dropped — but adapter returned more than one
-        # The real assertion lives in real_impl; here we simply confirm
-        # that real_impl WOULD have caught it had this list been wrong.
-        return selected, dropped
-
-    # Sanity: real impl with the same adapter input must NOT raise.
     adapter = DummyAdapter(["BTC/USDT", "ETH/USDT"])
     selected, dropped = real_impl(adapter, 5, True, True, False)
     seen = set(selected) | {d["symbol"] for d in dropped}
@@ -357,12 +338,13 @@ def test_history_evicts_oldest_at_capacity():
     assert history_size() == _HISTORY_SIZE
 
 
-def test_history_returns_shallow_copies():
+def test_history_returns_detached_copies():
     adapter = DummyAdapter(["BTC/USDT"])
     select_symbols(adapter, limit=5, majors=True, altcoins=False, meme_mode=False)
     history1 = get_snapshot_history()
     history1[0]["selected"].append("HACKED/USDT")
     history2 = get_snapshot_history()
+    assert history2[0]["selected"] == ["BTC/USDT"]
     # Outer dict mutation should not propagate
     history1[0]["new_field"] = "leak"
     assert "new_field" not in history2[0]

@@ -56,6 +56,7 @@ import {
   SectionHead,
   fmtPrice,
 } from '@/components/hud';
+import { readScore, readDirection, validScore, passesAdmission, admissionLabel, formatScore } from '@/utils/scoreEvidence';
 import { useScanner } from '@/context/ScannerContext';
 import { scanHistoryService, type ScanHistoryEntry } from '@/services/scanHistoryService';
 
@@ -76,7 +77,6 @@ type Setup = (typeof SETUPS)[number];
 type Tf = (typeof TFS)[number];
 type Regime = (typeof REGIMES)[number];
 type Direction = 'LONG' | 'SHORT';
-type Confidence = 'HIGH' | 'MED' | 'LOW';
 
 type TradeType = 'SWING' | 'INTRADAY' | 'SCALP';
 
@@ -85,9 +85,15 @@ interface CardSignal {
   sym: string;
   dir: Direction;
   setup: Setup;
-  score: number;
+  score: number | undefined;
+  scoreGate: number | undefined;
+  scoreGatePassed?: boolean;
+  evidenceEligible?: boolean;
+  admissionPassed?: boolean;
+  evidenceMissing?: string[];
+  scoreModelVersion?: string;
+  scorePolicyVersion?: string;
   tf: Tf;
-  conf: Confidence;
   regime: Regime;
   mark: number;
   entry: number;
@@ -130,16 +136,14 @@ function synthFromSymbol(sym: string, idx: number): {
   setup: Setup;
   tf: Tf;
   regime: Regime;
-  conf: Confidence;
   bias: [number, number, number, number];
 } {
   const seed = sym.split('').reduce((s, c) => s + c.charCodeAt(0), 0) + idx;
   const setup = SETUPS[seed % SETUPS.length];
   const tf = TFS[seed % TFS.length];
   const regime = REGIMES[seed % REGIMES.length];
-  const conf: Confidence = seed % 3 === 0 ? 'HIGH' : seed % 3 === 1 ? 'MED' : 'LOW';
   const b = (n: number) => 5 + ((seed >> n) % 5);
-  return { setup, tf, regime, conf, bias: [b(0), b(2), b(4), b(6)] };
+  return { setup, tf, regime, bias: [b(0), b(2), b(4), b(6)] };
 }
 
 // ─── Mini chart (per card) ───────────────────────────────────────────────
@@ -331,10 +335,9 @@ function ConvergenceConflictBar({
 
 // ─── Signal Card ─────────────────────────────────────────────────────────
 
-function SignalCard({ sig }: { sig: CardSignal }) {
+export function SignalCard({ sig }: { sig: CardSignal }) {
   const isLong = sig.dir === 'LONG';
-  const confCol =
-    sig.conf === 'HIGH' ? 'var(--green-soft)' : sig.conf === 'MED' ? 'var(--amber)' : 'var(--fg-3)';
+  const confCol = 'var(--fg-2)';
   const setupKind: 'blue' | 'purple' | 'amber' | undefined = sig.setup.includes('FVG')
     ? 'blue'
     : sig.setup.includes('BOS') || sig.setup.includes('CHoCH')
@@ -376,16 +379,25 @@ function SignalCard({ sig }: { sig: CardSignal }) {
             {sig.setup}
           </Chip>
         </div>
-        <div style={{ textAlign: 'right' }}>
+        <div style={{ textAlign: 'right' }} title={[
+          sig.scoreModelVersion && `Score model: ${sig.scoreModelVersion}`,
+          sig.scorePolicyVersion && `Score policy: ${sig.scorePolicyVersion}`,
+        ].filter(Boolean).join(' · ')}>
           <div
             className="mono"
             style={{ fontSize: 18, fontWeight: 800, color: confCol, lineHeight: 1 }}
           >
-            {sig.score.toFixed(1)}
+            {formatScore(sig.score)}
           </div>
           <div className="mono" style={{ fontSize: 8, color: confCol, letterSpacing: '.18em' }}>
-            {sig.conf}
+            {sig.score === undefined ? 'SCORE UNAVAILABLE' : 'SCORE /100'}
           </div>
+          {(sig.evidenceEligible !== undefined || sig.admissionPassed !== undefined) && (
+            <div className="mono" title={sig.evidenceMissing?.join(' · ')}
+              style={{ fontSize: 8, marginTop: 4, color: passesAdmission(sig) ? 'var(--green-soft)' : 'var(--amber-2)' }}>
+              {admissionLabel(sig)}
+            </div>
+          )}
           <ConvergenceConflictBar
             synergy={sig.synergyBonus}
             conflict={sig.conflictPenalty}
@@ -802,10 +814,10 @@ function ScannerRadar({ signals }: { signals: CardSignal[] }) {
         />
         {signals.slice(0, 12).map((s, i) => {
           const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
-          const dist = 30 + (10 - s.score) * 5;
+          const dist = 30 + (100 - (s.score ?? 0)) * 0.5;
           const x = Math.cos(angle) * dist,
             y = Math.sin(angle) * dist;
-          const armed = s.score >= 7;
+          const armed = passesAdmission(s);
           const color = s.dir === 'LONG' ? 'var(--green)' : 'var(--red-2)';
           return (
             <g key={s.id}>
@@ -841,22 +853,23 @@ function ScannerRadar({ signals }: { signals: CardSignal[] }) {
 
 // ─── Helpers: build CardSignals from scan history ────────────────────────
 
-function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
+export function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
   const latest = history[0];
   if (!latest || !Array.isArray(latest.results) || latest.results.length === 0) return [];
-  return latest.results.slice(0, 8).map((r: any, i: number): CardSignal => {
-    const sym: string = r.symbol ?? r.sym ?? 'UNKNOWN/USDT';
-    const dir: Direction =
-      (r.direction || r.side || r.dir || 'long').toString().toUpperCase().startsWith('S')
-        ? 'SHORT'
-        : 'LONG';
+  return latest.results.slice(0, 8).map((r: any, i: number): CardSignal | null => {
+    const sym: string = r.pair ?? r.symbol ?? r.sym ?? 'UNKNOWN/USDT';
+    const dir = readDirection(r);
+    if (!dir) return null; // No directional evidence: do not invent a LONG.
     const synth = synthFromSymbol(sym, i);
-    const entry: number = Number(r.entry ?? r.entry_price ?? r.price ?? 0) || 1;
-    const sl: number = Number(r.stop ?? r.stop_loss ?? r.sl ?? entry * (dir === 'LONG' ? 0.98 : 1.02));
-    const tp1: number = Number(r.tp1 ?? r.take_profit ?? r.tp ?? entry * (dir === 'LONG' ? 1.015 : 0.985));
-    const tp2: number = Number(r.tp2 ?? entry * (dir === 'LONG' ? 1.03 : 0.97));
-    const score: number = Number(r.score ?? r.confluence_score ?? r.confluence ?? 0) || 0;
-    const rr: number = Number(r.rr ?? r.risk_reward ?? Math.abs((tp1 - entry) / Math.max(0.0001, entry - sl))) || 1.5;
+    const entry: number = Number(r.entryZone?.high ?? r.entry ?? r.entry_price ?? r.price ?? 0) || 1;
+    const sl: number = Number(r.stopLoss ?? r.stop ?? r.stop_loss?.level ?? r.stop_loss ?? r.sl ?? entry * (dir === 'LONG' ? 0.98 : 1.02));
+    const tp1: number = Number(r.takeProfits?.[0] ?? r.targets?.[0]?.level ?? r.tp1 ?? r.take_profit ?? r.tp ?? entry * (dir === 'LONG' ? 1.015 : 0.985));
+    const tp2: number = Number(r.takeProfits?.[1] ?? r.targets?.[1]?.level ?? r.tp2 ?? entry * (dir === 'LONG' ? 1.03 : 0.97));
+    const score = readScore(r);
+    const scoreMetadata = r.confluence_breakdown?.metadata ?? r.metadata ?? {};
+    const scoreGate = validScore(scoreMetadata.score_gate ?? latest.effectiveMinScore);
+    const scoreGatePassed = scoreMetadata.score_gate_passed;
+    const rr: number = Number(r.riskReward ?? r.rr ?? r.risk_reward ?? Math.abs((tp1 - entry) / Math.max(0.0001, entry - sl))) || 1.5;
     const mark: number = Number(r.mark ?? r.mark_price ?? entry);
     const id: string = String(r.id ?? `card_${i}`);
     // Trade-type: prefer the convertSignalToScanResult-emitted `classification`
@@ -875,8 +888,15 @@ function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
       dir,
       setup: synth.setup,
       score,
+      scoreGate,
+      scoreGatePassed: typeof scoreGatePassed === 'boolean' ? scoreGatePassed : undefined,
+      evidenceEligible: typeof scoreMetadata.evidence_eligible === 'boolean' ? scoreMetadata.evidence_eligible : undefined,
+      admissionPassed: typeof scoreMetadata.admission_passed === 'boolean' ? scoreMetadata.admission_passed : undefined,
+      evidenceMissing: Array.isArray(scoreMetadata.evidence_missing)
+        ? scoreMetadata.evidence_missing.filter((reason: unknown): reason is string => typeof reason === 'string') : undefined,
+      scoreModelVersion: typeof scoreMetadata.score_model_version === 'string' ? scoreMetadata.score_model_version : undefined,
+      scorePolicyVersion: typeof scoreMetadata.score_policy_version === 'string' ? scoreMetadata.score_policy_version : undefined,
       tf: synth.tf,
-      conf: synth.conf,
       regime: synth.regime,
       mark,
       entry,
@@ -890,7 +910,7 @@ function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
       synergyBonus,
       conflictPenalty,
     };
-  });
+  }).filter((signal): signal is CardSignal => signal !== null);
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────
@@ -956,7 +976,7 @@ export function Scanner() {
   const filtered = useMemo(
     () =>
       cardSignals.filter((s) => {
-        if (s.score < filters.minScore) return false;
+        if (filters.minScore > 0 && (s.score === undefined || s.score < filters.minScore)) return false;
         if (filters.dir !== 'ALL' && s.dir !== filters.dir) return false;
         if (!filters.tfs.includes(s.tf)) return false;
         if (!filters.setups.includes(s.setup)) return false;
@@ -966,7 +986,7 @@ export function Scanner() {
     [cardSignals, filters],
   );
 
-  const armedCount = filtered.filter((s) => s.score >= 7).length;
+  const armedCount = filtered.filter(passesAdmission).length;
   const minScore = selectedMode?.min_confluence_score ?? 0;
   const modeName = (selectedMode?.name ?? '—').toUpperCase();
   const tfRoster = (selectedMode?.timeframes ?? []).join(' · ') || '—';
@@ -1211,25 +1231,25 @@ export function Scanner() {
                       {String(42 - i * 2).padStart(2, '0')}:
                       {String((i * 7) % 60).padStart(2, '0')}
                     </span>
-                    <span className={c.score >= 7 ? 'pass' : 'rej'}>
-                      {c.score >= 7 ? 'PASS' : 'FILT'}
+                    <span className={passesAdmission(c) ? 'pass' : 'rej'}>
+                      {c.score === undefined ? 'N/A' : 'SCORE'}
                     </span>
                     <span>
                       <span className="sym">{c.sym}</span>
                       <br />
                       <span style={{ color: 'var(--fg-3)', fontSize: 10 }}>
-                        {c.score >= 7 ? `${c.setup} aligned · ${c.tf}` : `score < ${minScore}`}
+                        {`${c.dir} · ${admissionLabel(c).toLowerCase()}`}
                       </span>
                     </span>
                     <span
                       className="mono"
                       style={{
                         fontSize: 10,
-                        color: c.score >= 7 ? 'var(--green-soft)' : 'var(--fg-4)',
+                        color: passesAdmission(c) ? 'var(--green-soft)' : 'var(--fg-4)',
                         textAlign: 'right',
                       }}
                     >
-                      {c.score.toFixed(1)}
+                      {formatScore(c.score)}
                     </span>
                   </div>
                 ))

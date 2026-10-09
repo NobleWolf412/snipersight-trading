@@ -55,6 +55,8 @@
  *   cleanup; final post-double-mount state stays set, which is what
  *   Playwright's `data-snapshot-ready` waiter observes.
  */
+import { BotStrategySettings } from '@/components/hud/BotStrategySettings';
+import { useScannerRecommendation } from '@/hooks/useScannerRecommendation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -374,7 +376,7 @@ export function BotSetup() {
   // line 117. Scanner's `selectedMode` is for strategy inspection only
   // and MUST NOT drive bot production behavior. `scannerModes` is read
   // to look up the per-mode min_confluence_score for read-only display.
-  const { botConfig, scannerModes } = useScanner();
+  const { botConfig, setBotConfig, scannerModes } = useScanner();
   const [config, setConfig] = useState<LiveConfig>(DEFAULT_CONFIG);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
@@ -382,11 +384,7 @@ export function BotSetup() {
   const [error, setError] = useState<string | null>(null);
   const [ackChecked, setAckChecked] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
-  const [recommendation, setRecommendation] = useState<{
-    mode: string;
-    reason: string;
-    regime?: { composite?: string };
-  } | null>(null);
+  const recommendation = useScannerRecommendation();
 
   // Static now for snapshot determinism. Footer renders this once.
   const [now] = useState(() => new Date());
@@ -421,12 +419,7 @@ export function BotSetup() {
       })
       .catch(() => {});
     runPreflight();
-    api
-      .getScannerRecommendation()
-      .then((r) => {
-        if (r.data) setRecommendation(r.data);
-      })
-      .catch(() => {});
+
   }, [runPreflight, navigate]);
 
   const balance = preflight?.balance;
@@ -456,6 +449,7 @@ export function BotSetup() {
         // 3z.h: bot mode comes from `botConfig.sniperMode` (production
         // source of truth). Scanner inspection mode is independent.
         sniper_mode: botConfig.sniperMode ?? 'stealth',
+        selection_mode: 'fixed',
         leverage: config.leverage,
         risk_per_trade: config.risk_per_trade,
         max_positions: config.max_positions,
@@ -502,18 +496,10 @@ export function BotSetup() {
   );
   const modeMinScore = modeMetadata?.min_confluence_score ?? 65;
 
-  // CLAUDE.md §6: "Frontend can override upward but not downward."
-  // Whenever the resolved mode floor changes (mode picker, late metadata
-  // fetch, etc.) re-clamp min_confluence upward. Leaves user-tightened
-  // values alone — only fires when below floor.
-  useEffect(() => {
-    if (config.min_confluence < modeMinScore) {
-      setConfig((prev) => ({ ...prev, min_confluence: modeMinScore }));
-    }
-  }, [modeMinScore, config.min_confluence]);
+  // Mode qualification is the minimum; bot controls may tighten it.
   const regimeText = recommendation?.regime?.composite
     ? recommendation.regime.composite.replace(/_/g, ' ')
-    : 'adaptive';
+    : 'market context unavailable';
 
   // Synthetic backtest stats (90d). Marked synthetic in the panel header.
   const backtestStats = useMemo(
@@ -579,14 +565,7 @@ export function BotSetup() {
         </span>
       </div>
 
-      {/* 3z.h: BOT MODE read-only badge. Pre-3z.h this strip read from
-          ScannerContext.selectedMode and linked to /scanner to change it,
-          which conflated bot production behavior with scanner inspection
-          mode (§11 hidden-bug class — operator changed scanner mode for
-          strategy review and inadvertently changed bot production mode).
-          Per CLAUDE.md §15 line 117 the bot's mode is now driven by
-          botConfig.sniperMode and is read-only here. Scanner inspection
-          mode is independent. */}
+      <BotStrategySettings config={botConfig} onChange={setBotConfig} />
       <section
         className="panel"
         style={{
@@ -628,7 +607,7 @@ export function BotSetup() {
             {modeName}
           </span>
           <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>
-            ≥ {modeMinScore} confluence · production · read-only
+            mode minimum {modeMinScore} · effective entry gate {Math.max(modeMinScore, config.min_confluence)}
           </span>
           <span
             className="mono"
@@ -638,7 +617,7 @@ export function BotSetup() {
               marginLeft: 'auto',
               letterSpacing: '.12em',
             }}
-            title="Bot production mode is independent of Scanner inspection mode (CLAUDE.md §15 line 117). Change in Settings (future) — Scanner picker does not affect bot."
+            title="Choose the bot mode above. Scanner selections are independent."
           >
             ◌ INDEPENDENT OF SCANNER PICKER
           </span>
@@ -724,21 +703,21 @@ export function BotSetup() {
               />
               <Slider
                 label="Min Confluence"
-                value={config.min_confluence}
+                value={Math.max(modeMinScore, config.min_confluence)}
                 min={modeMinScore}
                 max={100}
                 step={1}
-                onChange={(v) => setConfig({ ...config, min_confluence: v })}
-                hint={`full-size entry threshold · floor ≥${modeMinScore} (${modeName} mode)`}
+                onChange={(v) => setConfig({ ...config, min_confluence: v, confluence_soft_floor: Math.min(config.confluence_soft_floor, v) })}
+                hint="May tighten the mode minimum; cannot lower it"
               />
               <Slider
-                label="Soft Floor"
+                label="Soft Floor (paper only)"
                 value={config.confluence_soft_floor}
-                min={30}
-                max={100}
+                min={0}
+                max={config.min_confluence}
                 step={1}
                 onChange={(v) => setConfig({ ...config, confluence_soft_floor: v })}
-                hint="half-size near-miss floor"
+                hint="paper sizing band after threshold tightening · live uses only Min Confluence"
               />
               <Slider
                 label="Scan Interval"
@@ -1120,7 +1099,7 @@ export function BotSetup() {
               step={5}
               suffix=" pairs"
               onChange={(v) => setConfig({ ...config, universe_size: v })}
-              hint="total scan candidates after dedup"
+              hint="maximum candidates from enabled categories; all switches off includes all categories"
             />
 
             <div style={{ marginTop: 12 }}>
@@ -1317,7 +1296,7 @@ export function BotSetup() {
                         config.meme_mode && 'meme',
                       ]
                         .filter(Boolean)
-                        .join('+') || '—',
+                        .join('+') || 'all categories',
                     ],
                   ] as Array<[string, string]>
                 ).map(([k, v]) => (

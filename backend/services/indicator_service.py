@@ -297,7 +297,10 @@ class IndicatorService:
     def _safe_compute_macd(self, df: pd.DataFrame, timeframe: str):
         """Safely compute MACD with error handling."""
         try:
-            return compute_macd(df)
+            from backend.shared.config.scanner_modes import get_macd_config
+            profile = getattr(self._scanner_mode, "profile", "balanced")
+            fast, slow, signal = get_macd_config(profile).macd_settings
+            return compute_macd(df, fast=fast, slow=slow, signal=signal)
         except Exception as e:
             logger.warning("MACD computation failed for %s: %s", timeframe, e)
             return None, None, None

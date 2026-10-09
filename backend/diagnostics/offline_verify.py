@@ -19,6 +19,7 @@ from urllib.request import url2pathname
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=('backend', 'contracts', 'smoke', 'inputs'))
+    parser.add_argument('-k', dest='test_filter', default='', help='Filter selected backend tests by pytest expression')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     essentials = {k: v for k, v in os.environ.items() if k.upper() in {
@@ -130,7 +131,7 @@ def main():
             if args.mode == 'backend':
                 import pytest
                 result = pytest.main([str(repo/p) for p in manifest['tests']] + [
-                    '-o', 'addopts=', '-p', 'no:cacheprovider', '-q', '--tb=short',
+                    '-o', 'addopts=', '-p', 'no:cacheprovider', '-q', '--tb=short', '-k', args.test_filter,
                 ])
             elif args.mode == 'inputs':
                 from backend.diagnostics.decision_inputs_diagnostic import inspect_inputs

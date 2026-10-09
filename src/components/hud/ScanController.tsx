@@ -100,12 +100,12 @@ const REASON_LABELS: Record<string, string> = {
   regime_block: 'REGIME BLOCKED',
 };
 
-function summarizeRejections(raw: any): RejectionSnapshot | null {
+export function summarizeRejections(raw: any): RejectionSnapshot | null {
   if (!raw || typeof raw !== 'object') return null;
   const byReasonObj = (raw.by_reason ?? {}) as Record<string, number>;
   const detailsObj = (raw.details ?? {}) as Record<string, Array<{ symbol?: string }>>;
   const reasons = Object.entries(byReasonObj)
-    .filter(([, count]) => typeof count === 'number' && count > 0)
+    .filter(([reason, count]) => reason !== 'features' && typeof count === 'number' && count > 0)
     .map(([reason, count]) => {
       const list = Array.isArray(detailsObj[reason]) ? detailsObj[reason] : [];
       const examples = list

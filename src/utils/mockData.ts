@@ -1,13 +1,14 @@
 import type { PlanType, ConvictionClass, RegimeMetadata } from '@/types/regime';
 import type { CycleContext, ReversalContext } from '@/types/cycle';
 import type { ConfluenceBreakdown } from '@/types/confluence';
+import { readScore } from './scoreEvidence';
 
 export interface ScanResult {
   id: string;
   pair: string;
   sniper_mode?: string; // added for mode-aware overlays
   trendBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-  confidenceScore: number;
+  confidenceScore?: number; // Omitted when the producer supplied no valid score.
   riskScore: number;
   riskReward?: number; // Actual R:R ratio from trade plan
   classification: 'SWING' | 'INTRADAY' | 'SCALP';
@@ -137,8 +138,9 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     : 5;
 
   // Derive conviction class A/B/C from confidence score if not provided
-  const confidence: number = typeof signal.score === 'number' ? signal.score : 0;
-  const derivedConviction: ConvictionClass = confidence >= 80 ? 'A' : confidence >= 60 ? 'B' : 'C';
+  const confidence = readScore(signal);
+  const derivedConviction: ConvictionClass | undefined = confidence === undefined
+    ? undefined : confidence >= 80 ? 'A' : confidence >= 60 ? 'B' : 'C';
 
   // Prefer backend-provided regime metadata when available
   const regime: RegimeMetadata | undefined = signal.regime || signal.analysis?.regime || undefined;

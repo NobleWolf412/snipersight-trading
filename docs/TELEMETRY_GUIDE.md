@@ -1,3 +1,8 @@
+> Partial historical reference. Logger/storage concepts remain useful; endpoint,
+> field and UI examples below require checking against current source. In particular,
+> the former ActivityFeed extension instructions do not describe the current HUD.
+> Use [the current architecture index](ARCHITECTURE_INDEX.md) for owners and guarded checks.
+
 # Telemetry System User Guide
 
 ## Overview

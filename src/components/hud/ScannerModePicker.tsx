@@ -1,57 +1,8 @@
-/**
- * ScannerModePicker — Phase 3f sub-step 2
- *
- * Port of `prototype/scanner-modes.jsx` adapted to TSX. Renders the AI
- * advisory hero + 4 mode cards (OVERWATCH / STRIKE / SURGICAL / STEALTH)
- * and writes the operator's choice into ScannerContext via setSelectedMode.
- *
- * Real-data wiring:
- *   - `useScanner()` provides `scannerModes` (display source of truth — name,
- *     description, min_confluence_score, min_rr_ratio, critical_timeframes,
- *     primary_planning_timeframe, timeframes) and `selectedMode` for the
- *     active highlight.
- *   - `setSelectedMode(mode)` is called on card click — drives the global
- *     scanner mode for the bot AND any other listener of ScannerContext.
- *   - `useMarketRegime('scanner')` powers the AI advisory rule:
- *       BTC_DRIVE / ALTSEASON       → OVERWATCH (macro loaded)
- *       PANIC / DEFENSIVE           → SURGICAL  (precision under stress)
- *       CHOPPY / NEUTRAL / fallback → STEALTH   (balanced default)
- *     Snapshot fixture returns `{}` for /api/market/regime → hook produces
- *     its CHOPPY/MEDIUM default → recommendation lands on STEALTH
- *     deterministically.
- *
- * Synthetic-but-disclosed (amber `◌` chip pattern):
- *   - Display metadata (tagline, accent colour, bullet copy, trade-type
- *     pills) comes from a static MODE_META map keyed by mode name. The
- *     backend exposes the operational fields (min score, R:R, TFs) but
- *     not the display copy — so the docblock + a `◌` chip on the card
- *     header reflect that the visual treatment is local.
- *   - "AI advisory · rule-based" disclosure: this is a deterministic
- *     mapping from regime label to mode. A real LLM-driven recommendation
- *     would consume `api.getScannerRecommendation()` (already exists on
- *     /api/scanner/recommend) — that integration lands when the LLM
- *     reasoner is wired. For now the rule is transparent in the docblock
- *     and the hero badge text reads "AI ADVISORY · RULE-BASED" so no
- *     operator can mistake it for live ML.
- *
- * Determinism for snapshots:
- *   - No `Math.random` — recommendation is a pure function of regimeLabel.
- *   - No `setInterval`, no animation. Hover tints use CSS pseudo-classes
- *     are hard-disabled in snapshot mode by tests/visual/setup.ts'
- *     animation freeze.
- *
- * Snapshot-ready handshake:
- *   This component does NOT set `data-snapshot-ready` — it's mounted INSIDE
- *   `Scanner.tsx` which owns the page-level handshake. As long as this
- *   component's `useScanner()` and `useMarketRegime()` calls return their
- *   defaults synchronously (or within Playwright's networkidle window),
- *   the page is ready when Scanner.tsx flips its bit.
- */
-import { useMemo } from 'react';
+/** Scanner mode selection and advisory from the shared backend routing policy. */
 import { Chip, Reticle, SectionHead } from '@/components/hud';
 import { useScanner } from '@/context/ScannerContext';
-import { useMarketRegime } from '@/hooks/useMarketRegime';
-import type { ScannerMode } from '@/utils/api';
+import { useScannerRecommendation, recommendationIsFresh } from '@/hooks/useScannerRecommendation';
+import type { ScannerMode, ScannerRecommendation } from '@/utils/api';
 
 type AccentKey = 'cyan' | 'amber' | 'red' | 'green';
 
@@ -92,8 +43,8 @@ const MODE_META: Record<string, ModeMeta> = {
   stealth: {
     tagline: 'Balanced · Default',
     accent: 'green',
-    desc: 'Hours–days · cascades swing → intraday → scalp · all-around',
-    types: ['SWING', 'INTRADAY', 'SCALP'],
+    desc: 'Balanced context · 1h planning · confirmed entries',
+    types: ['INTRADAY', 'SCALP'],
   },
 };
 
@@ -105,41 +56,6 @@ const ACCENT_HEX: Record<AccentKey, string> = {
 };
 
 // ─── Recommendation rule (deterministic) ─────────────────────────────────
-
-interface Recommendation {
-  mode: string;
-  reason: string;
-  confidence: 'HIGH' | 'MED' | 'LOW';
-  regime: string;
-}
-
-function deriveRecommendation(regimeLabel: string, visibility: 'HIGH' | 'MEDIUM' | 'LOW'): Recommendation {
-  // Macro-loaded regimes → patient swing surveillance.
-  if (regimeLabel === 'BTC_DRIVE' || regimeLabel === 'ALTSEASON') {
-    return {
-      mode: 'overwatch',
-      reason: `Macro-loaded regime detected (${regimeLabel}). Weekly + Daily structure is the cleanest signal source.`,
-      confidence: visibility === 'HIGH' ? 'HIGH' : 'MED',
-      regime: `MACRO · ${regimeLabel}`,
-    };
-  }
-  // Defensive / panic → tighten to precision.
-  if (regimeLabel === 'PANIC' || regimeLabel === 'DEFENSIVE') {
-    return {
-      mode: 'surgical',
-      reason: `${regimeLabel} regime — controlled risk wins. Tighter stops, fewer cleaner setups.`,
-      confidence: visibility === 'HIGH' ? 'HIGH' : 'MED',
-      regime: `STRESS · ${regimeLabel}`,
-    };
-  }
-  // Default: balanced.
-  return {
-    mode: 'stealth',
-    reason: `Balanced regime (${regimeLabel || 'CHOPPY'}) — system default in effect; cascades swing → intraday → scalp.`,
-    confidence: visibility === 'HIGH' ? 'MED' : 'LOW',
-    regime: `BALANCED · ${regimeLabel || 'CHOPPY'}`,
-  };
-}
 
 // ─── Mode icon (per-mode line-art) ───────────────────────────────────────
 
@@ -235,7 +151,7 @@ function ScannerRecommendationHero({
   currentMode,
   onActivate,
 }: {
-  rec: Recommendation;
+  rec: ScannerRecommendation;
   recMode: ScannerMode | undefined;
   currentMode: string;
   onActivate: (id: string) => void;
@@ -243,7 +159,12 @@ function ScannerRecommendationHero({
   const meta = recMode ? MODE_META[recMode.name] : undefined;
   const color = meta ? ACCENT_HEX[meta.accent] : ACCENT_HEX.green;
   const isActive = currentMode === rec.mode;
-  if (!recMode || !meta) return null;
+  if (rec.status !== 'available' || !recMode || !meta) return (
+    <section className="panel" style={{ padding: 24, marginBottom: 18 }} aria-live="polite">
+      <strong>{rec.status === 'stand_aside' ? 'Wait for clearer conditions' : 'Recommendation unavailable'}</strong>
+      <p>{rec.reason}</p><p>You can choose a fixed scanner mode below.</p>
+    </section>
+  );
   return (
     <section
       className="panel panel-accent"
@@ -258,9 +179,9 @@ function ScannerRecommendationHero({
         }}
       />
       <Reticle />
-      <div className="corner-tag tl">// AI-ADVISORY · RULE-BASED</div>
+      <div className="corner-tag tl">// MARKET GUIDANCE · RULE-BASED</div>
       <div className="corner-tag tr" style={{ color }}>
-        {rec.regime}
+        {rec.regime?.composite?.replace(/_/g, ' ').toUpperCase()}
       </div>
       <div style={{ padding: '24px 26px', position: 'relative' }}>
         <div
@@ -306,7 +227,7 @@ function ScannerRecommendationHero({
                     boxShadow: `0 0 8px ${color}`,
                   }}
                 />
-                AI ADVISORY · {rec.confidence} CONVICTION
+                MARKET GUIDANCE
               </span>
               <Chip kind="amber">◌ rule-based</Chip>
               <span
@@ -362,7 +283,11 @@ function ScannerRecommendationHero({
                 fontStyle: 'italic',
               }}
             >
-              "{rec.reason}"
+              {rec.reason}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+              Daily BTC context · updated {rec.timestamp ? new Date(rec.timestamp).toLocaleTimeString() : '—'}.
+              {' '}This suggests where to look; every setup still needs its own confirmation.
             </p>
             {isActive ? (
               <div
@@ -381,11 +306,11 @@ function ScannerRecommendationHero({
                   textTransform: 'uppercase',
                 }}
               >
-                ✓ Protocol Active
+                ✓ Selected scanner mode
               </div>
             ) : (
               <button
-                onClick={() => onActivate(rec.mode)}
+                onClick={() => { if (rec.mode && recommendationIsFresh(rec)) onActivate(rec.mode); }}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -404,7 +329,7 @@ function ScannerRecommendationHero({
                   boxShadow: `0 0 0 1px ${color}, 0 0 24px ${color}66`,
                 }}
               >
-                ⌬ ACTIVATE {recMode.name.toUpperCase()}
+                USE {recMode.name.toUpperCase()}
               </button>
             )}
           </div>
@@ -661,17 +586,7 @@ function ModeCard({
 
 export function ScannerModePicker() {
   const { scannerModes, selectedMode, setSelectedMode } = useScanner();
-  const regime = useMarketRegime('scanner');
-
-  // Visibility from useMarketRegime — narrow the type via runtime check so
-  // deriveRecommendation receives only the three shape-allowed strings.
-  const visibility: 'HIGH' | 'MEDIUM' | 'LOW' =
-    regime.visibility === 'HIGH' || regime.visibility === 'LOW' ? regime.visibility : 'MEDIUM';
-
-  const rec = useMemo(
-    () => deriveRecommendation(regime.regimeLabel as string, visibility),
-    [regime.regimeLabel, visibility],
-  );
+  const rec = useScannerRecommendation();
 
   const recMode = scannerModes.find((m) => m.name === rec.mode);
   const currentName = selectedMode?.name ?? '';
@@ -712,7 +627,7 @@ export function ScannerModePicker() {
               marginBottom: 14,
             }}
           >
-            // SCANNER · WHICH SIGNALS GET SURFACED TO THE BOT
+            // SCANNER · SETUPS FOR YOUR MANUAL REVIEW
           </div>
           <div
             style={{

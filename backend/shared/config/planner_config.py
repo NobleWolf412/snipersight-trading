@@ -169,7 +169,7 @@ class PlannerConfig:
         """
         mode_lower = (mode or "intraday").lower()
 
-        if mode_lower in ("scalp", "precision"):
+        if mode_lower in ("scalp", "precision", "surgical"):
             return cls(
                 min_rr=1.5,  # Quick scalps
                 target_rr_ladder=[1.5, 2.5, 4.0],
@@ -211,7 +211,7 @@ class PlannerConfig:
                 consolidation_min_touches=4,  # Lower bar for faster detection
             )
 
-        elif mode_lower == "swing" or mode_lower == "overwatch":
+        elif mode_lower in ("swing", "overwatch", "macro_surveillance"):
             return cls(
                 min_rr=2.5,  # Higher standard for swing
                 tp1_reachable_ceiling_atr=3.0,  # see §15 baseline note below (deferred in 5b)

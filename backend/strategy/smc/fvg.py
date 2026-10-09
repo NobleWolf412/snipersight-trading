@@ -54,7 +54,7 @@ def detect_fvgs(
         df: DataFrame with OHLC data and DatetimeIndex
         config: Configuration dict with:
             - min_gap_atr: Minimum gap size in ATR units (default 0.3)
-            - max_overlap: Maximum allowed overlap percentage (default 0.1)
+            - max_overlap: Maximum middle-candle wick overlap fraction of the gap
         mode_profile: Scanner mode profile for size filtering (optional)
         _return_raw_count: If True, returns (fvgs, raw_count) tuple where raw_count
             is the number of FVGs that passed overlap/structure checks before the
@@ -132,7 +132,7 @@ def detect_fvgs(
             gap_bottom = candle_0["high"]
             gap_size = gap_top - gap_bottom
 
-            # Check overlap with middle candle (should be minimal)
+            # Only middle-candle wicks count as formation overlap; its body creates the gap.
             overlap = _calculate_overlap_bullish(candle_1, gap_bottom, gap_top)
 
             if overlap > max_overlap:
@@ -196,7 +196,7 @@ def detect_fvgs(
             gap_bottom = candle_2["high"]
             gap_size = gap_top - gap_bottom
 
-            # Check overlap with middle candle (should be minimal)
+            # Only middle-candle wicks count as formation overlap; its body creates the gap.
             overlap = _calculate_overlap_bearish(candle_1, gap_bottom, gap_top)
 
             if overlap > max_overlap:
@@ -319,53 +319,26 @@ def detect_fvgs(
 
 
 def _calculate_overlap_bullish(candle: pd.Series, gap_bottom: float, gap_top: float) -> float:
+    """Fraction of the first/third candle gap covered by middle-candle wicks.
+
+    The middle candle's body creates the displacement, so counting its entire
+    range as overlap rejects ordinary continuous-candle FVGs. Only its wicks
+    consume the configured formation-overlap allowance. Later candles determine
+    mitigation separately in detect_fvgs/check_price_overlap.
     """
-    Calculate how much a candle overlaps with a bullish FVG.
-
-    Args:
-        candle: Middle candle that creates the gap
-        gap_bottom: Bottom of the gap
-        gap_top: Top of the gap
-
-    Returns:
-        float: Overlap percentage (0.0 = no overlap, 1.0 = full overlap)
-    """
-    # Check if candle penetrates into the gap
-    overlap_high = min(candle["high"], gap_top)
-    overlap_low = max(candle["low"], gap_bottom)
-
-    if overlap_high <= overlap_low:
-        return 0.0  # No overlap
-
-    overlap_size = overlap_high - overlap_low
     gap_size = gap_top - gap_bottom
-
-    return overlap_size / gap_size if gap_size > 0 else 0.0
+    if gap_size <= 0:
+        return 0.0
+    body_low = min(candle["open"], candle["close"])
+    body_high = max(candle["open"], candle["close"])
+    lower_wick_overlap = max(0.0, min(body_low, gap_top) - max(candle["low"], gap_bottom))
+    upper_wick_overlap = max(0.0, min(candle["high"], gap_top) - max(body_high, gap_bottom))
+    return (lower_wick_overlap + upper_wick_overlap) / gap_size
 
 
 def _calculate_overlap_bearish(candle: pd.Series, gap_bottom: float, gap_top: float) -> float:
-    """
-    Calculate how much a candle overlaps with a bearish FVG.
-
-    Args:
-        candle: Middle candle that creates the gap
-        gap_bottom: Bottom of the gap
-        gap_top: Top of the gap
-
-    Returns:
-        float: Overlap percentage (0.0 = no overlap, 1.0 = full overlap)
-    """
-    # Same logic as bullish - just checking middle candle penetration
-    overlap_high = min(candle["high"], gap_top)
-    overlap_low = max(candle["low"], gap_bottom)
-
-    if overlap_high <= overlap_low:
-        return 0.0  # No overlap
-
-    overlap_size = overlap_high - overlap_low
-    gap_size = gap_top - gap_bottom
-
-    return overlap_size / gap_size if gap_size > 0 else 0.0
+    """Use the same wick-overlap geometry for bearish and bullish gaps."""
+    return _calculate_overlap_bullish(candle, gap_bottom, gap_top)
 
 
 def calculate_fvg_size(fvg: FVG) -> float:

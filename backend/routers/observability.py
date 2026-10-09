@@ -63,6 +63,7 @@ runs aggregation or audit detectors on demand.
 from __future__ import annotations
 
 import os
+import math
 import time
 from typing import Any, List, Optional
 
@@ -170,9 +171,11 @@ async def get_signal_trace(id: str) -> JSONResponse:
     REASON_TO_STAGE = {
         "no_data": "DATA", "missing_critical_tf": "CRITICAL_TF",
         "low_confluence": "CONFLUENCE_SCORE", "structural_anchor": "FEATURES",
+        "evidence_requirements": "CONFLUENCE_SCORE",
         "btc_impulse": "CONFLUENCE_SCORE", "regime_alignment": "CONFLUENCE_SCORE",
         "conflict_density": "CONFLUENCE_SCORE",
-        "no_trade_plan": "PLANNER", "risk_validation": "RISK_VALIDATION",
+        "no_trade_plan": "PLANNER", "post_plan_revalidation": "PLANNER",
+        "risk_validation": "RISK_VALIDATION",
         "max_positions": "POSITION_CAPS", "has_position": "POSITION_CAPS",
         "pending_order": "POSITION_CAPS", "errors": "EXECUTION",
         "stale_entry": "EXECUTION", "position_size": "EXECUTION",
@@ -271,12 +274,19 @@ async def get_signal_confluence(id: str) -> JSONResponse:
             detail={"reason": "unknown_id", "id": id},
         )
 
+    # Preserve the recorded policy boundary; legacy records retain the old
+    # numeric fallback with explicit availability metadata.
+    score_metadata = dict(breakdown.metadata or {})
+    threshold = score_metadata.get("score_gate")
+    threshold_available = (isinstance(threshold, (int, float)) and not isinstance(threshold, bool)
+                           and math.isfinite(threshold) and 0 <= threshold <= 100)
+    score_metadata["threshold_available"] = threshold_available
     # Materialize as DTO
     dto = ConfluenceBreakdownDTO(
         id=id,
         symbol=breakdown.symbol,
         total_score=breakdown.total_score,
-        threshold=0.0,  # threshold lives on the scanner mode, not the breakdown
+        threshold=threshold if threshold_available else 0.0,
         base_score=breakdown.base_score,
         factors=[
             ConfluenceFactorDTO(
@@ -298,7 +308,7 @@ async def get_signal_confluence(id: str) -> JSONResponse:
         htf_proximity_pct=breakdown.htf_proximity_pct,
         nearest_htf_level_timeframe=breakdown.nearest_htf_level_timeframe,
         nearest_htf_level_type=breakdown.nearest_htf_level_type,
-        metadata=dict(breakdown.metadata or {}),
+        metadata=score_metadata,
     )
     env = ok_envelope(dto.model_dump(), source="confluence_cache", cost_class="cheap")
     return JSONResponse(content=env.model_dump(by_alias=True))
@@ -343,6 +353,8 @@ async def get_confluence_distribution(
             synergy += br.synergy_bonus
             conflict += br.conflict_penalty
             for f in br.factors:
+                if f.weight <= 0:
+                    continue  # Raw diagnostics are not score contributions.
                 slot = factor_acc.setdefault(f.name, [0.0, 0.0, 0.0, 0])
                 slot[0] += f.score
                 slot[1] += f.weight
@@ -355,8 +367,8 @@ async def get_confluence_distribution(
             "avg_synergy_bonus": synergy / nn,
             "avg_conflict_penalty": conflict / nn,
             "factors": [
-                {"name": k, "avg_score": v[0] / v[3], "avg_weight": v[1] / v[3],
-                 "avg_weighted_score": v[2] / v[3], "sample_count": v[3]}
+                {"name": k, "avg_score": v[0] / v[3], "avg_weight": v[1] / nn,
+                 "avg_weighted_score": v[2] / nn, "sample_count": v[3]}
                 for k, v in sorted(factor_acc.items(), key=lambda kv: -kv[1][2])
             ],
         }
@@ -390,7 +402,21 @@ async def get_confluence_distribution(
         factors=[FactorContribution(**f) for f in agg["factors"]],
         by_direction=by_direction,
     )
-    env = ok_envelope(dist.model_dump(), source="confluence_cache", cost_class="moderate")
+    provenance = {
+        (str((br.metadata or {}).get("score_model_version", "unversioned")),
+         str((br.metadata or {}).get("score_policy_version", "unversioned")),
+         str(br.profile)) for _, br in samples
+    }
+    if len(provenance) > 1:
+        labels = [" / ".join(item) for item in sorted(provenance)]
+        env = degraded_envelope(
+            dist.model_dump(), source="confluence_cache", cost_class="moderate",
+            reason="mixed_scoring_provenance",
+            warnings=["Mixed score models, policies or profiles: " + "; ".join(labels)
+                      + ". These averages do not represent one scoring policy."],
+        )
+    else:
+        env = ok_envelope(dist.model_dump(), source="confluence_cache", cost_class="moderate")
     return JSONResponse(content=env.model_dump(by_alias=True))
 
 

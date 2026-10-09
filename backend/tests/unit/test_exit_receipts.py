@@ -103,7 +103,7 @@ def test_direction_flip_cannot_close_or_advance_after_failed_exit(direction):
     ns=dict(method.__globals__)
     exec(compile(module,'<actual-signal-prefix>','exec'),ns)
     svc=PaperTradingService()
-    svc.config=S(max_positions=3)
+    svc.config=S(max_positions=3, sniper_mode='stealth')
     svc.executor=S(_accounting=True)
     svc.position_manager=PositionManager(price_fetcher=lambda _:100)
     pos=position(direction)

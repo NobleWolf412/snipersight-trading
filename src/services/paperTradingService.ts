@@ -23,6 +23,8 @@ const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VIT
   : '/api';
 
 export interface PaperTradingConfigRequest {
+  selection_mode?: 'fixed' | 'adaptive';
+  allowed_modes?: string[];
   exchange?: string;
   sniper_mode?: string;
   initial_balance?: number;
@@ -59,6 +61,7 @@ export interface PaperTradingConfigRequest {
 }
 
 export interface PaperPosition {
+  strategy?: { mode?: string; version?: string; selection_mode?: string };
   position_id: string;
   symbol: string;
   direction: 'LONG' | 'SHORT';
@@ -112,6 +115,9 @@ export interface CompletedPaperTrade {
 }
 
 export interface PaperTradingStatus {
+  active_mode?: string;
+  active_profile?: string;
+  mode_recommendation?: { status: string; mode: string | null; reason: string } | null;
   status: 'idle' | 'running' | 'stopped' | 'paused' | 'error';
   session_id: string | null;
   started_at: string | null;

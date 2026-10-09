@@ -1,3 +1,7 @@
+> Historical proposal (December 2025), retained as mode-consolidation provenance.
+> Its status and proposed changes are not current implementation instructions.
+> Start with [the current architecture index](ARCHITECTURE_INDEX.md) and confirm in code.
+
 # SMC Pipeline Refactor - Implementation Game Plan
 
 **Version**: 1.1  

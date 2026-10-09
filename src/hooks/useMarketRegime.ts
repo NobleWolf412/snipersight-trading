@@ -4,7 +4,7 @@ import { api } from '@/utils/api';
 // Public shape of the regime hook's return value.
 // Inlined here after the original MarketRegimeLens component was archived in
 // Phase 6 sub-step 4.
-export type RegimeLabel = 'ALTSEASON' | 'BTC_DRIVE' | 'DEFENSIVE' | 'PANIC' | 'CHOPPY';
+export type RegimeLabel = string;
 export type Visibility = 'HIGH' | 'MEDIUM' | 'LOW' | 'VERY_LOW';
 export type RegimeColor = 'green' | 'blue' | 'yellow' | 'orange' | 'red';
 
@@ -35,18 +35,34 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
 
   useEffect(() => {
     let mounted = true;
-    api.getMarketRegime().then((res) => {
-      if (!mounted) return;
-      if (res.data) setData(res.data);
-    });
-    return () => { mounted = false };
+    let busy = false;
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const res = await api.getMarketRegime();
+        if (!mounted) return;
+        clearTimeout(expiry);
+        const value = res.data as any;
+        const expires = Date.parse(value?.expires_at ?? '');
+        if (value?.dimensions && Date.now() < expires) {
+          setData(value);
+          expiry = setTimeout(() => setData(null), expires - Date.now());
+        } else setData(null);
+      } catch { if (mounted) setData(null); }
+      finally { busy = false; }
+    };
+    void refresh();
+    const interval = setInterval(() => { void refresh(); }, 60_000);
+    return () => { mounted = false; clearInterval(interval); clearTimeout(expiry); };
   }, []);
 
   return useMemo<MarketRegimeLensProps>(() => {
     if (!data) {
       return {
-        regimeLabel: 'CHOPPY',
-        visibility: 'MEDIUM',
+        regimeLabel: 'UNAVAILABLE',
+        visibility: 'VERY_LOW',
         color: 'yellow',
         btcDominance: undefined,
         usdtDominance: undefined,
@@ -71,29 +87,15 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
     const composite = (data.composite || 'neutral').toUpperCase();
     const visibility = data.score >= 75 ? 'HIGH' : data.score >= 50 ? 'MEDIUM' : 'LOW';
 
-    // Map composite label to UI label/color heuristically
-    const labelMap: Record<string, { label: string; color: MarketRegimeLensProps['color'] }> = {
-      ALTSEASON: { label: 'ALTSEASON', color: 'green' },
-      BTC_DRIVE: { label: 'BTC_DRIVE', color: 'blue' },
-      DEFENSIVE: { label: 'DEFENSIVE', color: 'orange' },
-      PANIC: { label: 'PANIC', color: 'red' },
-      CHOPPY: { label: 'CHOPPY', color: 'yellow' },
-      NEUTRAL: { label: 'CHOPPY', color: 'yellow' },
-    };
-
-    const mapped = labelMap[composite] || labelMap.NEUTRAL;
-
-    // Dominance lives under `dominance` on the regime response, not
-    // `dimensions` (which is a labels object). Reading the wrong path
-    // silently discards real data and falls through to UI placeholders.
-    // See CLAUDE.md §10 standing fix #4 (real dominance data).
-    // Backend emits stablecoin dominance as `stable_d` (USDT-anchored);
-    // the hook field stays named `usdtDominance` for backward compat —
-    // dial labels read "USDT.D" since USDT is ~85% of stable mcap.
+    const trend = data.dimensions?.trend;
+    const color: RegimeColor = data.dimensions?.volatility === 'chaotic' ? 'red'
+      : trend === 'up' || trend === 'strong_up' ? 'green'
+      : trend === 'down' || trend === 'strong_down' ? 'orange' : 'yellow';
+    // Legacy property name retained for consumers; the measure includes all tracked stablecoins.
     return {
-      regimeLabel: mapped.label as MarketRegimeLensProps['regimeLabel'],
+      regimeLabel: composite,
       visibility,
-      color: mapped.color,
+      color,
       btcDominance: data.dominance?.btc_d ?? undefined,
       usdtDominance: data.dominance?.stable_d ?? undefined,
       altDominance: data.dominance?.alt_d ?? undefined,
@@ -104,13 +106,14 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
         typeof data.liquidity_score === 'number' ? data.liquidity_score : undefined,
       riskScore: typeof data.risk_score === 'number' ? data.risk_score : undefined,
       derivativesScore:
-        typeof data.derivatives_score === 'number' ? data.derivatives_score : undefined,
+        data.derivatives_available && typeof data.derivatives_score === 'number' ? data.derivatives_score : undefined,
       compositeScore: typeof data.score === 'number' ? data.score : undefined,
       previousBtcDominance: undefined,
       previousUsdtDominance: undefined,
       previousAltDominance: undefined,
       guidanceLines: [
-        'Derived from backend market regime analysis',
+        'Daily BTC context; scores are heuristic, not probabilities',
+        data.dominance_source ?? 'Market basket dominance',
       ],
       mode,
     };

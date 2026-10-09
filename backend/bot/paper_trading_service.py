@@ -36,6 +36,7 @@ from backend.bot.telemetry.storage import TelemetryStorage
 from backend.bot.telemetry.events import TelemetryEvent, EventType
 from backend.engine.orchestrator import Orchestrator
 from backend.engine.decision import is_fresh_entry_price, is_thesis_mode
+from backend.shared.config.strategy_policy import validate_strategy_selection, resolve_bot_sensitivity, plan_strategy_gate
 from backend.shared.config.scanner_modes import get_mode, ScannerMode
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
@@ -60,7 +61,7 @@ _MAX_TTL_EXTENSIONS = 2
 # Maximum distance (%) a limit order can be placed from current price.
 # If the OB entry zone is further away, the limit is "snapped" closer to price
 # so the order actually has a chance of filling within the TTL window.
-# For high-confluence signals (>= 70%), the max distance is halved.
+# For signals in the shared strong-score band, the max distance is halved.
 _MAX_LIMIT_DISTANCE_PCT: Dict[str, float] = {
     "scalp": 0.15,     # ~$0.20 on a $130 coin
     "intraday": 0.40,  # ~$0.52 on a $130 coin
@@ -205,11 +206,8 @@ def _nearest_same_side_pool(
 # gate  = minimum score for full-size entry
 # floor = minimum score for near-miss half-size entry; below floor = skipped
 # Tier ordering: aggressive < balanced < conservative (tightening direction)
-_SENSITIVITY_PRESETS: Dict[str, Dict[str, float]] = {
-    "conservative": {"gate": 72.0, "floor": 62.0},
-    "balanced":     {"gate": 65.0, "floor": 55.0},
-    "aggressive":   {"gate": 58.0, "floor": 48.0},
-}
+from backend.shared.config.sensitivity import SENSITIVITY_PRESETS as _SENSITIVITY_PRESETS, resolve_sensitivity, passes_confluence_gate
+from backend.shared.config.score_policy import STRONG_SCORE, evidence_allows_entry
 # One tier up from each preset (for drawdown-linked tightening)
 _PRESET_TIER_UP: Dict[str, str] = {
     "aggressive":   "balanced",
@@ -266,7 +264,9 @@ class PaperTradingConfig:
     """
 
     exchange: str = "phemex"
-    sniper_mode: str = "stealth"  # Fixed: stealth mode is the optimal balance for paper trading (adaptive scalp/swing)
+    sniper_mode: str = "stealth"
+    selection_mode: str = "fixed"
+    allowed_modes: List[str] = field(default_factory=lambda: ["strike", "surgical", "stealth"])
     initial_balance: float = 10000.0
     risk_per_trade: float = 1.0  # Reduced from 2.0%: safer for automated trading (3 positions * 1% = 3% max risk)
     max_positions: int = 3
@@ -481,6 +481,7 @@ class CompletedTrade:
     nearest_same_side_pool_price: Optional[float] = None
     nearest_same_side_pool_swept: Optional[bool] = None
 
+    strategy: Dict[str, Any] = field(default_factory=dict)
     execution_accounting: Optional[Dict[str, Any]] = None
     gross_pnl: Optional[float] = None
     execution_fees: Optional[Dict[str, str]] = None
@@ -500,6 +501,7 @@ class CompletedTrade:
         if self._execution_report_snapshot is not None:
             return deepcopy(self._execution_report_snapshot)
         record = {
+            "strategy": deepcopy(self.strategy),
             "trade_id": self.trade_id,
             "symbol": self.symbol,
             "direction": self.direction,
@@ -691,6 +693,7 @@ class PaperTradingService:
         self._price_cache: Dict[str, float] = {}
         self._price_cache_observed_at: Dict[str, float] = {}
         self._pending_testnet_exits: Dict[str, str] = {}
+        self._pending_paper_exits: Dict[str, str] = {}
         self._price_cache_refreshed_at: Optional[datetime] = None
         # Detailed signal processing log (every signal, not just recent activity)
         self.signal_log: List[Dict[str, Any]] = []
@@ -727,6 +730,7 @@ class PaperTradingService:
     async def start(self, config: PaperTradingConfig) -> Dict[str, Any]:
         if getattr(self, "_execution_lifecycle_busy", False):
             raise ValueError("Execution lifecycle transition in progress")
+        validate_strategy_selection(config, paper=True)
         self._execution_lifecycle_busy = True
         try:
             return await self._start_session(config)
@@ -746,10 +750,16 @@ class PaperTradingService:
         if self.status == PaperBotStatus.RUNNING:
             raise ValueError("Paper trading already running")
 
+        if isinstance(self.executor, PaperExecutor) and (
+                self.executor.get_open_orders() or any(self.executor.positions.values())
+                or (self.position_manager and self.position_manager.positions)):
+            raise ValueError('PAPER_RECOVERY_REQUIRED: stop and publish the previous session first')
+
         # Guard replacement before overwriting the previous session's metadata.
         if self.executor and hasattr(self.executor, "recovery_snapshot"):
             await asyncio.to_thread(self._release_testnet_owner)
 
+        validate_strategy_selection(config, paper=True)
         self.config = config
         self.session_id = str(uuid.uuid4())[:8]
 
@@ -764,21 +774,7 @@ class PaperTradingService:
         except Exception as _je:
             logger.warning("Could not preload journal on start: %s", _je)
 
-        # Paper trading always uses stealth mode — it's the optimal balance:
-        # - Covers D→5m timeframes (full range)
-        # - Allows all trade types (scalp, intraday, swing) adaptively
-        # - Requires solid 1.5 R:R minimum
-        # - Can trade both directions (long + short)
-        # If the caller requested a different mode, log it so the user knows it was overridden.
-        if config.sniper_mode != "stealth":
-            logger.info(
-                f"Paper trading overrides sniper_mode '{config.sniper_mode}' → 'stealth'. "
-                "Stealth is the only supported mode for paper trading (adaptive scalp/intraday/swing)."
-            )
-        config.sniper_mode = "stealth"
-        self.mode = get_mode("stealth")
-        if not self.mode:
-            raise ValueError("Failed to load stealth mode")
+        self.mode = get_mode(config.sniper_mode)
 
         # Initialize executor — testnet routes real orders through Phemex testnet,
         # simulation uses internal fill math (no API keys required)
@@ -851,7 +847,7 @@ class PaperTradingService:
             trailing_stop_activation=config.trailing_activation,
             trailing_stop_distance=0.75,  # WAS 0.5 - increased to 0.75 to give trade more room to breathe
             max_hours_open=config.max_hours_open,
-            receipt_execution=bool(getattr(self.executor, '_accounting', None)),
+            receipt_execution=isinstance(self.executor, PaperExecutor) or bool(getattr(self.executor, '_accounting', None)),
         )
 
         # Initialize orchestrator with exchange adapter
@@ -867,62 +863,33 @@ class PaperTradingService:
             # the main scanner. We attach a session-local PlannerConfig to this ScanConfig.
             from backend.shared.config.planner_config import PlannerConfig
 
-            planner_cfg = PlannerConfig.defaults_for_mode("stealth")
-            # Training Ground tuning:
-            # - don't hard-reject on PD (use confluence + structure instead)
-            # - widen stop buffers to reduce noise stop-outs
-            planner_cfg.pd_compliance_required = False
-            planner_cfg.stop_buffer_by_regime = {
-                "calm": 0.35,
-                "normal": 0.45,
-                "elevated": 0.55,
-                "explosive": 0.65,
-            }
+            planner_cfg = PlannerConfig.defaults_for_mode(self.mode.name)
 
-            # Create ScanConfig from paper trading config.
-            # NOTE: use explicit None-check instead of ``or`` — a legitimate
-            # override of ``min_confluence=0`` (used when forcing raw signals
-            # through for diagnostics) is falsy and would otherwise silently
-            # fall back to the mode default.
-            _min_conf = (
-                config.min_confluence
-                if config.min_confluence is not None
-                else self.mode.min_confluence_score
-            )
-
-            # Resolve soft floor from sensitivity preset using module-level dict.
-            # "custom" uses the explicit confluence_soft_floor value;
-            # named presets carry their own floor regardless of min_confluence.
-            _preset = (config.sensitivity_preset or "balanced").lower()
-            if _preset in _SENSITIVITY_PRESETS:
-                # Named preset: override gate + floor with preset values unless
-                # the user also sent an explicit min_confluence override (custom gate).
-                _preset_gate  = _SENSITIVITY_PRESETS[_preset]["gate"]
-                _preset_floor = _SENSITIVITY_PRESETS[_preset]["floor"]
-                if config.min_confluence is None:
-                    _min_conf = _preset_gate
-                _soft_floor = _preset_floor
-            else:
-                # "custom" preset: use explicit floor if provided, else 10-point band
-                _soft_floor = config.confluence_soft_floor if config.confluence_soft_floor is not None else max(0.0, _min_conf - 10.0)
+            # Resolve once for startup; re-use the same precedence at scan and entry.
+            _min_conf, _soft_floor, _preset = resolve_bot_sensitivity(config, self.mode.min_confluence_score)
 
             scan_config = ScanConfig(
                 profile=self.mode.profile,
                 timeframes=tuple(self.mode.timeframes),
-                min_confluence_score=_min_conf,
+                min_confluence_score=_soft_floor,
                 confluence_soft_floor=_soft_floor,
                 sensitivity_preset=_preset,
                 min_rr_ratio=min_rr,
                 max_symbols=20,
             )
             scan_config.planner = planner_cfg
-            scan_config.enable_fusion = True  # Bot uses Dynamic Logic Fusion — scanner stays on pure Stealth weights
+            scan_config.enable_fusion = False
+            scan_config.selection_mode = config.selection_mode
             # Macro/dominance overlay toggle (operator-controllable; scorer.py:3114 reads config.macro_overlay_enabled).
             # Mirrors scanner_service.py:281. Default True = back-compat; False = pure technicals (ledger T19).
             scan_config.macro_overlay_enabled = config.macro_overlay_enabled
             logger.info(f"Macro overlay: {'ON' if config.macro_overlay_enabled else 'OFF'} (config.macro_overlay_enabled)")
 
             self.orchestrator = Orchestrator(config=scan_config, exchange_adapter=adapter)
+            # apply_mode in the constructor supplies defaults, not caller overrides.
+            self.orchestrator.config.min_confluence_score = _soft_floor
+            self.orchestrator.config.bot_full_size_gate = _min_conf
+            self.orchestrator.config.confluence_soft_floor = _soft_floor
         except Exception as e:
             logger.error(f"Failed to initialize orchestrator: {e}")
             raise ValueError(f"Failed to initialize scanner: {e}")
@@ -941,6 +908,7 @@ class PaperTradingService:
         self._price_cache = {}
         self._price_cache_observed_at = {}
         self._pending_testnet_exits = {}
+        self._pending_paper_exits = {}
         self._peak_equity = self.executor.get_equity({}) if getattr(self.executor, '_accounting', None) else config.initial_balance
         self._prev_regime_trend = None
         self._current_regime_trend = None
@@ -961,8 +929,13 @@ class PaperTradingService:
         self.started_at = datetime.now(timezone.utc)
         self.stopped_at = None
         self.status = PaperBotStatus.RUNNING
-        self.active_mode = "stealth"
-        self.active_profile = "stealth"
+        self.active_mode = self.mode.name
+        self.active_profile = self.mode.profile
+        from backend.analysis.mode_recommendation import AdaptiveModeSelector
+        from backend.services.market_regime_service import MarketRegimeService
+        self._adaptive_selector = AdaptiveModeSelector()
+        self._regime_reader = MarketRegimeService(lambda: adapter)
+        self.mode_recommendation = None
         self._running = True
 
         # Initialize diagnostics
@@ -1032,6 +1005,12 @@ class PaperTradingService:
         if self._fee_recovery_task:
             self._fee_recovery_task.cancel()
         if self.status != PaperBotStatus.RUNNING:
+            if isinstance(self.executor, PaperExecutor):
+                await self._close_all_positions('session_stopped')
+                self.status = PaperBotStatus.ERROR if (
+                    self.executor.get_open_orders() or any(self.executor.positions.values())
+                    or (self.position_manager and self.position_manager.positions)) else PaperBotStatus.STOPPED
+                return self.get_status()
             if self.executor and hasattr(self.executor, "recovery_snapshot"):
                 if getattr(self.executor, '_accounting', None):
                     await self._close_all_positions('session_stopped')
@@ -1073,6 +1052,11 @@ class PaperTradingService:
 
         # Close all open positions
         await self._close_all_positions("session_stopped")
+        if isinstance(self.executor, PaperExecutor) and (
+                self.executor.get_open_orders() or any(self.executor.positions.values())
+                or (self.position_manager and self.position_manager.positions)):
+            self.status = PaperBotStatus.ERROR
+            self._log_activity("paper_stop_incomplete", {"reason": "Execution or journal publication requires stop retry"})
         if self._fee_recovery_task:
             try:
                 await self._fee_recovery_task
@@ -1160,6 +1144,10 @@ class PaperTradingService:
             raise ValueError("Execution lifecycle transition in progress")
         if self.status == PaperBotStatus.RUNNING:
             raise ValueError("Cannot reset while running. Stop first.")
+        if isinstance(self.executor, PaperExecutor) and (
+                self.executor.get_open_orders() or any(self.executor.positions.values())
+                or (self.position_manager and self.position_manager.positions)):
+            raise ValueError('PAPER_RECOVERY_REQUIRED: stop and publish before reset')
         if self.executor and hasattr(self.executor, "recovery_snapshot"):
             self._release_testnet_owner()
 
@@ -1178,6 +1166,7 @@ class PaperTradingService:
         self._price_cache = {}
         self._price_cache_observed_at = {}
         self._pending_testnet_exits = {}
+        self._pending_paper_exits = {}
         self._pending_plans = {}
         self._pending_placed_at = {}
         self._pending_placed_price = {}
@@ -1235,6 +1224,7 @@ class PaperTradingService:
             "current_scan": self.current_scan,
             "active_mode": self.active_mode,
             "active_profile": self.active_profile,
+            "mode_recommendation": deepcopy(getattr(self, "mode_recommendation", None)),
             # Heart-change flag surface (so the UI can reflect the actual decision core): in thesis
             # mode the confluence score is DEMOTED (the structure-led thesis decides direction; the
             # min_confluence "gate" no longer rejects). Lets the setup page relabel/grey that control.
@@ -1269,17 +1259,9 @@ class PaperTradingService:
             # Pure cash balance (executor handles fees and ALL realized PnL)
             current = self.executor.get_balance()
 
-            # Sum unrealized PnL from PositionState — already refreshed by
-            # _get_active_positions() above, so equity and positions are consistent.
-            unrealized_pnl = 0.0
-            if self.position_manager:
-                unrealized_pnl = sum(
-                    pos.unrealized_pnl
-                    for pos in self.position_manager.positions.values()
-                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
-                )
-
-            equity = current + unrealized_pnl
+            # Pending reductions leave a logical slice in the manager until the
+            # complete receipt arrives; account equity uses actual executor fills.
+            equity = self._paper_equity()
 
             prices_age_seconds = None
             if self._price_cache_refreshed_at:
@@ -1500,6 +1482,27 @@ class PaperTradingService:
         except Exception as _e:
             logger.debug(f"CVD snapshot inject skipped: {_e}")
 
+    def _adopt_paper_entry(self, order, plan):
+        """Attach all confirmed entry fills before forgetting their pending plan."""
+        self._inject_cvd_snapshot(plan)
+        position_id = self.position_manager.open_position(
+            trade_plan=plan, entry_price=order.average_fill_price,
+            quantity=order.filled_quantity, entry_order_id=order.order_id)
+        self.stats.signals_taken += 1
+        self._pending_plans.pop(order.order_id, None)
+        self._pending_placed_at.pop(order.order_id, None)
+        self._pending_placed_price.pop(order.order_id, None)
+        self._pending_extended.pop(order.order_id, None)
+        self._log_signal(plan, 'executed', f'Pending order filled @ {order.average_fill_price:.6g}',
+                         fill_price=order.average_fill_price,
+                         fill_qty=order.filled_quantity, position_id=position_id)
+        self._log_activity('trade_opened', {
+            'position_id': position_id, 'symbol': plan.symbol, 'direction': plan.direction,
+            'entry_price': order.average_fill_price, 'quantity': order.filled_quantity,
+            'status': 'pending_filled',
+        })
+        return position_id
+
     async def _monitor_loop(self):
         """Background loop for monitoring positions."""
         while self._running:
@@ -1518,96 +1521,58 @@ class PaperTradingService:
                             await self._reconcile_testnet_positions()
                             open_orders = []
                         else:
-                            open_orders = executor.get_open_orders()
+                            orders = {order.order_id: order for order in executor.get_open_orders()}
+                            # A fully filled order can still await adoption after a manager error.
+                            for order_id in self._pending_plans:
+                                order = executor.get_order(order_id)
+                                if order and order.filled_quantity:
+                                    orders[order_id] = order
+                            open_orders = list(orders.values())
                         for order in open_orders:
-                            if order.order_type == OrderType.LIMIT:
+                            if order.order_type != OrderType.LIMIT:
+                                continue
+                            position = self.position_manager.find_position_by_order_id(order.order_id)
+                            plan = self._pending_plans.get(order.order_id)
+                            cap = self.config.max_positions if self.config else 3
+                            active_count = len(self._get_active_positions())
+                            reason = None
+                            if not position and not plan:
+                                reason = 'paper_entry_owner_missing'
+                            elif not position and not order.filled_quantity and active_count >= cap:
+                                reason = 'max_positions_reached_at_fill'
+                            if reason:
+                                # Simulation controls when a fill occurs: enforce admission
+                                # BEFORE changing executor balances or exposure.
+                                if not executor.cancel_order(order.order_id):
+                                    raise ValueError('PAPER_PENDING_CANCEL_UNCONFIRMED')
+                                self._pending_plans.pop(order.order_id, None)
+                                self._pending_placed_at.pop(order.order_id, None)
+                                self._pending_placed_price.pop(order.order_id, None)
+                                self._pending_extended.pop(order.order_id, None)
+                                logger.warning('PAPER_PENDING_CANCELLED %s order=%s reason=%s',
+                                               order.symbol, order.order_id, reason)
+                                self._log_activity('pending_fill_blocked', {
+                                    'order_id': order.order_id, 'symbol': order.symbol,
+                                    'reason': reason, 'active_count': active_count, 'cap': cap,
+                                })
+                                self._save_state()
+                                continue
+                            fill = None
+                            if position or not order.filled_quantity:
                                 current_price = self._price_cache.get(order.symbol)
-                                if current_price:
-                                    fill = executor.execute_limit_order(order.order_id, current_price)
-                                    if fill:
-                                        # Check if this order is linked to an existing position
-                                        position = self.position_manager.find_position_by_order_id(order.order_id)
-                                        if position:
-                                            # Add volume to existing position
-                                            self.position_manager.add_position_volume(
-                                                position.position_id, fill.price, fill.quantity
-                                            )
-                                            logger.info(
-                                                f"PARTIAL FILL SYNCED: {position.symbol} +{fill.quantity:.6f} "
-                                                f"| New Size: {position.quantity:.6f}"
-                                            )
-                                        # Handle filled orders that were waiting in _pending_plans
-                                        elif order.order_id in self._pending_plans and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
-                                            plan = self._pending_plans.get(order.order_id)
-                                            if plan:
-                                                # Re-check position cap at fill time. Multiple pending orders
-                                                # can fill in the same monitor tick, bypassing the cap that
-                                                # was checked when the signal was originally processed.
-                                                active_count_now = len(self._get_active_positions())
-                                                cap = self.config.max_positions if self.config else 3
-                                                if active_count_now >= cap:
-                                                    try:
-                                                        executor.cancel_order(order.order_id)
-                                                    except Exception as _ce:
-                                                        logger.warning("cancel_order %s failed: %s", order.order_id, _ce)
-                                                    self._pending_plans.pop(order.order_id, None)
-                                                    self._pending_placed_at.pop(order.order_id, None)
-                                                    logger.info(
-                                                        f"PENDING FILL BLOCKED (cap): {plan.symbol} "
-                                                        f"| active={active_count_now}/{cap} — order cancelled"
-                                                    )
-                                                    self._log_activity("pending_fill_blocked", {
-                                                        "order_id": order.order_id,
-                                                        "symbol": plan.symbol,
-                                                        "direction": plan.direction,
-                                                        "reason": "max_positions_reached_at_fill",
-                                                        "active_count": active_count_now,
-                                                        "cap": cap,
-                                                    })
-                                                else:
-                                                    self._inject_cvd_snapshot(plan)  # observational entry snapshot
-                                                    position_id = self.position_manager.open_position(
-                                                        trade_plan=plan,
-                                                        entry_price=fill.price,
-                                                        quantity=fill.quantity,
-                                                        entry_order_id=order.order_id
-                                                    )
-
-                                                    self.stats.signals_taken += 1
-                                                    logger.info(
-                                                        f"PENDING ORDER FILLED: {plan.symbol} @ {fill.price:.2f} "
-                                                        f"| Opening position {position_id}"
-                                                    )
-
-                                                    # Position opened — remove from pending tracking
-                                                    self._pending_plans.pop(order.order_id, None)
-                                                    self._pending_placed_at.pop(order.order_id, None)
-
-                                                    # Mark the signal as executed now that the fill happened.
-                                                    # The original _log_signal call used result="pending"; this
-                                                    # second entry with result="executed" lets the diagnostic
-                                                    # report and per-symbol stats correctly count the trade.
-                                                    self._log_signal(
-                                                        plan,
-                                                        "executed",
-                                                        f"Pending order filled @ {fill.price:.6g}",
-                                                        fill_price=fill.price,
-                                                        fill_qty=fill.quantity,
-                                                        position_id=position_id,
-                                                    )
-
-                                                    self._log_activity("trade_opened", {
-                                                        "position_id": position_id,
-                                                        "symbol": plan.symbol,
-                                                        "direction": plan.direction,
-                                                        "entry_price": fill.price,
-                                                        "quantity": fill.quantity,
-                                                        "status": "pending_filled"
-                                                    })
-                                        elif not self._has_position(order.symbol) and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
-                                            # This case handles orders that filled but haven't opened a position yet
-                                            # (though _process_signal should handle most of these)
-                                            pass
+                                if not current_price:
+                                    continue
+                                fill = executor.execute_limit_order(order.order_id, current_price)
+                                if not fill:
+                                    continue
+                            if position:
+                                self.position_manager.add_position_volume(
+                                    position.position_id, fill.price, fill.quantity)
+                                logger.info('PARTIAL_FILL_SYNCED %s order=%s qty=%s',
+                                            position.symbol, order.order_id, fill.quantity)
+                            else:
+                                self._adopt_paper_entry(order, plan)
+                            self._save_state()
 
                         # Expire stale pending orders that have outlived their per-type TTL.
                         if self._pending_plans and self.config and not getattr(executor, '_accounting', None):
@@ -1967,52 +1932,46 @@ class PaperTradingService:
         
         self.last_scan_at = datetime.now(timezone.utc)
         
-        # Check for dynamic mode adaptation if base mode is "stealth"
-        actual_scan_mode = getattr(conf, "sniper_mode", "stealth")
-        if actual_scan_mode == "stealth":
-            try:
-                from backend.strategy.planner.regime_engine import get_mode_recommendation  # type: ignore
-                
-                detector = self.orchestrator.regime_detector
-                global_regime = detector.get_confirmed_regime()
-                
-                if global_regime and global_regime.composite != "unknown":
-                    rec = get_mode_recommendation(
-                        global_regime.dimensions.trend,
-                        global_regime.dimensions.volatility,
-                        global_regime.dimensions.risk_appetite
-                    )
-                    recommended_mode = rec.get("mode", "stealth")
-                    if recommended_mode != "stealth":
-                        logger.info(
-                            f"🧠 ADAPTIVE MODE: Regime is {global_regime.composite}. "
-                            f"Adapting scan mode from stealth → {recommended_mode} ({rec.get('reason')})"
-                        )
-                        # NOTE: For paper trading, execution stays locked to STEALTH to avoid
-                        # accidentally switching into stricter modes (e.g., Overwatch 78% gate)
-                        # which can starve trade frequency.  actual_scan_mode is only used for
-                        # display/logging — the orchestrator always scans with self.mode (stealth).
-                        actual_scan_mode = recommended_mode
-                        self.active_mode = actual_scan_mode
-                        
-                        # Set active profile for fusion visibility
-                        # If recommended is Strike/Surgical, use that; otherwise stealth
-                        if recommended_mode in ["strike", "surgical"]:
-                           self.active_profile = recommended_mode
-                        else:
-                           self.active_profile = "stealth"
+        def _finish_without_candidates(error=None):
+            reason = "universe_selection_failed" if error is not None else "universe_empty"
+            details = {"reason": reason, "symbols_scanned": 0, "signals_found": 0}
+            if error is not None:
+                details["error"] = f"{type(error).__name__}: {error}"
+                logger.error("Universe selection failed; scan aborted: %s", details["error"])
+            else:
+                logger.info("No eligible universe candidates; scan skipped")
+            self.current_scan = {
+                "status": "error" if error is not None else "completed",
+                "started_at": self.last_scan_at.isoformat(),
+                "completed": 0, "total": 0, "passed": 0, "rejected": 0,
+                "progress_pct": 100, "current_symbol": None, "recent_symbols": [],
+                **details,
+            }
+            self._cvd_poll_symbols = []
+            self._log_activity("scan_error" if error is not None else "scan_completed", details)
 
-                        # Log the recommendation to the UI Activity Feed.
-                        # Explicitly note the scan remains in stealth to avoid misleading users.
-                        self._log_activity("system_update", {
-                            "message": (
-                                f"Regime Advisory: {recommended_mode.upper()} conditions detected "
-                                f"(scan stays in STEALTH)."
-                            ),
-                            "details": rec.get("reason", "")
-                        })
-            except Exception as e:
-                logger.error(f"Failed to calculate adaptive regime mode: {e}")
+        # Resolve a complete policy between scans. Existing positions retain their plans.
+        actual_scan_mode = conf.sniper_mode
+        if getattr(conf, "selection_mode", "fixed") == "adaptive":
+            try:
+                snapshot = await self._regime_reader.get_global()
+                advice = self._adaptive_selector.select(snapshot, conf.allowed_modes)
+            except Exception:
+                from backend.analysis.mode_recommendation import unavailable_recommendation
+                advice = unavailable_recommendation()
+            self.mode_recommendation = advice
+            if advice["status"] != "available":
+                self.current_scan = {"status": "waiting", "started_at": self.last_scan_at.isoformat(),
+                                     "completed": 0, "total": 0, "passed": 0, "rejected": 0,
+                                     "progress_pct": 100, "reason": advice["reason_code"],
+                                     "message": advice["reason"]}
+                self._log_activity("strategy_wait", advice)
+                return
+            actual_scan_mode = advice["mode"]
+        self.mode = get_mode(actual_scan_mode)
+        self.active_mode, self.active_profile = self.mode.name, self.mode.profile
+        if self.diagnostic_logger:
+            self.diagnostic_logger.set_context(mode=actual_scan_mode)
 
         self._log_activity("scan_started", {"mode": actual_scan_mode})
         self.stats.scans_completed += 1
@@ -2037,11 +1996,11 @@ class PaperTradingService:
                         altcoins=getattr(self.config, "altcoins", False),
                         meme_mode=getattr(self.config, "meme_mode", False),
                         leverage=self.config.leverage,
-                        market_type=self.orchestrator.config.market_type if hasattr(self.orchestrator.config, "market_type") else "perp"
+                        market_type=getattr(self.orchestrator.exchange_adapter, "default_type", None),
                     )
                 except Exception as e:
-                    logger.warning(f"Pair selection failed ({e}), using default majors")
-                    scan_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
+                    _finish_without_candidates(e)
+                    return
 
             # Apply stale-symbol drop regardless of how scan_symbols was built.
             # The user-pinned path (config.symbols) bypasses select_symbols(), so
@@ -2060,6 +2019,10 @@ class PaperTradingService:
                 # the mass-conservation assert. Scan continues with the unfiltered
                 # list — graceful degradation, NOT silent failure.
                 logger.warning(f"filter_stale_symbols failed: {_stale_exc}")
+
+            if not scan_symbols:
+                _finish_without_candidates()
+                return
 
             # Apply the LIQUIDITY floor regardless of how scan_symbols was built — covers
             # user-pinned AND auto-selected (operator decision 2026-06-18: pinned symbols ARE
@@ -2181,6 +2144,10 @@ class PaperTradingService:
             if self.config.exclude_symbols:
                 scan_symbols = [s for s in scan_symbols if s not in self.config.exclude_symbols]
 
+            if not scan_symbols:
+                _finish_without_candidates()
+                return
+
             # Feed the candidate universe to the observational CVD poller (so CVD-at-entry is warm
             # when a symbol fires). Pure assignment — no decision impact. decisions/2026-06-30__cvd.
             self._cvd_poll_symbols = list(scan_symbols)
@@ -2199,7 +2166,7 @@ class PaperTradingService:
                     )
                 self._expired_symbols.clear()
 
-            logger.info(f"Starting scan: {len(scan_symbols)} symbols, mode={self.config.sniper_mode}")
+            logger.info(f"Starting scan: {len(scan_symbols)} symbols, mode={actual_scan_mode}")
 
             self.current_scan = {
                 "status": "running",
@@ -2273,24 +2240,15 @@ class PaperTradingService:
             orch = self.orchestrator
             assert orch is not None
             orch.apply_mode(self.mode)
+            orch.config.selection_mode = getattr(conf, "selection_mode", "fixed")
+            orch.config.mode_recommendation = deepcopy(getattr(self, "mode_recommendation", None))
             
-            # Apply sensitivity preset or explicit min_confluence override
-            _rt_preset = (getattr(conf, "sensitivity_preset", None) or "").lower()
-            _rt_min_conf = getattr(conf, "min_confluence", None)
-            if _rt_min_conf is not None:
-                # Explicit numeric override wins
-                orch.config.min_confluence_score = _rt_min_conf
-                _rt_floor = getattr(conf, "confluence_soft_floor", None)
-                if _rt_floor is not None:
-                    orch.config.confluence_soft_floor = _rt_floor
-                else:
-                    orch.config.confluence_soft_floor = max(0.0, _rt_min_conf - 10.0)
-            elif _rt_preset in _SENSITIVITY_PRESETS:
-                orch.config.min_confluence_score = _SENSITIVITY_PRESETS[_rt_preset]["gate"]
-                orch.config.confluence_soft_floor = _SENSITIVITY_PRESETS[_rt_preset]["floor"]
-            if _rt_preset:
-                orch.config.sensitivity_preset = _rt_preset
-                
+            gate, floor, preset = resolve_bot_sensitivity(conf, self.mode.min_confluence_score)
+            orch.config.min_confluence_score = floor
+            orch.config.bot_full_size_gate = gate
+            orch.config.confluence_soft_floor = floor
+            orch.config.sensitivity_preset = preset
+
             loop = asyncio.get_running_loop()
             trade_plans, rejection_summary = await loop.run_in_executor(
                 None,
@@ -2316,7 +2274,7 @@ class PaperTradingService:
                 score_val = 0.0
 
             # Get the regime policy for current mode (defines min_score, adjustments)
-            regime_policy = get_regime_policy(self.config.sniper_mode)
+            regime_policy = get_regime_policy(self.mode.name)
 
             # Only veto in truly extreme conditions (chaotic + very low score)
             is_extreme = regime_composite in ["chaotic_volatile"] and score_val < 20
@@ -2407,7 +2365,7 @@ class PaperTradingService:
                     
                     mock_plan = SimpleNamespace(
                         symbol=item.get('symbol', 'Unknown'),
-                        direction=item.get('direction', 'LONG'),
+                        direction=item.get('direction') if item.get('direction') in ('LONG', 'SHORT') else 'UNKNOWN',
                         confidence_score=item.get('score', 0.0),
                         setup_type='filtered',
                         entry_zone=entry_zone,
@@ -2439,6 +2397,16 @@ class PaperTradingService:
                         reason_type=reason_type,
                         # Score vs threshold — lets the UI draw a gap bar
                         threshold=item.get('threshold'),
+                        score_model_version=item.get('score_model_version'),
+                        score_policy_version=item.get('score_policy_version'),
+                        scoring_mode=item.get('scoring_mode'),
+                        score_gate=item.get('score_gate'),
+                        score_gate_passed=item.get('score_gate_passed'),
+                        evidence_families=item.get('evidence_families'),
+                        evidence_eligible=item.get('evidence_eligible'),
+                        evidence_missing=item.get('evidence_missing'),
+                        admission_passed=item.get('admission_passed'),
+                        score_calibration=item.get('score_calibration'),
                         # Conflict density details — list of specific conflicting
                         # structural breaks + OBs, empty for non-conflict gates
                         conflict_conditions=item.get('conflict_conditions', []),
@@ -2540,10 +2508,15 @@ class PaperTradingService:
             "pullback_probability": float(_pb or 0),
             "kill_zone": _kz,
             "execution_mode": getattr(self.config, "execution_mode", "snap_taker"),
+            "strategy": deepcopy((getattr(plan, "metadata", None) or {}).get("strategy", {})),
         }
         # Confluence breakdown features (Tier 1 ML enrichment)
         _cb = getattr(plan, "confluence_breakdown", None)
         if _cb is not None:
+            _score_meta = getattr(_cb, "metadata", {}) or {}
+            for key in ("score_model_version", "score_policy_version", "score_calibration", "scoring_mode", "score_gate", "score_gate_passed", "evidence_eligible", "evidence_missing", "admission_passed", "evidence_families"):
+                if key in _score_meta:
+                    entry[key] = _score_meta[key]
             entry["synergy_bonus"] = round(float(getattr(_cb, "synergy_bonus", 0) or 0), 2)
             entry["conflict_penalty"] = round(float(getattr(_cb, "conflict_penalty", 0) or 0), 2)
             entry["htf_aligned"] = int(bool(getattr(_cb, "htf_aligned", False)))
@@ -2652,6 +2625,21 @@ class PaperTradingService:
         assert config is not None
         assert position_manager is not None
 
+        # Qualify before any cancellation or direction-flip side effect.
+        strategy_gate = plan_strategy_gate(plan, config.sniper_mode)
+        if not evidence_allows_entry(plan) or not passes_confluence_gate(plan.confidence_score, strategy_gate):
+            self._log_signal(plan, "filtered", "Setup does not meet its playbook requirements",
+                             reason_type="evidence_requirements" if not evidence_allows_entry(plan) else "low_confluence",
+                             threshold=strategy_gate)
+            return
+        incoming = (getattr(plan, "metadata", None) or {}).get("strategy", {})
+        for existing in position_manager.positions.values():
+            if existing.symbol == plan.symbol and existing.remaining_quantity > 0:
+                original = getattr(existing, "strategy", {})
+                if (original.get("mode"), original.get("version")) != (incoming.get("mode"), incoming.get("version")):
+                    self._log_signal(plan, "filtered", "Open trade retains its original playbook", reason_type="has_position")
+                    return
+
 
 
         # R:R sanity cap — reject plans with unreachable targets.
@@ -2718,13 +2706,17 @@ class PaperTradingService:
                 if executor and existing_pos.remaining_quantity > 0 and close_price:
                     close_side = "SELL" if existing_direction == "LONG" else "BUY"
                     try:
-                        confirmed = await self._execute_exit_order(
-                            symbol=plan.symbol,
-                            side=close_side,
-                            quantity=existing_pos.remaining_quantity,
-                            price=close_price,
-                            **({'entry_order_id': existing_pos.entry_order_id} if existing_pos.entry_order_id else {}),
-                        )
+                        if getattr(executor, '_accounting', None):
+                            confirmed = await self._execute_exit_order(
+                                symbol=plan.symbol,
+                                side=close_side,
+                                quantity=existing_pos.remaining_quantity,
+                                price=close_price,
+                                **({'entry_order_id': existing_pos.entry_order_id} if existing_pos.entry_order_id else {}),
+                            )
+                        else:
+                            confirmed = await self.position_manager._execute_exit(
+                                existing_pos, close_price, 'DIRECTION_FLIP')
                     except Exception as _ex:
                         logger.warning(
                             f"DIRECTION FLIP: executor close failed for {plan.symbol}: {_ex} — "
@@ -2775,6 +2767,11 @@ class PaperTradingService:
         )
         if existing_order_id:
             existing_plan = self._pending_plans[existing_order_id]
+            old_strategy = (getattr(existing_plan, "metadata", None) or {}).get("strategy", {})
+            new_strategy = (getattr(plan, "metadata", None) or {}).get("strategy", {})
+            if (old_strategy.get("mode"), old_strategy.get("version")) != (new_strategy.get("mode"), new_strategy.get("version")):
+                self._log_signal(plan, "filtered", "Pending trade retains its original playbook", reason_type="pending_order")
+                return
             direction_flipped = existing_plan.direction != plan.direction
 
             if direction_flipped:
@@ -2888,16 +2885,8 @@ class PaperTradingService:
         # (conservative/balanced/aggressive/custom) and are stored on ScanConfig.
         # Explicit None-check: a caller may set min_confluence=0 to force all
         # signals through for diagnostics; ``or`` would silently swallow that.
-        min_score = (
-            config.min_confluence
-            if config.min_confluence is not None
-            else (self.mode.min_confluence_score if self.mode else 60)
-        )
-        soft_floor = getattr(config, "confluence_soft_floor", None)
-        if soft_floor is None:
-            soft_floor = max(0.0, min_score - 10.0)   # fallback: 10-point band
-
-        _preset = getattr(config, "sensitivity_preset", "balanced")
+        strategy_gate = plan_strategy_gate(plan, config.sniper_mode)
+        min_score, soft_floor, _preset = resolve_bot_sensitivity(config, strategy_gate)
 
         # Apply dynamic adjustments (Phase 2: drawdown tightening,
         # Phase 3: kill zone floor relaxation)
@@ -2906,8 +2895,8 @@ class PaperTradingService:
             base_floor=soft_floor,
             preset=_preset,
         )
-        gate_r  = round(gate_r, 1)
-        floor_r = round(floor_r, 1)
+        gate_r  = round(max(strategy_gate, gate_r), 1)
+        floor_r = round(max(strategy_gate, floor_r), 1)
         score_r = round(plan.confidence_score, 1)
 
         if _adjustments:
@@ -2916,26 +2905,20 @@ class PaperTradingService:
                 plan.symbol, plan.direction, " | ".join(_adjustments),
             )
 
-        if score_r >= gate_r:
+        if not evidence_allows_entry(plan):
+            self._log_signal(plan, 'filtered', 'Required entry evidence is incomplete', reason_type='evidence_requirements')
+            return
+        if not passes_confluence_gate(plan.confidence_score, 0.0):
+            self._log_signal(plan, "filtered", "Invalid confluence score", reason_type="confluence")
+            return
+        if passes_confluence_gate(plan.confidence_score, gate_r):
             size_modifier = 1.0   # full conviction — normal execution
-        elif score_r >= floor_r:
+        elif passes_confluence_gate(plan.confidence_score, floor_r):
             size_modifier = 0.5   # near-miss — half size, still trade
             _adj_note = f" [{'; '.join(_adjustments)}]" if _adjustments else ""
             logger.info(
                 f"NEAR-MISS ENTRY: {plan.symbol} {plan.direction} "
                 f"| confluence {score_r:.1f}% in band [{floor_r:.0f}–{gate_r:.0f}%]{_adj_note} "
-                f"| taking at 50% position size"
-            )
-        elif is_thesis_mode():
-            # Heart-change chunk 4: in thesis mode the confluence score is DEMOTED — the orchestrator
-            # already gated go/no-go on the structural thesis (FLAT rejects upstream). A below-floor
-            # score no longer SKIPS here; it takes at minimum (half) size — the score informs SIZING,
-            # not the trade/no-trade decision. This is the bot's half of the dual-gate demotion
-            # (must move WITH the orchestrator gate or it secretly re-score-gates the thesis trades).
-            size_modifier = 0.5
-            logger.info(
-                f"THESIS ENTRY: {plan.symbol} {plan.direction} "
-                f"| confluence {score_r:.1f}% below floor {floor_r:.0f}% (score demoted) "
                 f"| taking at 50% position size"
             )
         else:
@@ -2965,7 +2948,7 @@ class PaperTradingService:
         # Rules:
         #   strong_up / strong_down → block ALL counter-trend (no edge at any R:R)
         #   up / down / up_compressed / down_compressed → block counter-trend intraday
-        #     and swing; allow scalp only at ≥70% confluence, half-sized
+        #     and swing; allow scalp only at the strong-score band, half-sized
         #   scalp counter-trend that passes → half-size via size_modifier *= 0.5
         _ct_trend = getattr(self, "_current_regime_trend", "sideways") or "sideways"
         _ct_dir = plan.direction
@@ -3019,14 +3002,14 @@ class PaperTradingService:
                 })
                 return
             else:
-                # Counter-trend scalp in directional regime — allowed at ≥70% only, half-sized.
+                # Counter-trend scalp in directional regime needs the strong-score band, half-sized.
                 # Heart-change leftover-gate demotion #2 (operator-flagged): in thesis mode the
                 # demoted confluence score must NOT gate a counter-trend scalp the thesis already
                 # adjudicated (structure-led + the strong-trend block above + CHoCH exemption are the
-                # controls); the trade still takes at half size. Legacy keeps the ≥70% floor.
-                if not is_thesis_mode() and plan.confidence_score < 70.0:
+                # controls); the trade still takes at half size. Legacy keeps the strong-score floor.
+                if not is_thesis_mode() and not passes_confluence_gate(plan.confidence_score, STRONG_SCORE):
                     _ct_reason = (
-                        f"Counter-trend {_ct_dir} scalp requires ≥70% confluence in "
+                        f"Counter-trend {_ct_dir} scalp requires ≥{STRONG_SCORE:g}/100 confluence in "
                         f"{_ct_trend} regime (got {plan.confidence_score:.1f}%)"
                     )
                     logger.info(f"SIGNAL FILTERED (regime_counter_trend): {plan.symbol} | {_ct_reason}")
@@ -3041,7 +3024,7 @@ class PaperTradingService:
                 size_modifier *= 0.5
                 logger.info(
                     f"COUNTER-TREND SCALP (half-sized): {plan.symbol} {_ct_dir} "
-                    f"| regime={_ct_trend} | conf={plan.confidence_score:.1f}% ≥70% "
+                    f"| regime={_ct_trend} | score={plan.confidence_score:.1f}/100 ≥{STRONG_SCORE:g} "
                     f"| size_modifier → {size_modifier:.2f}"
                 )
 
@@ -3150,7 +3133,7 @@ class PaperTradingService:
             _trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
             _raw_limit = float(plan.entry_zone.near_entry)
             _max_dist = _MAX_LIMIT_DISTANCE_PCT.get(_trade_type, 0.40)
-            if plan.confidence_score >= 70.0:
+            if passes_confluence_gate(plan.confidence_score, STRONG_SCORE):
                 _max_dist /= 2.0  # High-confluence → tighter snap → faster fill
             _gap_pct = abs(_raw_limit - current_price) / current_price * 100 if current_price else 0
 
@@ -3299,6 +3282,11 @@ class PaperTradingService:
                 return
 
 
+            # Preserve ownership before any immediate fill; adoption may fail.
+            self._pending_plans[order.order_id] = plan
+            self._pending_placed_at[order.order_id] = datetime.now(timezone.utc)
+            self._pending_placed_price[order.order_id] = current_price
+
             # snap_taker: fill immediately at ~market (taker). rest_maker: leave the limit RESTING at
             # the OB → fill=None routes to the pending branch, filled later by the monitor loop only
             # when price retraces to the level (maker). The execute_limit_order fill-gate
@@ -3314,6 +3302,9 @@ class PaperTradingService:
                     quantity=fill.quantity,
                     entry_order_id=order.order_id
                 )
+                self._pending_plans.pop(order.order_id, None)
+                self._pending_placed_at.pop(order.order_id, None)
+                self._pending_placed_price.pop(order.order_id, None)
 
                 # ── Entry-time liquidity-pool snapshot (2026-06-13, observability-only) ──
                 # Capture the SMC static pool context at entry and stash it on the live
@@ -3460,6 +3451,18 @@ class PaperTradingService:
             pos.regime_trend = self._current_regime_trend
             pos.regime_volatility = self._current_regime_volatility
 
+    def _paper_equity(self) -> float:
+        """Value actual simulated exposure, including unfinished exit slices."""
+        if isinstance(self.executor, PaperExecutor):
+            prices = dict(self.executor.position_avg_price)
+            prices.update(self._price_cache)
+            return self.executor.get_equity(prices)
+        # Compatibility with non-paper executors without the accounting runtime.
+        equity = self.executor.get_balance()
+        if self.position_manager:
+            equity += sum(pos.unrealized_pnl for pos in self.position_manager.get_open_positions())
+        return equity
+
     def _get_current_drawdown_pct(self) -> float:
         """Return the live peak-to-trough drawdown for the current session (0.0 if none).
 
@@ -3472,13 +3475,7 @@ class PaperTradingService:
         if getattr(self.executor, '_accounting', None):
             equity = self.executor.get_equity({})
             return max(0., (self._peak_equity - equity) / self._peak_equity * 100) if equity is not None else self.stats.max_drawdown
-        current_equity = self.executor.get_balance()
-        if self.position_manager:
-            current_equity += sum(
-                pos.unrealized_pnl
-                for pos in self.position_manager.positions.values()
-                if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
-            )
+        current_equity = self._paper_equity()
         current_equity = max(0.0, current_equity)
         if current_equity >= self._peak_equity:
             return 0.0
@@ -3495,7 +3492,7 @@ class PaperTradingService:
         Two automatic adjustments run on every signal evaluation:
 
         Phase 2 — Drawdown-linked gate tightening:
-          current drawdown ≥ 8% → hard cap to conservative (gate=72, floor=62)
+          current drawdown ≥ 8% → tighten to at least the conservative policy
             regardless of chosen preset — prevents digging deeper with weak setups.
           current drawdown ≥ 5% → shift up one preset tier automatically.
             aggressive → balanced, balanced → conservative, conservative stays.
@@ -3518,17 +3515,18 @@ class PaperTradingService:
         # ── Phase 2: Drawdown-linked gate tightening ──────────────────────────
         current_dd = self._get_current_drawdown_pct()
         if current_dd >= 8.0:
-            new_gate, new_floor = 72.0, 62.0   # hard cap to conservative
+            conservative = _SENSITIVITY_PRESETS['conservative']
+            new_gate, new_floor = max(gate, conservative['gate']), max(floor, conservative['floor'])
             if gate != new_gate or floor != new_floor:
                 adjustments.append(
-                    f"drawdown {current_dd:.1f}% ≥ 8% → hard-capped at conservative "
+                    f"drawdown {current_dd:.1f}% ≥ 8% → at least conservative "
                     f"(gate {gate:.0f}→{new_gate:.0f}, floor {floor:.0f}→{new_floor:.0f})"
                 )
             gate, floor = new_gate, new_floor
         elif current_dd >= 5.0:
             tier_name = _PRESET_TIER_UP.get(preset, "conservative")
             tier = _SENSITIVITY_PRESETS.get(tier_name, _SENSITIVITY_PRESETS["conservative"])
-            new_gate, new_floor = tier["gate"], tier["floor"]
+            new_gate, new_floor = max(gate, tier["gate"]), max(floor, tier["floor"])
             if gate != new_gate or floor != new_floor:
                 adjustments.append(
                     f"drawdown {current_dd:.1f}% ≥ 5% → shifted to {tier_name} "
@@ -3539,8 +3537,9 @@ class PaperTradingService:
         # ── Phase 3: Kill zone floor relaxation ───────────────────────────────
         try:
             active_kz = get_current_kill_zone(datetime.now(timezone.utc))
-            if active_kz is not None:
-                relaxed_floor = max(40.0, floor - 3.0)
+            if active_kz is not None and current_dd < 5.0:
+                # Relaxation cannot raise a small/zero floor or exceed its gate.
+                relaxed_floor = min(floor, max(40.0, floor - 3.0))
                 if relaxed_floor != floor:
                     adjustments.append(
                         f"kill zone active ({active_kz}) → floor {floor:.0f}→{relaxed_floor:.0f}"
@@ -3575,8 +3574,7 @@ class PaperTradingService:
                 # Validate cash before adding P&L; bool is not a cash amount.
                 if isinstance(balance, bool) or not math.isfinite(float(balance)):
                     raise ValueError("invalid balance")
-                if self.position_manager:
-                    balance += sum(pos.unrealized_pnl for pos in self.position_manager.get_open_positions())
+                balance = self._paper_equity()
                 available = balance
             values = {
                 'equity': balance, 'free': available,
@@ -3763,6 +3761,24 @@ class PaperTradingService:
             if pos.status not in [PositionStatus.OPEN, PositionStatus.PARTIAL]:
                 continue
 
+            if isinstance(self.executor, PaperExecutor):
+                pending_id = self._pending_paper_exits.get(pos.symbol)
+                pending = self.executor.get_order(pending_id) if pending_id else None
+                if pending and pending.filled_quantity:
+                    # Display actual holdings while the manager retains the
+                    # original logical slice for receipt completion. Never alter
+                    # the manager's targets or quantity from a status read.
+                    pos = deepcopy(pos)
+                    sold = min(pending.filled_quantity, pos.remaining_quantity)
+                    prior_remaining = pos.remaining_quantity
+                    pos.remaining_quantity -= sold
+                    pos.realized_pnl += (pending.average_fill_price - pos.entry_price) * sold * (
+                        1 if pos.direction == 'LONG' else -1)
+                    if pos.pending_target is not None:
+                        pos.pending_target.percentage = max(0., pos.pending_target.percentage - sold / pos.quantity * 100)
+                    else:
+                        for target in pos.targets:
+                            target.percentage *= pos.remaining_quantity / prior_remaining
             current_price = self._price_cache.get(pos.symbol, pos.entry_price)
             pos.update_unrealized_pnl(current_price)
 
@@ -3773,6 +3789,7 @@ class PaperTradingService:
             positions.append(
                 {
                     "position_id": pos.position_id,
+                    "strategy": deepcopy(getattr(pos, "strategy", {})),
                     "symbol": pos.symbol,
                     "direction": pos.direction,
                     "entry_price": pos.entry_price,
@@ -3818,15 +3835,15 @@ class PaperTradingService:
         return positions
 
     def _journal_pnl_for(self, pos) -> float:
-        """Journal P&L = the executor's ACTUAL realized cash for this position (net of fees, on the
-        actually-filled qty), so the journal matches the account and edge measurement is trustworthy.
-        Falls back to pos.total_pnl when the executor doesn't track it (live executor / simulation),
-        leaving those paths unchanged. (2026-06-27 journal-vs-executor reconciliation, paper-only.)"""
-        _exec = getattr(self, "executor", None)
-        if _exec is not None and hasattr(_exec, "pop_position_realized"):
-            _actual = _exec.pop_position_realized(getattr(pos, "symbol", None))
-            if _actual is not None:
-                return float(_actual)
+        """Freeze actual paper cash P&L once; publication retries reuse it."""
+        if hasattr(pos, '_paper_journal_pnl'):
+            return pos._paper_journal_pnl
+        executor = getattr(self, 'executor', None)
+        if executor is not None and hasattr(executor, 'pop_position_realized'):
+            actual = executor.pop_position_realized(getattr(pos, 'symbol', None))
+            if actual is not None:
+                pos._paper_journal_pnl = float(actual)
+                return pos._paper_journal_pnl
         return pos.total_pnl
 
     async def _sync_closed_positions(self):
@@ -3907,6 +3924,7 @@ class PaperTradingService:
                     alt_velocity_1h_at_entry=getattr(pos, "alt_velocity_1h_at_entry", 0.0),
                     macro_state_at_entry=getattr(pos, "macro_state_at_entry", "unknown"),
                     regime_trend_at_entry=getattr(pos, "entry_regime_trend", "sideways"),
+                    strategy=deepcopy(getattr(pos, "strategy", {})),
                     regime_labeled_at=getattr(pos, "regime_labeled_at", "entry"),
                     htf_aligned_at_entry=getattr(pos, "htf_aligned_at_entry", False),
                     setup_qualifier=getattr(pos, "setup_qualifier", "Unknown"),
@@ -4065,6 +4083,40 @@ class PaperTradingService:
             return
 
         runtime = bool(getattr(self.executor, '_accounting', None))
+        if isinstance(self.executor, PaperExecutor):
+            # Complete paper reductions synchronously during shutdown, retaining
+            # failed orders/positions for a later stop retry. Never erase exposure.
+            for order_id, plan in list(self._pending_plans.items()):
+                order = self.executor.get_order(order_id)
+                if order and order.filled_quantity and not self.position_manager.find_position_by_order_id(order_id):
+                    self._adopt_paper_entry(order, plan)
+            for order in self.executor.get_open_orders():
+                if order.order_type == OrderType.LIMIT:
+                    if not self.executor.cancel_order(order.order_id):
+                        raise ValueError('PAPER_STOP_ENTRY_CANCEL_UNCONFIRMED')
+                    self._pending_plans.pop(order.order_id, None)
+                    self._pending_placed_at.pop(order.order_id, None)
+                    self._pending_placed_price.pop(order.order_id, None)
+                    self._pending_extended.pop(order.order_id, None)
+            for pos in self.position_manager.get_open_positions():
+                for _ in range(32):  # bounded even with malformed simulation parameters
+                    price = self._price_cache.get(pos.symbol)
+                    if not price:
+                        logger.error('PAPER_STOP_PRICE_MISSING %s', pos.symbol)
+                        break
+                    if pos.pending_target is not None or pos.pending_exit_reason:
+                        await self.position_manager._retry_pending_reduction(pos, price)
+                    else:
+                        receipt = await self.position_manager._execute_exit(pos, price, reason)
+                        if isinstance(receipt, ExecutionReceipt):
+                            self.position_manager.close_position(pos.position_id, reason, receipt.average_price)
+                    if pos.remaining_quantity <= 0:
+                        break
+            await self._sync_closed_positions()
+            self._save_state()
+            if self.position_manager.get_open_positions():
+                logger.error('PAPER_STOP_INCOMPLETE: positions retained for retry')
+            return
         if runtime:
             for order in self.executor.get_open_entry_orders():
                 try:
@@ -4236,6 +4288,21 @@ class PaperTradingService:
                 "positions": positions_data,
                 "pending_orders": pending_data,
             }
+            if isinstance(self.executor, PaperExecutor):
+                # Manager quantities include uncommitted logical exit slices.
+                # Preserve actual exposure and the cumulative fills alongside them.
+                state["paper_execution"] = {
+                    "positions": dict(self.executor.positions),
+                    "pending_exits": [
+                        asdict(self.executor.get_order(order_id))
+                        for order_id in self._pending_paper_exits.values()
+                    ],
+                    "unpublished_positions": [
+                        dict(asdict(pos), paper_cash_pnl=getattr(pos, '_paper_journal_pnl', None))
+                        for pos in self.position_manager.positions.values()
+                        if pos.status not in (PositionStatus.OPEN, PositionStatus.PARTIAL)
+                    ] if self.position_manager else [],
+                }
 
             state_path = self._session_log_dir / "state.json"
             tmp_path = state_path.with_suffix(".tmp")
@@ -4265,13 +4332,7 @@ class PaperTradingService:
                         (self._peak_equity - equity) / self._peak_equity * 100)
             return
         # Equity = realized balance + all unrealized PnL on open/partial positions
-        current_equity = self.executor.get_balance()
-        if self.position_manager:
-            current_equity += sum(
-                pos.unrealized_pnl
-                for pos in self.position_manager.positions.values()
-                if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
-            )
+        current_equity = self._paper_equity()
         if current_equity > self._peak_equity:
             self._peak_equity = current_equity
         elif self._peak_equity > 0:
@@ -4388,13 +4449,7 @@ class PaperTradingService:
             initial = self.config.initial_balance if self.config else 0
             final_equity = initial  # fallback
             if self.executor and not getattr(self.executor, '_accounting', None):
-                unrealized = 0.0
-                if self.position_manager:
-                    unrealized = sum(
-                        p.unrealized_pnl for p in self.position_manager.positions.values()
-                        if p.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
-                    )
-                final_equity = self.executor.get_balance() + unrealized
+                final_equity = self._paper_equity()
 
             if getattr(self.executor, '_accounting', None):
                 values = self.executor.balance_status()
@@ -4762,64 +4817,79 @@ class PaperTradingService:
     async def _execute_exit_order(
         self, symbol: str, side: str, quantity: float, price: float, entry_order_id: Optional[str] = None
     ) -> bool | ExecutionReceipt:
+        """Settle one logical reduction only after its full, priced execution.
+
+        Paper partials retain the same order across monitor ticks. The manager's
+        pending-reduction state owns that slice until the cumulative receipt is
+        complete, just as on the existing testnet path.
         """
-        Execute exit order (called by position manager).
-
-        Returns a priced receipt for testnet, True for simulation, or False on failure. The position
-        manager checks the return value to decide whether to clear the
-        position state — swallowing exceptions silently here previously
-        left positions in a "half-closed" state where internal bookkeeping
-        thought the exit had executed but the paper executor never filled.
-        """
-        if not self.executor:
-            logger.error(
-                f"_execute_exit_order: no executor configured for {symbol} "
-                f"{side} qty={quantity} price={price}"
-            )
+        if not self.executor or quantity <= 0 or price <= 0:
+            logger.error("EXIT_INVALID_REQUEST %s %s qty=%s price=%s", symbol, side, quantity, price)
             return False
-
-        if quantity <= 0 or price <= 0:
-            logger.error(
-                f"_execute_exit_order: invalid args for {symbol} "
-                f"side={side} qty={quantity} price={price}"
-            )
-            return False
-
         try:
             if getattr(self.executor, '_accounting', None):
                 return await self._execute_testnet_exit(symbol, side, quantity, price, entry_order_id)
-            order = self.executor.place_order(
-                symbol=symbol,
-                side=side,
-                order_type="MARKET",
-                quantity=quantity,
-                price=price,
+            if not all(type(value) in (int, float) and math.isfinite(value) for value in (quantity, price)):
+                raise ValueError('PAPER_EXIT_INVALID_NUMBER')
+
+            executor = self.executor
+            position = self.position_manager.find_position_by_order_id(entry_order_id) if (
+                self.position_manager and entry_order_id) else None
+            if position is None or position.symbol != symbol:
+                raise ValueError('PAPER_EXIT_OWNER_MISSING')
+            expected_side = 'SELL' if position.direction == 'LONG' else 'BUY'
+            if side != expected_side or quantity > position.remaining_quantity:
+                raise ValueError('PAPER_EXIT_QUANTITY_OR_SIDE_CONFLICT')
+
+            # Never allow a resting entry remainder to reopen an exiting trade.
+            entry = executor.get_order(entry_order_id)
+            if entry and entry.status in (OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED):
+                if not executor.cancel_order(entry_order_id):
+                    raise ValueError('PAPER_ENTRY_CANCEL_UNCONFIRMED')
+
+            oid = self._pending_paper_exits.get(symbol)
+            order = executor.get_order(oid) if oid else None
+            if order is not None:
+                if (order.parent_entry_order_id != entry_order_id or order.side.value != side
+                        or order.quantity != quantity):
+                    raise ValueError('PAPER_EXIT_REQUEST_CONFLICT')
+            elif oid:
+                raise ValueError('PAPER_EXIT_ORDER_MISSING')
+            else:
+                exposure = executor.get_position(symbol)
+                if (exposure * (1 if position.direction == 'LONG' else -1) <= 0
+                        or quantity > abs(exposure) + 1e-9):
+                    raise ValueError('PAPER_EXIT_EXPOSURE_CONFLICT')
+                order = executor.place_order(symbol, side, 'MARKET', quantity, price=price)
+                if order is None:
+                    raise ValueError('PAPER_EXIT_SUBMISSION_FAILED')
+                order.parent_entry_order_id = entry_order_id
+                self._pending_paper_exits[symbol] = order.order_id
+
+            if order.status != OrderStatus.FILLED:
+                executor.execute_market_order(order.order_id, price)
+            receipt = ExecutionReceipt(
+                order.order_id, Decimal(str(order.filled_quantity)),
+                Decimal(str(order.filled_quantity)) * Decimal(str(order.average_fill_price))
+                    if order.filled_quantity else None,
+                None, order.status == OrderStatus.FILLED, (),
             )
-            if order is None:
-                logger.error(
-                    f"_execute_exit_order: place_order returned None for {symbol} "
-                    f"side={side} qty={quantity} price={price}"
-                )
+            if not receipt.confirms(quantity):
+                logger.warning('PAPER_EXIT_PENDING %s order=%s filled=%s requested=%s',
+                               symbol, order.order_id, order.filled_quantity, quantity)
+                self._save_state()
                 return False
 
-            fill = self.executor.execute_market_order(order.order_id, price)
-            if not fill:
-                logger.error(
-                    f"_execute_exit_order: execute_market_order returned falsy fill "
-                    f"for {symbol} order_id={order.order_id} price={price}"
-                )
-                return False
-
-            logger.info(
-                f"✅ Exit order filled: {symbol} {side} qty={quantity} @ {price:.6f} "
-                f"order_id={order.order_id}"
-            )
-            return True
-        except Exception as e:
-            logger.exception(
-                f"_execute_exit_order failed for {symbol} side={side} "
-                f"qty={quantity} price={price}: {e}"
-            )
+            self._pending_paper_exits.pop(symbol)
+            # Freeze the completed position's net cash before a same-symbol
+            # replacement entry can add its own fees to the executor accumulator.
+            if abs(executor.get_position(symbol)) < 1e-9:
+                self._journal_pnl_for(position)
+            logger.info('PAPER_EXIT_FILLED %s order=%s qty=%s price=%s',
+                        symbol, order.order_id, receipt.quantity, receipt.average_price)
+            return receipt
+        except Exception:
+            logger.exception('EXIT_EXECUTION_FAILED %s %s qty=%s price=%s', symbol, side, quantity, price)
             return False
 
 

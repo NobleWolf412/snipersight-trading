@@ -22,6 +22,8 @@ class LiveTradingConfig:
     # --- Shared with PaperTradingConfig ---
     exchange: str = "phemex"
     sniper_mode: str = "stealth"
+    selection_mode: str = "fixed"
+    allowed_modes: List[str] = field(default_factory=list)
     risk_per_trade: float = 1.0
     max_positions: int = 3
     leverage: int = 1

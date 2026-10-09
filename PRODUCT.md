@@ -57,7 +57,7 @@ What SniperSight is **not** allowed to look or feel like:
 These are non-negotiable. They come from the engine, not the design layer; the design layer just makes them visible.
 
 1. **Confluence over conviction.** No single input gets to fire a signal. The score is a weighted sum with synergy bonuses and explicit conflict penalties. Pre-scoring gates hard-fail before scoring even runs.
-2. **Precision over volume.** Four scanner modes, each with its own minimum threshold (68-72). The frontend can override upward but never downward.
+2. **Precision over volume.** Scanner modes provide default thresholds. Request and bot-session overrides can change effective values; read the current configuration path before interpreting a score cutoff. See [configuration ownership](docs/ARCHITECTURE_INDEX.md#decision-contracts-and-configuration-precedence).
 3. **Truth over narrative.** Every signal must be defensible by its breakdown. The Confluence Breakdown and Rejection Panel are surfaces where the engine has to show its work.
 4. **Symmetry.** Bullish and bearish signals are treated identically. Long/short test pairs are mandatory for direction-aware code.
 5. **Observability first.** Every non-trivial decision produces inspectable output. Telemetry events, diagnostic scripts, structured rejection reasons. Silent skips are bugs.

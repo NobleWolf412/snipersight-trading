@@ -1,3 +1,4 @@
+import { BotStrategySettings } from '@/components/hud/BotStrategySettings';
 import { accountingLabel, accountingColor, formatAccountMoney, executionReportNotice } from '../../services/accounting';
 /**
  * RangeBot — full paper-trading equivalent of the live bot
@@ -624,11 +625,7 @@ const DEFAULT_SETUP: PaperConfig = {
   leverage: 1,
   duration_hours: 24,
   scan_interval_minutes: 2,
-  // 68 chosen to match the STRIKE mode min_confluence_score (scanner_modes.py
-  // line ~45). STEALTH (live bot production mode) is 70; paper mode defaults
-  // slightly lower so training sessions see more signals and provide richer
-  // feedback data. This is a paper-only tuning choice — not a live gate change.
-  min_confluence: 68,
+  min_confluence: 65,
   trailing_stop: true,
   trailing_activation: 1.0, // R-multiple (lowered 1.5->1.0 2026-06-29 — 1.5R rarely armed; trades peak 0.7-1.2R)
   breakeven_after_target: 1,
@@ -694,7 +691,7 @@ function SetupTab({
         }}
       >
         <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.14em' }}>
-          ◉ BOT MODE · <span style={{ color: '#22d3ee' }}>{sniperMode.toUpperCase()}</span> · detection set in Scanner · this page configures paper execution only
+          ◉ BOT MODE · <span style={{ color: '#22d3ee' }}>{sniperMode.toUpperCase()}</span> · strategy selected above · paper execution settings below
         </span>
         {thesis && <Chip kind="green">DECISION · THESIS (structure-led)</Chip>}
         <Chip kind="cyan">PAPER ONLY — NO REAL FUNDS</Chip>
@@ -728,9 +725,9 @@ function SetupTab({
       <SectionPanel
         num="03"
         title="Confluence Gate"
-        desc={thesis ? 'DEMOTED in thesis mode — the structure thesis decides direction; this score no longer rejects signals' : 'minimum score for a signal to be taken'}
+        desc="Minimum score for entry. The selected mode’s qualification threshold always applies."
       >
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12, opacity: thesis ? 0.4 : 1 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
           <Slider
             label="Min Confluence Score"
             value={cfg.min_confluence}
@@ -738,12 +735,12 @@ function SetupTab({
             max={95}
             step={1}
             onChange={(v) => set('min_confluence', v)}
-            hint={thesis ? 'context only — NOT a gate in thesis mode (at most nudges size tier)' : 'signals below this score are rejected'}
+            hint="Can tighten the selected mode’s threshold; cannot lower it"
           />
         </div>
         {thesis && (
           <div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginTop: 8 }}>
-            ⚠ thesis mode active — direction comes from confirmed market structure, not this score. This slider does not gate trades.
+            Direction comes from confirmed market structure. Required evidence and the score threshold still gate entries.
           </div>
         )}
       </SectionPanel>
@@ -820,7 +817,7 @@ function SetupTab({
         </div>
         {thesis && (
           <div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginTop: 6 }}>
-            ⚠ no effect on direction in thesis mode — the structure thesis owns direction; this only nudges the now-demoted score. Keep OFF. (Active in legacy mode.)
+            The structure thesis owns direction. Macro context can affect qualification and remains visible in the score.
           </div>
         )}
       </SectionPanel>
@@ -1012,6 +1009,13 @@ function StatusTab({
             </div>
           </div>
 
+          <div className="panel" style={{ padding: 14, marginBottom: 14 }}>
+            <strong>{cfg?.selection_mode === 'adaptive' ? 'ADAPTIVE' : 'FIXED'} · {status?.active_mode?.toUpperCase() ?? cfg?.sniper_mode?.toUpperCase() ?? '—'}</strong>
+            {status?.mode_recommendation && <p>{status.mode_recommendation.status !== 'available' ? 'Waiting: ' : ''}{status.mode_recommendation.reason}</p>}
+            {positions.map(position => <div key={position.position_id} style={{ fontSize: 12 }}>
+              {position.symbol}: {position.strategy?.mode?.toUpperCase() ?? 'Original mode unavailable'} · original trade plan
+            </div>)}
+          </div>
           {/* Metric grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 14 }}>
             <MetricTile label="Uptime" value={fmtDuration(status?.uptime_seconds ?? 0)} sub="session running" />
@@ -1185,7 +1189,7 @@ function StatusTab({
 
 // ─── Main component ────────────────────────────────────────────────────
 export function RangeBot() {
-  const { botConfig } = useScanner();
+  const { botConfig, setBotConfig } = useScanner();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -1298,6 +1302,8 @@ export function RangeBot() {
       const req: PaperTradingConfigRequest = {
         exchange: 'phemex',
         sniper_mode: botConfig.sniperMode ?? 'stealth',
+        selection_mode: botConfig.selectionMode ?? 'fixed',
+        allowed_modes: botConfig.allowedModes ?? ['strike', 'surgical', 'stealth'],
         initial_balance: cfg.initial_balance,
         risk_per_trade: cfg.risk_per_trade,
         max_positions: cfg.max_positions,
@@ -1334,7 +1340,7 @@ export function RangeBot() {
     } finally {
       setWorking(false);
     }
-  }, [botConfig.sniperMode, loadStatus, loadTrades, navigate]);
+  }, [botConfig, loadStatus, loadTrades, navigate]);
 
   const handleStop = useCallback(async () => {
     setWorking(true);
@@ -1424,10 +1430,11 @@ export function RangeBot() {
       {/* Cycle heartbeat — both tabs */}
       <CycleHeartbeat />
 
+      {activeTab === 'setup' && <BotStrategySettings config={botConfig} onChange={setBotConfig} paper />}
       {/* Tab content */}
       {activeTab === 'setup' ? (
         <SetupTab
-          sniperMode={botConfig.sniperMode ?? 'stealth'}
+          sniperMode={botConfig.selectionMode === 'adaptive' ? 'adaptive' : botConfig.sniperMode ?? 'stealth'}
           onArm={handleArm}
           working={working}
           armErr={armErr}

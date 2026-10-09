@@ -10,68 +10,27 @@ class DummyAdapter:
 
 
 def test_select_symbols_basic_filters():
-    symbols = [
-        "BTC/USDT",
-        "ETH/USDT",
-        "BNB/USDT",
-        "SOL/USDT",
-        "XRP/USDT",
-        "DOGE/USDT",
-        "SHIB/USDT",
-        "PEPE/USDT",
+    adapter = DummyAdapter([
+        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
+        "DOGE/USDT", "SHIB/USDT", "PEPE/USDT", "FOO/USDT", "BAR/USDT",
+    ])
+    assert select_symbols(adapter, 10, True, False, False) == [
+        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
     ]
-    adapter = DummyAdapter(symbols)
-
-    # Majors only
-    out = select_symbols(adapter, limit=10, majors=True, altcoins=False, meme_mode=False)
-    proportional = max(1, int(len(symbols) * 0.2))
-    # First chunk should come from majors slice; backfill may include others to reach limit
-    proportional = max(1, int(len(symbols) * 0.2))
-    majors_first = symbols[: max(3, min(10, proportional))]
-    assert set(out[: len(majors_first)]).issubset(set(majors_first))
-    assert len(out) >= len(majors_first)
-    assert len(out) <= 10
-
-    # Meme only: should include available memes, then backfill to reach limit
-    out = select_symbols(adapter, limit=5, majors=False, altcoins=False, meme_mode=True)
-    memes = {"DOGE/USDT", "SHIB/USDT", "PEPE/USDT"}
-    assert memes.issubset(set(out))
-    assert len(out) == 5
-
-    # Alts only (exclude majors & memes)
-    out = select_symbols(adapter, limit=2, majors=False, altcoins=True, meme_mode=False)
-    proportional = max(1, int(len(symbols) * 0.2))
-    majors_dyn = set(symbols[: max(3, min(10, proportional))])
-    memes = {"DOGE/USDT", "SHIB/USDT", "PEPE/USDT"}
-    assert all(s not in majors_dyn and s not in memes for s in out)
-
-
-def test_select_symbols_handles_all_combos_and_backfill():
-    # Construct limited dataset to force backfill
-    symbols = [
-        "BTC/USDT",
-        "ETH/USDT",
-        "BNB/USDT",
-        "SOL/USDT",
-        "XRP/USDT",
-        "DOGE/USDT",
-        "SHIB/USDT",
-        "PEPE/USDT",
-        "ADA/USDT",
-        "AVAX/USDT",
+    assert select_symbols(adapter, 5, False, False, True) == [
+        "DOGE/USDT", "SHIB/USDT", "PEPE/USDT",
     ]
-    adapter = DummyAdapter(symbols)
+    assert select_symbols(adapter, 10, False, True, False) == ["FOO/USDT", "BAR/USDT"]
 
-    # Request more memes than available -> should backfill with remaining symbols
-    out = select_symbols(adapter, limit=8, majors=False, altcoins=False, meme_mode=True)
-    assert len(out) == 8
-    assert set({"DOGE/USDT", "SHIB/USDT", "PEPE/USDT"}).issubset(set(out))
 
-    # All toggles checked, ensure we reach limit and preserve ranking
-    out = select_symbols(adapter, limit=7, majors=True, altcoins=True, meme_mode=True)
-    assert len(out) == 7
-    # First symbols should start from majors slice then include others
-    assert out[0] in {"BTC/USDT", "ETH/USDT", "BNB/USDT"}
+def test_select_symbols_underfills_strict_categories_and_orders_enabled_buckets():
+    adapter = DummyAdapter([
+        "DOGE/USDT", "FOO/USDT", "BTC/USDT", "SHIB/USDT", "ETH/USDT", "BAR/USDT",
+    ])
+    assert select_symbols(adapter, 8, False, False, True) == ["DOGE/USDT", "SHIB/USDT"]
+    assert select_symbols(adapter, 6, True, True, True) == [
+        "BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT", "FOO/USDT", "BAR/USDT",
+    ]
 
 
 def test_select_symbols_fallback_when_adapter_empty():

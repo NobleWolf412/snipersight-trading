@@ -7,12 +7,13 @@ Each mode supplies:
 - name: canonical lowercase key
 - description: human readable summary
 - timeframes: ordered tuple (highest -> lower frequency)
-- min_confluence_score: baseline threshold (frontend may override upward)
+- min_confluence_score: policy default threshold (explicit caller overrides are resolved separately)
 - profile: semantic profile tag reused by scoring/planner heuristics
 """
 
 from dataclasses import dataclass
 from typing import Tuple, Dict, List, Optional, Any
+from backend.shared.config.score_policy import MODE_SCORE_GATES
 
 
 # Multi-Timeframe Alignment Map
@@ -40,6 +41,12 @@ RELATIVITY_MAP = {
         "label": "Structural Swing"
     }
 }
+
+
+def get_volume_profile_config(mode_name):
+    """Fixed evidence horizon for each playbook (timeframe, lookback hours)."""
+    return {"overwatch": ("4h", 240), "strike": ("15m", 72),
+            "surgical": ("5m", 24), "stealth": ("15m", 72)}[get_mode(mode_name).name]
 
 
 @dataclass(frozen=True)
@@ -137,6 +144,10 @@ MACD_MODE_CONFIGS: Dict[str, MACDModeConfig] = {
 
 def get_macd_config(profile: str) -> MACDModeConfig:
     """Get MACD configuration for a scanner mode profile."""
+    try:
+        profile = get_mode(profile).profile
+    except ValueError:
+        pass
     return MACD_MODE_CONFIGS.get(profile, MACD_MODE_CONFIGS["balanced"])
 
 
@@ -214,7 +225,7 @@ MODES: Dict[str, ScannerMode] = {
         name="overwatch",
         description="SWING TRADES (Days-Weeks) • High-conviction setups only • Weekly/Daily structure alignment • Best for: Patient traders wanting A+ quality with 2:1+ R:R minimum",
         timeframes=("1w", "1d", "4h", "1h", "15m", "5m"),  # Extended to match UI
-        min_confluence_score=72.0,  # LOWERED: 78->72 to accommodate new scoring math for A+ setups
+        min_confluence_score=MODE_SCORE_GATES["overwatch"],
         profile="macro_surveillance",
         critical_timeframes=("1w", "1d"),  # Weekly and daily are essential for macro view
         primary_planning_timeframe="4h",
@@ -250,7 +261,7 @@ MODES: Dict[str, ScannerMode] = {
         name="strike",
         description="INTRADAY TRADES (Hours) • Aggressive momentum plays • More signals, faster entries • Best for: Active traders comfortable with quick decision-making and 1.2:1+ R:R",
         timeframes=("4h", "1h", "15m", "5m"),  # Changed from 1m to 4h start
-        min_confluence_score=68.0,  # RAISED: 62->68; session data shows sub-70 signals have 37% win rate
+        min_confluence_score=MODE_SCORE_GATES["strike"],
         profile="intraday_aggressive",
         critical_timeframes=("15m",),  # 15m is essential for intraday entries
         primary_planning_timeframe="15m",
@@ -287,7 +298,7 @@ MODES: Dict[str, ScannerMode] = {
         name="surgical",
         description="SCALP/INTRADAY (Minutes-Hours) • Precision entries with tight stops • Fewer but cleaner setups • Best for: Experienced traders wanting controlled risk with 1.5:1+ R:R",
         timeframes=("4h", "1h", "15m", "5m"),  # Simplified for precision
-        min_confluence_score=70.0,  # RAISED: 65->70; precision mode should only execute quality setups
+        min_confluence_score=MODE_SCORE_GATES["surgical"],
         profile="precision",
         critical_timeframes=("15m",),  # 15m essential for precision entries
         primary_planning_timeframe="15m",
@@ -336,7 +347,7 @@ MODES: Dict[str, ScannerMode] = {
         name="stealth",
         description="BALANCED (Hours-Days) • Mix of swing and intraday setups • Good signal volume with solid quality • Best for: All-around trading with 1.8:1+ R:R minimum",
         timeframes=("1d", "4h", "1h", "15m", "5m"),
-        min_confluence_score=70.0,  # RAISED: 65->70; B-class signals at 65-69 have insufficient edge
+        min_confluence_score=MODE_SCORE_GATES["stealth"],
         profile="stealth_balanced",
         critical_timeframes=("4h", "1h"),  # Essential for swing context
         primary_planning_timeframe="1h",
@@ -360,7 +371,7 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=0.5,
         smc_preset="defaults",  # Balanced detection for swing trading
         expected_trade_type="stealth",  # FIXED: Changed from "intraday" to enable trend continuation (PlannerConfig.defaults_for_mode("stealth"))
-        allowed_trade_types=("swing", "intraday", "scalp"),  # Balanced mix of all types
+        allowed_trade_types=("intraday", "scalp"),  # Preserve the existing exclusion of swing entries
         volume_accel_lookback=5,  # Default balanced - good for mixed swing/intraday
         overrides={
             "min_rr_ratio": 1.5,  # was 1.8 — more achievable with 4h/1h structure stops
@@ -372,13 +383,8 @@ MODES: Dict[str, ScannerMode] = {
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("4h", "1h", "15m"),  # Entry zone OBs (balanced)
         entry_trigger_timeframes=("5m",),  # Refined entry OBs
-        # Cascade: intraday then scalp. SWING CUT 2026-06-14 (decisions/2026-06-14__cut-swing-
-        # tier-from-stealth-cascade.md): post-clamp swing was -8.32/trade net (-383 total, n=46),
-        # shorting the BOTTOM of the macro range 100% of the time (0/44 at the correct extreme) —
-        # a structural loser that cancelled the profitable scalp pocket. intraday + scalp are the
-        # two net-positive tiers. A confirmation-gated reversal-at-HTF-S/R swing is a separate,
-        # backtest-gated future build, NOT re-enabled here.
-        cascade_trade_types=("intraday", "scalp"),
+        # Fixed STEALTH keeps intraday/scalp eligibility; swing remains excluded.
+        cascade_trade_types=None,  # One fixed STEALTH playbook; no cross-profile cascade.
         # Quality-aware direction override enabled — calibrated on session 2f35590b
         # (DIRECTION-SHORT-CIRCUIT diagnosed on INJ/SOL; 3.89:1 universe LONG skew).
         enable_quality_override=True,
@@ -459,4 +465,3 @@ def get_mode(name: str) -> ScannerMode:
     if key not in MODES:
         raise ValueError(f"Unknown scanner mode: {name}")
     return MODES[key]
-

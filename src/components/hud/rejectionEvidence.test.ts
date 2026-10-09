@@ -5,10 +5,46 @@ import type { ScanHistoryEntry } from '@/services/scanHistoryService';
 import type { SignalLogEntry, ScannerMode } from '@/utils/api';
 
 vi.mock('@/components/hud', () => ({ Chip: ({ children }: any) => children, SectionHead: () => null }));
-import { GauntletBreakdown } from './GauntletBreakdown';
-import { buildCategories, RejectionPanel } from './RejectionPanel';
+import { GauntletBreakdown, classifyStage } from './GauntletBreakdown';
+import { buildCategories, failureSampleText, RejectionPanel } from './RejectionPanel';
+import { summarizeRejections } from './ScanController';
+import { renderStackedBar } from './ConfluenceBreakdown';
 
 describe('rejection evidence does not invent totals or counterfactuals', () => {
+  it('keeps an accepted scan with feature failures out of rejection summaries', () => {
+    const entry = { symbolsScanned: 1, signalsGenerated: 1, signalsRejected: 0,
+      rejectionSummary: { total_rejected: 0, by_reason: { features: 1 },
+        features_breakdown: { indicator_failures: { count: 1,
+          samples: [{ symbol: 'BTC/USDT', timeframe: '5m', error: 'MACD failed' }] } } },
+    } as unknown as ScanHistoryEntry;
+    const categories = buildCategories(entry);
+    expect(categories.find(c => c.key === 'FEATURES')?.totalCount).toBe(1);
+    expect(categories.find(c => c.key === 'OTHER')?.totalCount).toBe(0);
+    expect(summarizeRejections(entry.rejectionSummary)).toBeNull();
+    expect(renderToStaticMarkup(createElement(RejectionPanel, { entry }))).toContain('0 run rejections');
+  });
+
+  it('excludes legacy feature occurrences while preserving real unknown gate counts', () => {
+    expect(summarizeRejections({ by_reason: { features: 9, future_gate: 2 } }))
+      .toEqual({ total: 2, byReason: [{ reason: 'future_gate', count: 2, examples: [] }] });
+  });
+
+  it('retains the timeframe and error in feature sample text without rendering objects', () => {
+    expect(failureSampleText({ symbol: 'BTC/USDT', timeframe: '5m', error: 'MACD failed' }))
+      .toBe('5m · MACD failed');
+    expect(failureSampleText({ stage: 'service', error: 'SMC stopped' })).toBe('service · SMC stopped');
+    expect(failureSampleText({ error: { arbitrary: true } })).toBe('');
+  });
+
+  it('classifies post-plan price rejection as planning in both views', () => {
+    const entry = { rejectionSummary: { by_reason: { post_plan_revalidation: 1 } } } as unknown as ScanHistoryEntry;
+    const categories = buildCategories(entry);
+    expect(categories.find(c => c.key === 'PLANNER')?.totalCount).toBe(1);
+    expect(categories.find(c => c.key === 'OTHER')?.totalCount).toBe(0);
+    expect(classifyStage({ result: 'filtered', reason_type: 'post_plan_revalidation' } as SignalLogEntry))
+      .toBe('NO_TRADE_PLAN');
+  });
+
   it('keeps universe/feature observations outside the reported run rejection count', () => {
     const entry = {
       symbolsScanned: 20, signalsRejected: 7,
@@ -47,5 +83,35 @@ describe('rejection evidence does not invent totals or counterfactuals', () => {
     expect(html).toContain('Modes also change scoring, gates and timeframes');
     expect(html).not.toContain('would-pass');
     expect(html).not.toContain('threshold may be too high');
+  });
+
+  it('keeps evidence requirements in confluence without suggesting a lower cutoff', () => {
+    const entry = { rejectionSummary: { by_reason: { evidence_requirements: 2, low_confluence: 1 } } } as unknown as ScanHistoryEntry;
+    const categories = buildCategories(entry);
+    const confluence = categories.find(c => c.key === 'CONFLUENCE')!;
+    expect(confluence.totalCount).toBe(3);
+    expect(confluence.subBuckets.map(bucket => bucket.reason)).toEqual(['low_confluence', 'evidence_requirements']);
+    expect(categories.find(c => c.key === 'OTHER')?.totalCount).toBe(0);
+    const signals = [{ id: '1', result: 'filtered', reason_type: 'evidence_requirements', confluence: 85,
+      reason: 'Evidence requirements: missing structural confirmation' }] as SignalLogEntry[];
+    expect(classifyStage(signals[0])).toBe('EVIDENCE_REQUIREMENTS');
+    const html = renderToStaticMarkup(createElement(GauntletBreakdown, { signals,
+      scannerModes: [{ name: 'strike', min_confluence_score: 65 }] as ScannerMode[], currentModeName: 'overwatch' }));
+    expect(html).toContain('EVIDENCE REQUIREMENTS');
+    expect(html).not.toContain('THRESHOLD COMPARISON');
+    expect(html).not.toContain('Logged scores did not meet');
+  });
+
+  it('shows weighted contributions without zero-weight raw diagnostics', () => {
+    const html = renderToStaticMarkup(renderStackedBar([
+      { name: 'Raw Order Block', avg_score: 100, avg_weight: 0, avg_weighted_score: 0, sample_count: 1 },
+      { name: 'Entry anchor', avg_score: 90, avg_weight: .2, avg_weighted_score: 18, sample_count: 1 },
+      { name: 'Participation', avg_score: 0, avg_weight: .1, avg_weighted_score: 0, sample_count: 1 },
+    ], 'AGGREGATE'));
+    expect(html).not.toContain('Raw Order Block');
+    expect(html).toContain('Entry anchor');
+    expect(html).toContain('Participation');
+    expect(html).toContain('18.0');
+    expect(html).toContain('WEIGHTED BASE · BEFORE ADJUSTMENTS');
   });
 });

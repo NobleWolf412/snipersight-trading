@@ -9,7 +9,7 @@ This module defines data structures for institutional trading patterns:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Literal, Optional, Any
 from enum import Enum
 
@@ -330,7 +330,11 @@ class LiquidityPool:
             return False
         if not self.last_touch:
             return True
-        age = datetime.now() - self.last_touch
+        # Candle timestamps are UTC; legacy naive timestamps also represent UTC.
+        last_touch = self.last_touch
+        if last_touch.tzinfo is None:
+            last_touch = last_touch.replace(tzinfo=timezone.utc)
+        age = datetime.now(timezone.utc) - last_touch
         return age.days <= 7
 
     @property

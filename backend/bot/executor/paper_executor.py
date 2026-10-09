@@ -295,7 +295,7 @@ class PaperExecutor:
     def execute_market_order(self, order_id: str, current_price: float) -> Optional[Fill]:
         """
         Execute a market order immediately.
-        Note: Market orders always fill 100%. The penalty is slippage.
+        Partial fills retain the order remainder; every fill includes slippage.
         """
         if order_id not in self.orders:
             raise ValueError(f"Order {order_id} not found")
@@ -303,14 +303,14 @@ class PaperExecutor:
         order = self.orders[order_id]
         if order.order_type != OrderType.MARKET:
             raise ValueError(f"Order {order_id} is not a market order")
-        if order.status == OrderStatus.FILLED:
+        if order.status not in (OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED):
             return None
 
         # Market orders support partial fills if enabled
         fill_qty = order.remaining_quantity
         if self.enable_partial_fills and fill_qty > 0 and not order.is_filled:
             import random
-            if random.random() < self.partial_fill_prob:
+            if fill_qty >= order.quantity * 0.01 and random.random() < self.partial_fill_prob:
                 fill_pct = random.uniform(self.min_fill_pct, self.max_fill_pct)
                 fill_qty = order.remaining_quantity * fill_pct
 
@@ -389,7 +389,7 @@ class PaperExecutor:
             return None
 
         order = self.orders[order_id]
-        if order.order_type != OrderType.LIMIT or order.status == OrderStatus.FILLED:
+        if order.order_type != OrderType.LIMIT or order.status not in (OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED):
             return None
 
         limit_price = order.price

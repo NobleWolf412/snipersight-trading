@@ -19,9 +19,9 @@ export default function FvgBody() {
       <ChapterSection title="// CORE MECHANIC">
         <ChapterPara>
           <strong>Bullish FVG</strong>: <code>candle[0].high &lt; candle[2].low</code>. <strong>Bearish</strong>:{' '}
-          <code>candle[0].low &gt; candle[2].high</code>. The bot adds two gates: middle-candle overlap with the
-          gap must be <code>≤ 10%</code>, and the gap size in ATR units must clear a mode-specific minimum (0.06
-          SURGICAL → 0.45 OVERWATCH).
+          <code>candle[0].low &gt; candle[2].high</code>. The bot adds two gates: middle-candle wick overlap
+          with the gap must stay within the configured allowance, and the gap size in ATR units must clear
+          a mode-specific minimum (0.06 SURGICAL → 0.45 OVERWATCH).
         </ChapterPara>
         <ChapterPara>
           Grading is multi-tier: A if <code>gap_atr ≥ 2.5×</code> the mode minimum, B if <code>≥ 1.5×</code>, C
@@ -51,8 +51,8 @@ export default function FvgBody() {
             front={<>"Any 3-candle gap counts."</>}
             back={
               <>
-                If candle 1's body intrudes deep into the gap region, the imbalance is half-filled at
-                formation. Bot rejects via <code>max_overlap = 0.1</code>.
+                Candle 2's body creates the displacement. Its wicks must stay within the configured
+                overlap allowance; later candles determine how much of the gap has filled.
               </>
             }
           />

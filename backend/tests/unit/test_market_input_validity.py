@@ -115,25 +115,19 @@ def test_observed_dominance_still_produces_the_existing_risk_label(monkeypatch):
 
 @pytest.mark.parametrize('missing', ['regime', 'dominance'])
 def test_market_regime_api_reports_unavailable_instead_of_inventing_numbers(missing):
-    # Execute the real route body without importing API startup (adapters/.env).
-    from typing import Optional
-    from backend.shared.models.regime import MarketRegime, RegimeDimensions
-    source = Path(__file__).resolve().parents[2] / 'api_server.py'
-    tree = ast.parse(source.read_text(encoding='utf8'))
-    handler = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == 'get_market_regime')
-    handler.decorator_list = []
-    regime = MarketRegime(RegimeDimensions('up', 'normal', 'healthy', 'risk_on', 'balanced'),
-                          'bullish_risk_on', 75., datetime(2001, 2, 5), 70., 75., 70., 80., 50.)
-    def unavailable(): raise ValueError('DOMINANCE_UNAVAILABLE: fixture')
-    namespace = dict(Optional=Optional, Query=Query, HTTPException=HTTPException,
-                     logger=Mock(), datetime=datetime, timezone=timezone,
-                     REGIME_CACHE=SimpleNamespace(get=lambda key: None, set=Mock()),
-                     orchestrator=SimpleNamespace(_detect_global_regime=lambda: None if missing=='regime' else regime),
-                     get_dominance_for_macro=unavailable)
-    exec(compile(ast.fix_missing_locations(ast.Module(body=[handler], type_ignores=[])), 'regime-api-fixture', 'exec'), namespace)
+    # The route now depends on a private reader rather than the scanner engine.
+    from unittest.mock import AsyncMock
+    from backend.services.market_regime_service import MarketRegimeUnavailable
+    from backend.tests.unit.test_api_read_ownership import regime_handler
+    reader = SimpleNamespace(get_global=AsyncMock(
+        side_effect=MarketRegimeUnavailable(f"{missing} unavailable: fixture")
+    ))
+    handler, scanner = regime_handler(reader)
     with pytest.raises(HTTPException) as caught:
-        asyncio.run(namespace['get_market_regime'](symbol=None))
+        asyncio.run(handler(symbol=None))
     assert caught.value.status_code == 503
+    assert missing in caught.value.detail
+    scanner._detect_global_regime.assert_not_called()
 
 def test_replay_signal_search_stops_at_unavailable_historical_context():
     from backend.tests.unit.test_replay_navigation_state import fixture_engine

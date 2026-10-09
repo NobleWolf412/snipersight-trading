@@ -1,3 +1,7 @@
+> Historical methodology and integration notes. The dated market assessment and
+> UI examples below do not describe current runtime behavior or authorize cycle activation.
+> See [the current architecture index](ARCHITECTURE_INDEX.md) for active paths and limits.
+
 # Cycle Translation Intelligence System
 
 ## Overview

@@ -1,4 +1,705 @@
 {
+  "evidence_deduplication": {
+    "date": "2026-10-09",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "scope": "Technical-analysis evidence duplication; divergence scale, acceptance and downstream risk review. ML excluded.",
+    "score_model_version": "evidence-dedup-v1",
+    "score_calibration": "heuristic_uncalibrated",
+    "decision": "backend/diagnostics/decisions/2026-10-09__evidence-deduplication.md",
+    "baseline": "Exact pre-task working-tree copies, not HEAD; earlier unrelated edits preserved.",
+    "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-evidence-base-24e02152-3a09-4a34-b01b-c54d52a3e38e",
+    "verification": {
+      "full_selected_backend": {
+        "passed": 2180,
+        "deselected": 0,
+        "warnings": 208,
+        "seconds": 296.91,
+        "exit_code": 0,
+        "log": "%TEMP%/snipersight-evidence-full-final.txt",
+        "log_sha256": "698c5ac8e85762293769f64bef4dfce3c6b4a91c96e879d5f84b7bb3f233ec2b",
+        "seven_guard_denial_checks": "passed",
+        "blocked_operations": [
+          "['os.mkdir outside fixture directory', 'subprocess.Popen']\r"
+        ]
+      },
+      "joined_core_rejections_score_contracts": {
+        "passed": 75,
+        "deselected": 2105,
+        "warnings": 46,
+        "seconds": 241.61,
+        "exit_code": 0,
+        "log": "%TEMP%/snipersight-evidence-joined-final.txt",
+        "log_sha256": "759b94ad66a03e892024b14b2a2993f00049407fa124d57e4daeb671038ef5bf",
+        "seven_guard_denial_checks": "passed",
+        "blocked_operations": [
+          "['subprocess.Popen']\r"
+        ]
+      },
+      "commands": [
+        ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py backend",
+        ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py backend -k \"core_workflow or scan_rejection_evidence or scoring_confidence_contract\"",
+        ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py contracts",
+        ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py smoke"
+      ],
+      "manifest_files": 108,
+      "manifest_limit": "Selected offline manifest only. Serial/pickled workers do not establish process isolation; no API imports/startup or external trading.",
+      "independent_focused": [
+        {
+          "reviewer": "api_ownership_design",
+          "passed": 71,
+          "scope": "evidence_accounting before final eight sequence service cases"
+        },
+        {
+          "reviewer": "api_ownership_design",
+          "passed": 8,
+          "scope": "new direct LONG/SHORT counter-HTF sequence chronology cases"
+        }
+      ],
+      "contracts": {
+        "exit_code": 1,
+        "api": "clean",
+        "telemetry": "clean",
+        "pipeline": "clean",
+        "db": "Two intentional signal writer implementation fingerprints; additive version/calibration/gate provenance, earlier live UNKNOWN fix also retained. Baselines unchanged.",
+        "writer_hashes": {
+          "live": [
+            "5bf01611b95df8de4c1b405e0d1a1c21ab9ee3ff1dcc372dab36299e504d2f09",
+            "ea4f13f33f9d3987b87a00455d03c95d80eb8668008c6553500ce672807a4708"
+          ],
+          "paper": [
+            "8f7dce5469c1a087c86536dab049d7463b38e60c38fd60cec0632f625b5ca22c",
+            "db9a7b71e69a03c91dbe24095fea27dac63a64f9a86cdd602b2a45f11af3c59a"
+          ]
+        },
+        "evidence": "Fresh guarded execution by independent api_backend_integrity reviewer; exact report retained in task."
+      },
+      "smoke": {
+        "exit_code": 0,
+        "clean_groups": 8,
+        "evidence": "Fresh guarded independent execution by api_backend_integrity reviewer."
+      },
+      "frontend": "No frontend changes in this batch; no new frontend test claim."
+    },
+    "independent_reviews": [
+      {
+        "reviewer": "api_ownership_design",
+        "result": "No remaining scoped math defect. Added direct counter-HTF chronology coverage; raw JSONL provenance and divergence attainability gaps resolved."
+      },
+      {
+        "reviewer": "universe_design_review",
+        "result": "Gate/config/sizing/provenance scope cleared; plain legacy exception handling repaired. Accepted fixture migration provided original balanced LONG rejection remains tested."
+      },
+      {
+        "reviewer": "api_backend_integrity",
+        "result": "No remaining blocking compatibility finding in traced producers, scorer/service, planner, bots and evidence consumers. Four protected hashes match."
+      }
+    ],
+    "remaining_limits": [
+      "Optional emitted-factor denominators and related momentum/HTF/structure inputs remain; no global statistical decorrelation claim.",
+      "MACD veto soft-pass, HTF sweep and OB/FVG interactions, count-based tier conditions and other absolute score cutoffs remain heuristic policies.",
+      "Sequence predicate proves sweep-before-shift; OB is co-present, not chronologically certified.",
+      "Paper soft floor and thesis policy differ from live hard-gate behavior; those product contracts remain.",
+      "Historical journal lacks revision/input/config/execution provenance for defensible calibration. Completed trades and old diagnostic aggregators do not automatically split score versions.",
+      "Default balanced LONG tape now rejects; controlled/seeded fixtures do not measure realistic default trade frequency.",
+      "No live/testnet orders, app restart, deployment, commit or push; no whole-system or process-spawning certification."
+    ],
+    "protected_files": [
+      {
+        "path": "backend/cache/trade_journal.jsonl",
+        "sha256": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+        "unchanged": true
+      },
+      {
+        "path": "backend/cache/telemetry.db",
+        "sha256": "342935783cb0d768613f3df45d72c24be3479378c07ebf01d195e865772e69e8",
+        "unchanged": true
+      },
+      {
+        "path": "backend/diagnostics/contracts/db_contracts.json",
+        "sha256": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+        "unchanged": true
+      },
+      {
+        "path": "backend/diagnostics/capture_contracts.py",
+        "sha256": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+        "unchanged": true
+      }
+    ],
+    "source_hashes": {
+      "backend/strategy/confluence/scorer.py": {
+        "after_sha256": "3fb18990d3ee713836d80cb03b60d5b7b283243e9f3c8fc47e1c4a440d9783a6",
+        "before_sha256": "58368bb1bd3e918c890f35723109ff6dd8d74d5f8fc75cbfa8beedc63955fba5"
+      },
+      "backend/strategy/confluence/liquidity_map_scorer.py": {
+        "after_sha256": "6f157639ad9bcdc4d4dd885dd8a52fa3d6014aa13edf4304a79e1acf960873ba",
+        "before_sha256": "04125866ed7f374339cf096ba1a04f4e6030fef55dfbef2e6acdc712287e034a"
+      },
+      "backend/services/confluence_service.py": {
+        "after_sha256": "097d9ac699a065c995671961d0bb9e2b8a5d893c1280bce227feaff423a94066",
+        "before_sha256": "08af4abf45d331329fc5a1cc1d62beaf6fd605a5ff723b018b00f40861f3498a"
+      },
+      "backend/shared/config/sensitivity.py": {
+        "after_sha256": "e69a75ae069ba3687dc1fd70d473500fd5febd48ce50eaf643a53a5517c7e543",
+        "before_sha256": "1c3efb8f683c7ff80cf8024eb2cee155b3d7bca11feb9dc2d18dfdb9143135f6"
+      },
+      "backend/shared/models/scoring.py": {
+        "after_sha256": "6b2feec8cb5fef3711982889ae1f187e5ffcc84e53fc96aca9449c8ca508d5fe",
+        "before_sha256": "21b2e335ee1859baaa6b8745d78ac7ca9bd73821f83c4fe105e18ccb22c850bc"
+      },
+      "backend/engine/orchestrator.py": {
+        "after_sha256": "d8b4da483b934a46d632930bb3133f6fa11ff433b937b8cf2cbeb2f23bff6b95",
+        "before_sha256": "3a769f5168196ac05229e8bc155e90d7134a911720b36b738cdaa21122f23c77"
+      },
+      "backend/bot/paper_trading_service.py": {
+        "after_sha256": "c7baed54b750ffc97638466130f4e0321087a20bb552f5f689c9f8188fa61027",
+        "before_sha256": "2e947aedb71824860daad25b5606f2e8d6b611363d8a7cb4ae39bdcd7ffa4ddb"
+      },
+      "backend/bot/live_trading_service.py": {
+        "after_sha256": "3e0ba6e3d0786e19ca2423397c466dedc48ff5cda994ce5af672b7bd771e2910",
+        "before_sha256": "c68f4f6a60edd131064b5ad5b45e35ec5664e9a5f459f4abf9ecb90f1a686e23"
+      },
+      "backend/tests/unit/test_evidence_accounting.py": {
+        "after_sha256": "447cc660e0f4abafc74c0831ab152afaf424978627aa56c9c447d574c5a6ab8d",
+        "before_sha256": null
+      },
+      "backend/tests/unit/test_scoring_confidence_contract.py": {
+        "after_sha256": "8d71d8cce7402adfdd6da60bebac908be53d090940f92a64e8e65992ea65a3e5",
+        "before_sha256": "68af39a0659428ae44ee73dbcfa659f662c5ac8caddd94a0a8519816118f6c16"
+      },
+      "backend/tests/unit/test_live_reconciliation.py": {
+        "after_sha256": "f29c39fb59da8b74daabe1f2b328b862bacbbf3259a71c7754d04cb91b3efd01",
+        "before_sha256": "faee56e5a6d50d8495d5d2fea3701eea68f294b714bc50063ec15076ec10e273"
+      },
+      "backend/tests/integration/test_core_workflow.py": {
+        "after_sha256": "e05cb69562f1e75370479ddb05c1488d4631477672415fda0950e5a91f3d6d93",
+        "before_sha256": "85aab9557ef1a561e3fc91150617284620c1460295bda43d58aa9faea184396d"
+      },
+      "backend/tests/integration/test_scoring_direction_handoff.py": {
+        "after_sha256": "7868b99479cd6084926a9efa2518975081e933c4e66f5603612a9c82800e1e89",
+        "before_sha256": "c371cbaf1611095e9205767972f61872a166180601a19262373520f73d523ee2"
+      },
+      "backend/tests/integration/test_scan_rejection_evidence.py": {
+        "after_sha256": "cdc0b042060e3ec5adf913ed1f5d6dec5ec408503bad3965b67eb704d07bbb2b",
+        "before_sha256": "0395cca8b97000806a70b81ca05490bb0bd19a89f4be45e1dc733da74aebb4fc"
+      },
+      "backend/diagnostics/offline_checks.json": {
+        "after_sha256": "cf37f6aada8209c857cdca1b1f79d383c2fc0d68c2810691b02760622ac1df9d",
+        "before_sha256": "86caf4dc93674f50fb41466965dcae7053cbedd1fd130f1acdfe798fa77f29db"
+      },
+      "backend/shared/config/scanner_modes.py": {
+        "after_sha256": "e663fb322e62426bf235a4893f9a50ed9638d771653e8b13c546c0f08c599d5a",
+        "before_sha256": null
+      },
+      "docs/ARCHITECTURE_INDEX.md": {
+        "after_sha256": "68e5d835044b16e560f0d0a24e6268e26dca18bd7ef690b2cda87611f456c2f0",
+        "before_sha256": "e0b9be488cf3d3c338b001ca7de24be468bbbd5b41df6e282f0fb1e2e4c12adc"
+      },
+      "backend/diagnostics/decisions/2026-10-09__evidence-deduplication.md": {
+        "after_sha256": "36edac086d6dd205367f1e05d866645240d593d2e05d1003482bbabbf09c9870",
+        "before_sha256": null
+      }
+    },
+    "comparison_record": "docs/audits/SCORING_EVIDENCE_2026-10-09.json"
+  },
+  "scoring_confidence": {
+    "date": "2026-10-09",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "scope": "Scorer arithmetic/symmetry/provenance, thesis direction-score ownership, bot sensitivity precedence and risk tightening, canonical frontend score evidence. ML excluded.",
+    "baseline": "Exact pre-batch working-tree copies; earlier unrelated changes preserved.",
+    "decision": "backend/diagnostics/decisions/2026-10-09__scoring-confidence.md",
+    "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-scoring-base-96c9ba86-e2b1-4eee-b89b-d75c118d97d9",
+    "reproduced": {
+      "math_before": {
+        "failed": 21,
+        "passed": 12
+      },
+      "counter_htf_before": {
+        "failed": 2,
+        "result": "UNKNOWN/errors loses chosen thesis side"
+      }
+    },
+    "verification": {
+      "full_selected_suite": {
+        "passed": 2088,
+        "warnings": 169,
+        "seconds": 269.38,
+        "exit_code": 0,
+        "log": "%TEMP%/snipersight-scoring-full-final.txt",
+        "scope": "Selected offline manifest, not every repo test or live system. Precedes final additive score_gate_passed metadata; that addition is covered by the focused final run."
+      },
+      "final_scoring_suite": {
+        "passed": 96,
+        "deselected": 1992,
+        "warnings": 8,
+        "seconds": 9.57,
+        "exit_code": 0,
+        "selection": "scoring_confidence_contract or sensitivity_contract or scoring_direction_handoff"
+      },
+      "related_rejection_followup": {
+        "passed": 75,
+        "deselected": 2013,
+        "warnings": 34,
+        "seconds": 146.93
+      },
+      "first_full_run": {
+        "passed": 2082,
+        "failed": 4,
+        "cause": "AST-only live_reconciliation fixture lacked new resolver/get_mode dependencies; supplied real pure config dependencies; all four then passed. No application rule relaxed."
+      },
+      "typescript": {
+        "command": "node_modules/.bin/tsc.cmd --noEmit",
+        "exit_code": 0
+      },
+      "frontend": {
+        "passed": 33,
+        "files": [
+          "src/pages/Scanner.score.test.tsx",
+          "src/components/hud/rejectionEvidence.test.ts"
+        ],
+        "new_cases": 25,
+        "exit_code": 0
+      },
+      "guards": "Seven denial self-checks passed on every guarded command. External transport/subprocess and outside-fixture write attempts were denied; isolation was not relaxed.",
+      "smoke": {
+        "groups_clean": 8,
+        "reviewer": "/root/api_backend_integrity"
+      },
+      "contracts": {
+        "exit_code": 1,
+        "clean": [
+          "api_contracts",
+          "telemetry_contracts",
+          "pipeline_contracts"
+        ],
+        "new_inventory_drift": false,
+        "remaining_prior_drift": {
+          "inventory": "db_contracts",
+          "symbol": "LiveTradingService._log_signal",
+          "before": "5bf01611b95df8de4c1b405e0d1a1c21ab9ee3ff1dcc372dab36299e504d2f09",
+          "after": "37498c3ac2a7ec8000d30603f8d5c7f66437a5540d85433dbb1b947258227745"
+        },
+        "baseline_preserved": true
+      }
+    },
+    "independent_reviews": [
+      {
+        "reviewer": "/root/api_ownership_design",
+        "scope": "Scorer math and final frontend score provenance",
+        "verdict": "No remaining concrete blocker",
+        "evidence": "12600 classification fixtures before intentional rounded-boundary alignment; 2430 arithmetic fixtures; nine unchanged weight/cap/multiplier groups. Final UI fixes source/test reviewed."
+      },
+      {
+        "reviewer": "/root/universe_design_review",
+        "scope": "Policy/scoring/configuration architecture and gates",
+        "verdict": "Approved, no remaining blocker",
+        "tests": "36 sensitivity/service then22 pipeline/boundary cases passed",
+        "alternatives": [
+          "Immutable session configuration snapshot",
+          "Typed pair of finalized directional breakdowns"
+        ]
+      },
+      {
+        "reviewer": "/root/api_backend_integrity",
+        "scope": "Callers/consumers, API DTO, planner/sizing, raw logs/final cache, contracts and smoke",
+        "verdict": "PASS after rejected-side correction",
+        "tests": "94 focused then2 rejection cases passed",
+        "correction": "Initial opposite-side hypothesis narrowed by reproduction to UNKNOWN/errors; fixed typed handler preserves selected side, score and counter_htf cause."
+      }
+    ],
+    "explicit_contract_changes": [
+      "ConfluenceService.score optional selected_direction",
+      "ConflictingDirectionsException optional selected_direction/gate_name",
+      "metadata.raw_directional_scores",
+      "breakdown.metadata.score_components, score_gate, score_gate_passed",
+      "directional scorer JSONL stage and score_components",
+      "weekly_stoch_rsi_bonus now actual raw adjustment already represented in weighted factor",
+      "ScanResult.confidenceScore optional, not fabricated zero; missing score has no derived conviction class"
+    ],
+    "limitations": [
+      "No probability/profit calibration, live/testnet execution, real process-pool proof or backend restart",
+      "Optional-factor denominator and missing MACD veto-factor baseline remain policy questions",
+      "Global HTF +5 mismatch not activated",
+      "Legacy upstream score gate limits paper near-miss admission; live thesis retains hard gate",
+      "Raw scorer JSONL differs from final plan evidence; final cache is live-only and not complete durable decision history",
+      "Synthetic chart/setup/regime visuals remain disclosed; older fabricated records cannot recover lost provenance"
+    ],
+    "protected_files": [
+      {
+        "path": "backend/cache/trade_journal.jsonl",
+        "sha256": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+        "unchanged": true
+      },
+      {
+        "path": "backend/cache/telemetry.db",
+        "sha256": "342935783cb0d768613f3df45d72c24be3479378c07ebf01d195e865772e69e8",
+        "unchanged": true
+      },
+      {
+        "path": "backend/diagnostics/contracts/db_contracts.json",
+        "sha256": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+        "unchanged": true
+      },
+      {
+        "path": "backend/diagnostics/capture_contracts.py",
+        "sha256": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+        "unchanged": true
+      }
+    ],
+    "source_sha256": {
+      "backend/strategy/confluence/scorer.py": "58368bb1bd3e918c890f35723109ff6dd8d74d5f8fc75cbfa8beedc63955fba5",
+      "backend/services/confluence_service.py": "08af4abf45d331329fc5a1cc1d62beaf6fd605a5ff723b018b00f40861f3498a",
+      "backend/engine/orchestrator.py": "3a769f5168196ac05229e8bc155e90d7134a911720b36b738cdaa21122f23c77",
+      "backend/bot/paper_trading_service.py": "2e947aedb71824860daad25b5606f2e8d6b611363d8a7cb4ae39bdcd7ffa4ddb",
+      "backend/bot/live_trading_service.py": "c68f4f6a60edd131064b5ad5b45e35ec5664e9a5f459f4abf9ecb90f1a686e23",
+      "backend/shared/config/sensitivity.py": "1c3efb8f683c7ff80cf8024eb2cee155b3d7bca11feb9dc2d18dfdb9143135f6",
+      "backend/tests/unit/test_scoring_confidence_contract.py": "68af39a0659428ae44ee73dbcfa659f662c5ac8caddd94a0a8519816118f6c16",
+      "backend/tests/unit/test_sensitivity_contract.py": "b9ddff40683517c9cb53cedced992fae62a8c891983d6546fc73ce1ca63b586a",
+      "backend/tests/integration/test_scoring_direction_handoff.py": "c371cbaf1611095e9205767972f61872a166180601a19262373520f73d523ee2",
+      "backend/tests/unit/test_live_reconciliation.py": "faee56e5a6d50d8495d5d2fea3701eea68f294b714bc50063ec15076ec10e273",
+      "backend/diagnostics/offline_checks.json": "86caf4dc93674f50fb41466965dcae7053cbedd1fd130f1acdfe798fa77f29db",
+      "src/pages/Scanner.tsx": "73e09eaacbff6edf2530030e4c7467866978a7784b2c7a7f65c9d66bffc75186",
+      "src/utils/scoreEvidence.ts": "192a90cf17eb71561f49716dbe47f72a18d72dccb1949d155722ecf3db2daba3",
+      "src/utils/notifications.ts": "ba69b0e31e566c4dea546e91819f76140c0259fa5f00c680f8b81e43b7f82899",
+      "src/pages/Scanner.score.test.tsx": "7f1faa607bc4876f44112f73f9c461a1d406213083927bf9cc25ddfba0ed8a78",
+      "src/utils/mockData.ts": "1d05e0c16d7e1f2111958ce34accf4ca8af7d68cc187d5e28d85ed5d96eda627"
+    }
+  },
+  "live_rejection_direction": {
+    "date": "2026-10-09",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "scope": "Live scan rejection and log-writer missing/null/empty direction -> UNKNOWN; known sides unchanged.",
+    "reproduced": {
+      "failed": 6,
+      "already_passed": 6,
+      "new_cases": 12
+    },
+    "verification": {
+      "focused": {
+        "passed": 175,
+        "deselected": 1817,
+        "seconds": 18.12,
+        "exit_code": 0,
+        "selection": "rejection_consumers or no_silent_long_default or live_lifecycle or live_entry_risk or universe_consumers"
+      },
+      "independent": {
+        "reviewer": "/root/api_backend_integrity",
+        "verdict": "PASS; no blocking findings",
+        "passed": 23,
+        "selection": "rejection_consumers",
+        "review": "Traced upstream pre-direction rejections through log/ID/JSONL/trace and neutral UI rendering. No execution/strategy changes; protected hashes match."
+      },
+      "contracts": {
+        "exit_code": 1,
+        "clean": [
+          "api_contracts",
+          "telemetry_contracts",
+          "pipeline_contracts"
+        ],
+        "intentional_drift": {
+          "inventory": "db_contracts",
+          "symbol": "LiveTradingService._log_signal",
+          "field": "implementation_sha256",
+          "before": "5bf01611b95df8de4c1b405e0d1a1c21ab9ee3ff1dcc372dab36299e504d2f09",
+          "after": "37498c3ac2a7ec8000d30603f8d5c7f66437a5540d85433dbb1b947258227745"
+        },
+        "literal_keys_changed": false,
+        "baseline_overwritten": false
+      },
+      "smoke": {
+        "groups": 8,
+        "changes": 0,
+        "exit_code": 0
+      },
+      "isolation": "Seven guard-denial checks passed on every invocation; fixture writes only.",
+      "syntax": "Both scoped Python files parse; scoped git diff --check passes."
+    },
+    "source_sha256": {
+      "backend/bot/live_trading_service.py": "5c162b36024e848308ea2dd44db2f75bda02e32d9983448993e0a2c3b4726fc5",
+      "backend/tests/integration/test_rejection_consumers.py": "6c5dc5bd30c6920b3c73fcb84c234a9513aa1bcd8a5aab806c8cf8f1808ce44f",
+      "backend/diagnostics/decisions/2026-10-09__live-rejection-direction.md": "e1b700c02a9084949eb990d7097fbcfc815758f9b340a8d1315fd7217957e32e",
+      "docs/ARCHITECTURE_INDEX.md": "b5e40b71b85a2fd62eaaea92e068ec597fcacb7ad21a87786a9da0e0c54f982b",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": "1ea8b3a5296e5f87051854fa3db4fef5585c8f5998078c900bc8ff0fc4e785ca"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/cache/telemetry.db": "342935783cb0d768613f3df45d72c24be3479378c07ebf01d195e865772e69e8",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46"
+    },
+    "artifacts": {
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-live-evidence-before.txt": "5f9d5e3713f27eb6044bd340fc71c472d97d12ad73166a3e8a7a50577484a06c",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-live-evidence-focused.txt": "74ae40ae8a62729bc92335fd1f969e0c03edb4e824e57823609f862c0bc71707",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-live-evidence-contracts.txt": "1ae4cd18b5569ad5c39f68b75f891c74d845cf9abbea8a959536e9c2640942fe",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-live-evidence-smoke.txt": "f59083d965534b66e7daab8e67e0cfe956418dcf37d48b2f4715643e752f7164"
+    },
+    "rollback_boundary": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-live-evidence-base-b7d24d8e-3677-4267-8b20-8b72ff6e6e4b",
+    "runtime": "Read-only dashboard/health checks passed; Pixel offline in Tailscale. No service restart or deployment.",
+    "limitations": [
+      "Supplied rejection fixtures, no raw exchange transport or live session.",
+      "UI compatibility source-inspected only.",
+      "Complete selected suite not rerun; previous 1980-case checkpoint remains historical.",
+      "Running backend retains earlier loaded code until restart.",
+      "Historical directions are preserved without inference; unknown trace source and universe ownership remain separate work."
+    ]
+  },
+  "api_read_ownership": {
+    "date": "2026-10-08",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "branch": "claude/decision-core-heart",
+    "scope": "Private market display/recommendation inputs, off-loop bounded worker admission, replay session lifecycle and task-cancellation ownership.",
+    "reproduced": {
+      "route_cases_failed": 6,
+      "lifecycle_contract_cases_failed": 4,
+      "lifecycle_note": "Three existing defects (active deletion/GC, deleted reference) plus the new status snapshot boundary.",
+      "review_cancellation_case_failed": 1
+    },
+    "implementation": {
+      "market": "Private Phemex swap adapter/pipeline. STEALTH display and weekly recommendation own separate indicator/detector contexts. Entire read off loop. Existing display TTL 60 seconds and detector hysteresis retained.",
+      "recommendation": "Injected reader; validated dominance; absent Phemex config returns existing low-confidence warning rather than arbitrary exchange.",
+      "worker": "Async admission before submission. Shielded executor future owns abandoned completion callback; optional cleanup completion releases admission. Late failures logged; no drain coroutine cancellation window.",
+      "replay": "One admitted route operation across sessions. Session lock then registry identity revalidation; status snapshot; deletion waits; GC skips active lock; completion refreshes idle time. Cancelled creation cleaned after loading; cancelled navigation may advance.",
+      "public_contracts": "Existing request/response models and route paths retained; optional symbol still global-only, now correctly documented.",
+      "private_contracts": "New SerializedWorker, private MarketRegimeService, optional ScannerService regime_reader injection, ReplayEngine.session_status/_owned_session."
+    },
+    "verification": {
+      "backend": {
+        "runner": "offline_verify.py backend",
+        "passed": 1980,
+        "warnings": 161,
+        "seconds": 249.03,
+        "exit_code": 0,
+        "scope": "selected guarded suite; includes 29 new cases beyond universe checkpoint"
+      },
+      "focused": {
+        "passed": 149,
+        "scope": "Related ownership/replay/scanner/input tests before final cancellation correction"
+      },
+      "final_correction": {
+        "passed": 27,
+        "scope": "New ownership/lifecycle set after correction; two further cleanup failure cases subsequently included in 7 passing worker cases and final full run"
+      },
+      "contracts": {
+        "groups": 4,
+        "changes": 0,
+        "exit_code": 0
+      },
+      "smoke": {
+        "groups": 8,
+        "changes": 0,
+        "exit_code": 0
+      },
+      "syntax": {
+        "scoped_python_files": 11,
+        "valid": true
+      },
+      "diff_check": {
+        "exit_code": 0
+      },
+      "guards": {
+        "self_checks_per_run": 7,
+        "scope": "cleared environment, credential/external transport/subprocess/outside fixture writes and SQLite denied"
+      }
+    },
+    "reviews": {
+      "architecture": {
+        "initial_findings": [
+          {
+            "severity": "P2",
+            "finding": "Drain cancellation before its first step strands admission and cancelled-create cleanup",
+            "resolution": "Timeout reproduced; executor completion callbacks replace drain task."
+          },
+          {
+            "severity": "P2",
+            "finding": "Dominance cause lost behind handled 503",
+            "resolution": "Cause-bearing warning restored and asserted."
+          }
+        ],
+        "follow_up": "Both findings resolved; no remaining scoped blocker.",
+        "limits": "Read-only source/diff/evidence review; final full run pending at reviewer verdict, then verified by parent."
+      },
+      "backend_integrity": {
+        "verdict": "PASS; no blocking compatibility defect",
+        "consumers": [
+          "useMarketRegime",
+          "LandingContext",
+          "MacroScoreTile",
+          "BotSetup",
+          "Replay UI/API client",
+          "direct replay diagnostic"
+        ],
+        "independent_verification": {
+          "tests_passed": 36,
+          "deselected": 1941,
+          "contracts": "4 clean",
+          "smoke": "8 clean"
+        },
+        "scope": "Prior to final callback/logging corrections, subsequently covered by architecture re-review and final full tests."
+      }
+    },
+    "limitations": [
+      "Python task cancellation tested; browser disconnect does not prove ASGI task cancellation.",
+      "Lost HTTP response cleanup and existing non-idempotent replay POST retries remain outside repair.",
+      "One replay operation across sessions, one market read across contexts; concurrency intentionally bounded.",
+      "Regime and displayed dominance are separate observations; no atomic historical input claim.",
+      "Actual server shutdown, real transport, multi-process session routing, browser startup and live execution unverified.",
+      "No strategy tuning, ML implementation, live orders, history rewrite or deployment."
+    ],
+    "disposition": "Local uncommitted work; current bounded repair complete.",
+    "remaining_followups": [
+      "Process-global universe and live-only trace ownership",
+      "Missing direction in live rejection logs",
+      "Immutable effective configuration and decision packages",
+      "Evidence-based strategy calibration/activation"
+    ],
+    "pre_turn_backup": "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-base-a19bf3bc-3d20-48ac-bd24-9c46baf66259",
+    "source_sha256": {
+      "backend/shared/async_worker.py": "f27e4763ae375be8332d44a41572cdbd719780ff36c305e67f19dff2d2a5ee2c",
+      "backend/services/market_regime_service.py": "3c94c5483da60cb9cc50124094f6a05a47d7ef399ee658ecf5911d9a07b7cb29",
+      "backend/api_server.py": "212e66dbc8548449427778beac709b0f48f8b747800c0c42fcef3b74014a0838",
+      "backend/services/scanner_service.py": "d0f75183d1273ea34139b5e0560231ab1d3aacf439f9dbc2dc796641b5e4c629",
+      "backend/routers/replay.py": "19a77e584385e2592b0b670bee6616a62eaa83390a3b3d193335c3b9799d9190",
+      "backend/engine/replay_engine.py": "bff72c199b3798aa40a9ebbb6ff2adbb98e44f1107d1185cfc601e90fc331f01",
+      "backend/tests/unit/test_api_read_ownership.py": "2e34b6093a444caeaccbd569579e4baaed76fdee2814018a47db7e7cd84d5270",
+      "backend/tests/unit/test_async_worker_ownership.py": "d2ea1f8e6dbab185bdad9bc4cbe34c4ad929379812b937bbf4f894d8906de091",
+      "backend/tests/unit/test_market_regime_ownership.py": "6efda95e94aef43bc03ef0410f3ffa449f9f0b2d7b754dc0de762544fbcd4626",
+      "backend/tests/unit/test_replay_navigation_state.py": "bc00b91b0f9e896696f0139e7505bcd4d2b34288ec768a30ea9f675d00d3623a",
+      "backend/tests/unit/test_market_input_validity.py": "09a49408074568957d341512bd054563d17eeef43270c19d0877286609d4a493",
+      "backend/diagnostics/offline_checks.json": "4efd16a8141a97bd775104beb516cee065cf8214376741fb01d61afbf8cc3497",
+      "docs/ARCHITECTURE_INDEX.md": "341234673a61c3edab88d1951eeef0ac2c16d33a7600ca5051bc4c411d2c67eb",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": "02831ccad7ebdcbf89431065c6605515947053a2972a78d313c0908beb561967",
+      "backend/diagnostics/decisions/2026-10-08__api-read-ownership.md": "df526825df5836bc3f6617a0522b27bab00ba7c79cb655481c9bc4324de3439e"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/cache/telemetry.db": "e4bb384bd13ef92dce31bcd7e7c21e44b8293c415a951f21b5764966fc7fd910",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e"
+    },
+    "artifact_sha256": {
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-before.txt": "985bb4ae0b36e413317b4ba37ab40a36705498e45b4afd25add0f03895b3189d",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-lifecycle-before.txt": "ca8940a32479215a5571efbea2778ddbc6252f401c42fbf4a50dd812ee346fdd",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-cancellation-before.txt": "b90bd102991891527aaa52ba3e67f336ea98b2df0fa452b008f5472433e57174",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-focused.txt": "cca0e099461ad52776e5960fa4f53e3fb2ec69fbe2a3f9445d7da8a98348f33d",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-new-tests-final.txt": "980155ae460dbafe30d2fedb3e91a6df5a25c0d4546dd63eed557ca508759166",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-worker-final.txt": "465b1807c6522dd3e8560b5db2cb7dd78bf55717eea97d15f51b8ae0f5f7fc77",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-final-full.txt": "27b684448b77a8f5c2a5758d4f42a2ed8a5f968d5b1c4ffbf7a38fd64f70d6b7",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-final-contracts.txt": "e19081710e055b0d89af778dee1ba52856a70dd0eb90344c3bf91af1f760b348",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-api-ownership-final-smoke.txt": "86fae2c345cbb6d8753ea213ac5b329dc463eea85c9fa0fefbd8ecefbe448e3b"
+    }
+  },
+  "strict_universe_selection": {
+    "date": "2026-10-08",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "branch": "claude/decision-core-heart",
+    "scope": "Strict category inclusion, candidate accounting, detached snapshots, empty/error bot handling and adapter-owned paper market type; no thresholds/weights retuned.",
+    "reproduced": {
+      "selector_failed": 24,
+      "selector_passed": 4,
+      "bot_stop_cases_failed": 10,
+      "phemex_boundary": {
+        "paper": "failed before market-type fix",
+        "live": "passed"
+      }
+    },
+    "contracts": {
+      "preserved": "select_symbols list, select_symbols_with_drops pair, snapshot/public API shapes",
+      "changed": "Categories strictly include; limit maximum; exact duplicates counted once; initial fallback filtered; all-off remains all eligible. Explicit metadata false wins. Audit permits valid empty result.",
+      "callers": "ScannerService fails empty job; paper/live stop empty/error cycle without alternate majors; paper reads adapter market type."
+    },
+    "verification": {
+      "backend": {
+        "passed": 1951,
+        "warnings": 161,
+        "seconds": 260.29,
+        "exit_code": 0,
+        "scope": "selected guarded manifest"
+      },
+      "targeted": {
+        "passed": 82,
+        "deselected": 1869,
+        "seconds": 7.79,
+        "exit_code": 0
+      },
+      "contracts": {
+        "groups": 4,
+        "changes": 0
+      },
+      "smoke": {
+        "categories": 8,
+        "changes": 0
+      },
+      "typescript": {
+        "command": "tsc --noEmit",
+        "exit_code": 0
+      },
+      "diff_check": {
+        "exit_code": 0
+      },
+      "guards": {
+        "self_checks_per_run": 7,
+        "blocked": "External transport, credentials, child processes and outside-fixture writes/SQLite denied; guard unchanged."
+      }
+    },
+    "review": {
+      "reviewer": "independent universe_design_review",
+      "initial_verdict": "changes required",
+      "findings": [
+        {
+          "severity": "P1",
+          "issue": "Paper passed unsupported perp to Phemex get_top_symbols",
+          "resolution": "Reproduced with actual Phemex methods and fixture markets; adapter-owned market type now used."
+        },
+        {
+          "severity": "P2",
+          "issue": "No successful real-selection consumer evidence",
+          "resolution": "Added both bots and scanner success/empty tests with actual selector and Phemex ranking."
+        }
+      ],
+      "follow_up_verdict": "Approved within reviewed scope; no further application blocker.",
+      "review_limit": "Read-only source/diff/artifact review. Final full run pending at reviewer report; parent subsequently observed 1951 passes."
+    },
+    "limitations": [
+      "Candidate basket and basket-derived macro context may change; classifier taxonomy not calibrated.",
+      "Exact string dedup only; alias normalization, 1x swap enforcement and real-exchange fallback recovery not certified.",
+      "Snapshot remains process-global selection evidence, not final bot admission history.",
+      "Existing fail-open stale/liquidity exception policies unchanged.",
+      "Fixture adapter transport and fake decision boundary; no executor, exchange session, browser validation, historical rewrite or deployment."
+    ],
+    "disposition": "Local uncommitted; no push/deployment.",
+    "next_priority": "Private market API ownership and bounded replay request/session ownership.",
+    "source_sha256": {
+      "backend/analysis/pair_selection.py": "0b228e1d2b19aa6ed69714f0603e21e9d91d9cb3bfe0470170eac1bc0bf49b39",
+      "backend/bot/paper_trading_service.py": "d33d148723ce590c7cae532d666a3bd0579e5419ea6ef2882b0d5e64feb181bf",
+      "backend/bot/live_trading_service.py": "43fc60a9bde22b91bc71808d866f9b07c75a4a64c047dbbba50ee08766416ec4",
+      "backend/diagnostics/universe_audit.py": "bce17d7dd9b0278fdd225ade71742148fd7632a09881e52b12452025471ccbfc",
+      "backend/diagnostics/offline_checks.json": "384c81d47fc1b647b29c6ad7fee5d198be5cf47fb0e72b32173bc9877e9d28ca",
+      "backend/tests/test_pair_selection.py": "e430dc6494616cf0b0fbb4473257c09b0c1bffae1a49cd0b9a013d8853b7783b",
+      "backend/tests/unit/test_pair_selection_drops.py": "7f182e65563c9e58679b4f4d3351fb6a312baa013a509ca1b9c09361c2e0aeb9",
+      "backend/tests/unit/test_universe_audit.py": "7bff56dad0bf7813db4e9c70c04c56a3a0ec6888752b39255636733dad7adf65",
+      "src/pages/BotSetup.tsx": "5136f5d1d1356e1524a7beff4b4b177e2e2a30e91902fa359f597227e88c7a91",
+      "docs/ARCHITECTURE_INDEX.md": "fcee776f57b16ba25d0afaf6e235a05bb746cb36c10521b05aeec59b820625f4",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": "7dbccd3a85890097be6f067ad852738fc8942cfb25c2cdd7318b5defbd69a7c7",
+      "backend/tests/unit/test_universe_contract.py": "a434a7ea875c2984317611a4158bd740e84059f744d4b391dd7501de4bba3f2c",
+      "backend/tests/unit/test_universe_consumers.py": "b45769d1bbeed0c61a48faf2ae6480841fcb19f9347996c32b343e9cc16d77cf",
+      "backend/diagnostics/decisions/2026-10-08__strict-universe-selection.md": "d4a076402d0bada9c3178ec2f4bc2ed3a531d2c26df77d6ccc1ebc1e48c1ef61"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/cache/telemetry.db": "e4bb384bd13ef92dce31bcd7e7c21e44b8293c415a951f21b5764966fc7fd910",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e"
+    },
+    "artifact_sha256": {
+      "C:/Users/macca/AppData/Local/Temp/snipersight-universe-before.txt": "840d0b5960a20575b3d065086515ab23b6cf1c765c00f212bb064b28c3fa9307",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-universe-consumers-before.txt": "ccf6ebc136579c497af7a99522997ede572f59280f7fa199cbb873283881e99a",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-universe-market-before.txt": "5d2f501d324d9afea53f904d4636d21353ffeda65337ecb390a28dfaada356ee",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-universe-final-targeted.txt": "de05c02935a41f3ad302b0f09ec899f5b34a4851557e0f5e0f02d2d498b25db8",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-universe-final-full.txt": "df66221c5853cb7fd6444b36c1eb300af6c94ea1233baf4cd5f3ab589774b1e2",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-universe-contracts.txt": "28cc97e6ac9be2c15809eff31065ea9df3b05e0abd4f15d4bd0c3c27e63630fe",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-universe-smoke.txt": "62e1be15e03e89d64c699ddebeae3df26dc5aab73e19b7e5f3af7ac595d9abe5"
+    },
+    "pre_turn_backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-universe-base-0518206cae664f1ebea1afa8a9206454"
+  },
   "audit_date_client": "2026-10-07",
   "checkpoint": {
     "result": "FAIL_CHECKPOINT_REPLACEMENT",
@@ -10485,5 +11186,590 @@
       "telemetry_unchanged_after_correction": true,
       "note": "Mermaid source checked, no rendered diagram claim"
     }
+  },
+  "paper_workflow_integration": {
+    "date": "2026-10-08",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "scope": "Existing scanner-result handoff through paper entry, management, exit, publication and forensic checkpoint. ML excluded by user; no raw-market signal or automatic-resume claim.",
+    "reproduced": {
+      "initial_failures": 14,
+      "additional_partial_equity_failures": 2,
+      "directions": [
+        "LONG",
+        "SHORT"
+      ],
+      "issues": [
+        "actual exit fill price lost",
+        "partial exit marked complete",
+        "cap checked after paper fill",
+        "resting entry refilled after closure",
+        "journal retry consumed cash P&L twice",
+        "shutdown closed manager without executing",
+        "pending reduction equity double-counted"
+      ]
+    },
+    "verification": {
+      "command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py backend",
+      "tests_passed": 1741,
+      "new_integration_cases": 50,
+      "previous_selected_cases": 1691,
+      "seconds": 69.98,
+      "warnings": 97,
+      "focused_command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py backend -k paper_workflow",
+      "contract_inventories": "4 clean; no baseline updates",
+      "smoke_categories": "8 clean",
+      "contract_limit": "Dynamic state.json.paper_execution is additive and tested directly; contract capture is not exhaustive JSON-schema coverage.",
+      "artifact": "C:/Users/macca/AppData/Local/Temp/snipersight-paper-workflow-backend.txt",
+      "guard": "Cleared environment; external transport/credentials/child processes denied; writes and SQLite restricted to fixtures. Reported attempted mkdir and subprocess operations were denied."
+    },
+    "source_sha256": {
+      "backend/bot/paper_trading_service.py": "06f9dd0f35dc8ad30bbe1eef0082881e5c800f5c4d526c6db19f292effa88f2f",
+      "backend/bot/executor/paper_executor.py": "77e5531d2b365b072ba4cc9f248496d56e783623888ce76070239ee3792bd193",
+      "backend/tests/integration/test_paper_workflow.py": "a015af1968f3d75d7bff545d3359dd387a699dca5180c245356141e0f9c5c40e",
+      "backend/diagnostics/offline_verify.py": "5ff6a62bb6670e8a3ed72de945e3fa794cbd724a995df6e7887535a191f0bb77",
+      "backend/diagnostics/offline_checks.json": "a63b6423a45cf68ef1a0d432ea08a268538e75fb91d98c309a22b46ef36ead7c"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/cache/telemetry.db": "e4bb384bd13ef92dce31bcd7e7c21e44b8293c415a951f21b5764966fc7fd910",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "limits": [
+      "Scanner outputs and quotes supplied as fixtures; actual raw-candle decisions outside this boundary.",
+      "Paper checkpoint is forensic; no automatic restart loader.",
+      "No exchange, model, credentials, actual store repair or deployment.",
+      "No strategy weights, thresholds or live executor edits.",
+      "Existing fee schedule and fill-probability parameters not calibrated."
+    ]
+  },
+  "raw_candle_workflow": {
+    "date": "2026-10-08",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "branch": "claude/decision-core-heart",
+    "scope": "Synthetic raw candles through real ingestion, indicators, SMC, macro/regimes, legacy decisions, gates, scoring, planning, risk, STEALTH/balanced paper admission, settlement and journal publication.",
+    "reproduced": {
+      "fvg_initial_failures": 10,
+      "worker_initial_failures": 5,
+      "issues": [
+        "UTC-aware candle ages failed liquidity freshness and HTF scoring",
+        "Displacement body counted as FVG formation overlap",
+        "Worker constructor discarded resolved caller settings"
+      ],
+      "fixes": "UTC normalization; middle-candle wick overlap; restore resolved worker configuration in place.",
+      "behavior_change": "FVG supply and plans can change. Caller overrides now apply, including the existing paper balanced gate/floor of 65/55. No mode threshold, weight, gate constant or preset was changed."
+    },
+    "verification": {
+      "command": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py backend",
+      "tests_passed": 1803,
+      "previous_selected_cases": 1741,
+      "new_cases": {
+        "joined_core": 10,
+        "worker_configuration": 7,
+        "timestamp_utc": 27,
+        "fvg_formation": 18
+      },
+      "seconds": 126.92,
+      "warnings": 105,
+      "focused_results": {
+        "utc_and_fvg": "45 passed in 7.89s",
+        "core_and_worker": "17 passed in 59.98s"
+      },
+      "contract_inventories": "4 clean; 0 changes; no baseline updates",
+      "smoke_categories": "8 clean; 0 changes",
+      "guard": "Seven denial self-checks passed. Cleared environment; external transport, credentials and subprocesses denied; fixture writes and SQLite only. Reported mkdir/socket/subprocess attempts were blocked.",
+      "changed_python_syntax": "valid",
+      "lesson_verification": "Static independent review of both copy-only diffs; no browser-render claim."
+    },
+    "fixture": {
+      "mode": "STEALTH",
+      "paper_preset": "balanced",
+      "decision_policy": "legacy",
+      "seed": 2,
+      "days": 500,
+      "base_timeframe": "5m",
+      "clock_utc": "2025-12-03T15:00:00+00:00",
+      "impulse_log_price": {
+        "LONG": 0.012,
+        "SHORT": 0.01
+      },
+      "market": "One generated tape consistently resampled to five timeframes; SHORT reflected around final close.",
+      "boundaries": "Synthetic market, dominance, precision, volume and quote inputs; clock injection. Real logic retained; worker inputs and outputs pickled but run serially.",
+      "positive_cases": "LONG/SHORT paper stop and profitable target exits; exact cash/journal reconciliation and duplicate-publication guard.",
+      "negative_cases": "LONG/SHORT missing critical 1h or 4h data and no structural anchor; assert context, specific rejection, no scoring/plan/risk/order."
+    },
+    "reviews": {
+      "utc": "Independent focused PASS",
+      "fvg": "Symmetry review PASS; fractional overlap and partial-retest cases added",
+      "worker": "Independent focused PASS; cache refresh and mode-change cases added",
+      "backend_integrity": "CLEAN; upstream/downstream mapping and guarded artifacts independently inspected. FVG lesson mismatch corrected in frontend and research copies.",
+      "rubric_limit": ".Codex/AUDIT_RUBRIC.md absent; no unavailable full-rubric certification."
+    },
+    "source_sha256": {
+      "backend/shared/models/smc.py": "90409ce488028bb843ac1fd0ed9ceaf9f00f3b332e92b3220860ae7431a1d41e",
+      "backend/analysis/htf_levels.py": "8e699da89822891178c714ac620a76137a8d19f85b503bf8fe8f697908340eb3",
+      "backend/strategy/smc/fvg.py": "2d44a9b4872d616372cc535f4bb1f7b0797ebb0738d3d1873c09143d824659f8",
+      "backend/engine/orchestrator.py": "cb396b06b4706231764619085fa3cbd1f82331ab026985264d6cbdb973e53e18",
+      "backend/tests/integration/test_core_workflow.py": "85aab9557ef1a561e3fc91150617284620c1460295bda43d58aa9faea184396d",
+      "backend/tests/unit/test_structure_timestamp_utc.py": "e1b9f66c581266bad7dca4340b67d2cd1e2c61aa945115cec23dbcbf00be4ca4",
+      "backend/tests/unit/test_fvg_formation.py": "96b6f5aebc2080e2a668e03666e434ba2a83db0c36ca344b4c99a74e75123a43",
+      "backend/tests/unit/test_worker_resolved_config.py": "daaf69be7015c50054eafcbffb15541809d8a4b9db16225a02fe0cbad15d8f15",
+      "backend/tests/unit/test_worker_regime_propagation.py": "0cc7927e32cd2c54a4feadb97a8636dbfa3005589afc63f70931eea127d2f95e",
+      "backend/diagnostics/offline_checks.json": "9d26d60c56495fb3eb7ab96e380f47311f181066ab2ad9d609397d500ad06bfa",
+      "backend/diagnostics/offline_verify.py": "5ff6a62bb6670e8a3ed72de945e3fa794cbd724a995df6e7887535a191f0bb77",
+      "backend/diagnostics/decisions/2026-10-08__raw-candle-workflow.md": "800b06aff99c3cc51d5c7922a952c62337e51827f3a105e861e952212b1e0a73",
+      "src/content/lessons/02-fvg.tsx": "bf7bb0dd8a7eba3fde3c0e8a4e674fa9c67cec50885165722b918ddbbe674671",
+      "backend/diagnostics/research/lessons/02-fvg.md": "5e37775d2da9fe36b58712e47841400353845419ca4fac9969d024f1ae10f7b6",
+      "docs/ARCHITECTURE_INDEX.md": "51787ea89046c61729d67981ab0a9b80ece943dff62560b7c181554a1a659a19",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": "9f0dcb14756e65ba975d2365259c7f66ca68f6fce37d410f4f0290c9081dcaf9"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/cache/telemetry.db": "e4bb384bd13ef92dce31bcd7e7c21e44b8293c415a951f21b5764966fc7fd910",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_sha256": {
+      "C:/Users/macca/AppData/Local/Temp/snipersight-core-backend.txt": "113fa47ae41746aa7f463dfebccf356d4ac38ca06ca898c1f45c07b54f6907d5",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-core-contracts.txt": "4c1b387d5957e642b8a74db0348d4d10973e8e25d48310268499513afc2e2df4",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-core-smoke.txt": "d7b15ce8961e902c93eabb8e591c48edd9580eec07f2f076c4d05c7fa1543b8f",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-core-final-targeted.txt": "232cfb308fef7cb5bfa049f93e4dadeba7b9c43d933bafd6d4a17d96ac81aa56",
+      "C:/Users/macca/AppData/Local/Temp/snipersight-core-unit.txt": "3dc279f880a42ca47be56869459d44a2b5beab50fdb3c852a1224a0dda741391"
+    },
+    "protected_data": "Hashes unchanged from the prior corrected paper pass. This does not erase the previously documented telemetry-test incident.",
+    "limits": [
+      "Joined path covers legacy STEALTH/balanced only; other modes have focused configuration/FVG cases, not this complete chain.",
+      "No actual process spawning/isolation/concurrency, exchange transport, browser/API startup, fresh-quote mode or live settlement.",
+      "Different directional impulses prove both paths execute, not exact mirrored score equality.",
+      "No historical performance, market calibration or profitability claim.",
+      "Dormant cycle branch remains unavailable and logged; paper checkpoint has no automatic restoration.",
+      "Shared scanner changes also reach live scanning, but no live executor was modified or live order submitted.",
+      "ML excluded; no trained model or artifact work."
+    ],
+    "next_priority": "Worker-local indicator/SMC diagnostics and rejection detail lost at the parent boundary, then universe reporting and shared API ownership.",
+    "disposition": "Local reviewed changes; not committed, pushed or deployed in this verification pass."
+  },
+  "worker_rejection_evidence": {
+    "date": "2026-10-08",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "branch": "claude/decision-core-heart",
+    "scope": "Worker and planning-attempt evidence through scan aggregation, heartbeat accounting, paper rejection logs, trace classification and HUD consumers. Decision rules and thresholds unchanged.",
+    "reproduced": {
+      "initial_regressions_failed": 15,
+      "heartbeat_regressions_failed": 2,
+      "confirmed_issues": [
+        "Worker-local diagnostic records lost at process boundary",
+        "Cached worker and planning-attempt state leaked prior causes",
+        "Sizing failure reused a previous risk reason",
+        "Terminal planner/risk evidence omitted known side or used generic cause",
+        "Candidate planner events could falsely reject later successful outcomes",
+        "Legacy feature occurrences double-counted by heartbeat and two HUD summaries",
+        "HUD omitted feature error/timeframe; trace missed post-plan rejection; paper fallback fabricated LONG"
+      ],
+      "test_repairs": [
+        "Two recovery-fixture assumptions corrected: tape has only one valid scalp scale; accepted test uses natural failed trade-type candidate then scalp success.",
+        "Replay as-of test double now supplies the existing service diagnostics property; clock assertion retained."
+      ]
+    },
+    "contracts": {
+      "internal_worker": "Intentional pair-to-triple return: plan, rejection, detached per-symbol diagnostics; sole runtime consumer scan updated.",
+      "preserved": "Public scan and direct _process_symbol returns remain pairs; planner remains plan-or-None.",
+      "additive_planner_output": "Optional rejection_details captures reason code/text and structured details; orchestrated caller owns terminal telemetry, standalone calls retain prior events.",
+      "heartbeat": "signals_per_stage excludes reserved features occurrence rollup; conservation guard retained; original scan summary keeps occurrences."
+    },
+    "regression_coverage": {
+      "new_backend_cases": 59,
+      "new_cases_by_file": {
+        "worker_diagnostics": 12,
+        "planner_rejection_details": 24,
+        "scan_rejection_evidence": 12,
+        "rejection_consumers": 11
+      },
+      "existing_feature_projection_cases_added_to_manifest": 7,
+      "previous_selected_cases": 1803,
+      "boundaries": [
+        "cached worker across symbols/runs",
+        "pickled detached payload and partial/startup failures",
+        "all fault-injection scans through real scan_with_heartbeat with persisted conservation assertions",
+        "LONG/SHORT planner/risk and candidate-then-success paths",
+        "all planner event sites with caller/standalone ownership",
+        "missing-side paper logs and trace classification",
+        "feature occurrence versus rejected-symbol UI counts and safe sample strings"
+      ]
+    },
+    "verification": {
+      "backend": {
+        "runner": "backend/diagnostics/offline_verify.py backend",
+        "passed": 1869,
+        "warnings": 161,
+        "seconds": 259.67,
+        "exit_code": 0,
+        "scope": "selected guarded suite"
+      },
+      "frontend": {
+        "passed": 15,
+        "files": 3,
+        "exit_code": 0,
+        "scope": "scan history, market-input rejections, rejection evidence"
+      },
+      "typescript": {
+        "command": "tsc --noEmit",
+        "exit_code": 0
+      },
+      "contracts": {
+        "runner": "backend/diagnostics/offline_verify.py contracts",
+        "inventory_groups": 4,
+        "changes": 0,
+        "exit_code": 0
+      },
+      "pipeline_smoke": {
+        "runner": "backend/diagnostics/offline_verify.py smoke",
+        "categories": 8,
+        "changes": 0,
+        "exit_code": 0
+      },
+      "guards": {
+        "denial_self_checks_per_run": 7,
+        "backend_imports": "isolated fixture cwd; credentials, external transport, subprocesses and writes/SQLite outside fixture denied"
+      },
+      "diff_check": {
+        "command": "git -c core.safecrlf=false diff --check",
+        "exit_code": 0
+      }
+    },
+    "reviews": {
+      "plan": "Read-only plan on record; triple chosen over typed result or shared queue.",
+      "symmetry": "PASS; AST comparison preserved pre-scoring gates, sizing, risk, entry/stop/targets and winner selection. Heartbeat addendum PASS.",
+      "integrity": "DRIFT — intentional private worker pair-to-triple; producer/sole runtime consumer synchronized; captured contract inventories CLEAN; no unresolved scoped breaks. Independent report pasted verbatim, including limits.",
+      "rubric_limit": ".Codex/AUDIT_RUBRIC.md absent; no unavailable full-rubric certification."
+    },
+    "limitations": [
+      "Selected offline suite; synthetic market inputs and serial pickled worker execution, not OS process isolation or external transport.",
+      "UI checks are classification/static render and type checks, not a browser session.",
+      "Retry eligibility is verified; fallback telemetry cache observations can duplicate under write failure. No global exactly-once telemetry claim.",
+      "Separate live-service missing-side fallback remains unchanged; trace endpoint still reads its live buffer.",
+      "No ML implementation, strategy retuning, live orders, automatic paper restore, historical repair or deployment."
+    ],
+    "disposition": "Local uncommitted changes; no push or deployment in this pass.",
+    "next_priority": "Universe-reporting contract conflict, then shared API ownership.",
+    "source_sha256": {
+      "backend/engine/orchestrator.py": "4907dd2ff5551c8e577716179a321dc496fda6aa7be02d1f72b5d991dcd9fab1",
+      "backend/strategy/planner/planner_service.py": "30c92ed6b294074e0048964137fcfae6e0b088495bac7ed9fe9ca2215402f51b",
+      "backend/bot/paper_trading_service.py": "596b02a2250c798a6bd0af2599d9c072b9248704fe64a8027a1917a9c4c17a13",
+      "backend/routers/observability.py": "2e3549ee7402ab0ea230577c760acb52a4d29500b5d5bfb61856b9bea5ed43d1",
+      "backend/tests/unit/test_worker_diagnostics.py": "1af9844be011b6a40275257169719c298ee2821473d91769a7331376bda8e218",
+      "backend/tests/unit/test_planner_rejection_details.py": "62de2478a8213f06cd9492796c1b158dbad20ab6153a4da6547acab667656b68",
+      "backend/tests/integration/test_scan_rejection_evidence.py": "0395cca8b97000806a70b81ca05490bb0bd19a89f4be45e1dc733da74aebb4fc",
+      "backend/tests/integration/test_rejection_consumers.py": "704f3758e0658b0d3a2d78c662d9e3bef2416016146fe56065cb30bc8960cfb5",
+      "backend/tests/unit/test_worker_resolved_config.py": "202dbf65431933033862237e7a9d57fc14564aa5db2bfe008e1bfcf5112a509d",
+      "backend/tests/unit/test_worker_regime_propagation.py": "0d26f297617ca8cef6edc2cf132d41e6c7310410b9ab54564b9b71d7bd670904",
+      "backend/tests/unit/test_replay_analysis_inputs.py": "3d4fe1d5b70c29babede12ed3df99e507d84b61efebd2b26aea32c2f7afdda9d",
+      "backend/diagnostics/offline_checks.json": "7e4ab857d8f534fb946ebe48bbf5e68afd2ad9efc761f3efeddc1c4a3b3d4050",
+      "src/components/hud/RejectionPanel.tsx": "66d12e46aa6b7b9a79b1b64dd6f5235459f82095241c72477468851db9f54be6",
+      "src/components/hud/GauntletBreakdown.tsx": "012d453d3507518f9758f0e287a45a0a37a654dd3961b403dd812b8e65984bca",
+      "src/components/hud/PipelineTracer.tsx": "c429a7184a0fa5e5eea5bbb67027ddc117e953e36c9e0c75499fb285edf9d078",
+      "src/components/hud/ScanController.tsx": "6a34c821bcb47d4354f11a0034ba717fb7fe091fab8f86ae085ffd70ed5116f5",
+      "src/components/hud/rejectionEvidence.test.ts": "86c9ce1da2d88f7c76832b59d872eaa30b03245cbbcac962a4929ccb685e6347",
+      "docs/ARCHITECTURE_INDEX.md": "adfc6229286716497e130f6aa8e9e4c90ea5c645d6c1c2eb1de64f05c3bf6ec3",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": "cdc426b4a235821e44f894325ceb89b7b77c2293124c87b82048608230caa055",
+      "backend/diagnostics/decisions/2026-10-08__worker-rejection-evidence.md": "542d0ebd00c8ceb4be82c8e9f2f1f0e98699afa06805eac5009abac7a4a71fb0"
+    },
+    "protected_sha256": {
+      "backend/cache/trade_journal.jsonl": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "backend/cache/telemetry.db": "e4bb384bd13ef92dce31bcd7e7c21e44b8293c415a951f21b5764966fc7fd910",
+      "backend/diagnostics/capture_contracts.py": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "backend/diagnostics/contracts/db_contracts.json": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      ".claude/settings.json": "3d176a9b5f277e3070a781b71e8267a71dce59139be63309e55f1a0a7611b5b7"
+    },
+    "artifact_sha256": {
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-diagnostics-backend-verified.txt": "724a71657d87683678972ae7557550d4471f58460283c82d86ef06c39ffdf0ea",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-diagnostics-contracts-verified.txt": "81d378e8d55f691287b0205acaf7d9ae4c6cd8bb60dc597c5240c218af0e2e56",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-diagnostics-smoke-verified.txt": "00c68c9f1302dfcb0a8e99ecbe9bf78106316f033f27e8bdfced011021b69c11",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-diagnostics-frontend.txt": "57583726c1904fbabf20309c0d570064d8eb53563862ae110b88ff5495c3f1d4",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-diagnostics-typescript.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-diagnostics-before.txt": "5e4242a0eb1af08883f5e1f86b31822ce8929d8233c4e6b5c3670e3e62ad6583",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-diagnostics-heartbeat-before.txt": "55dc0990b75b366a76cd05706fc3ac2d43711d70c06b58c0e91149574a7c2feb"
+    },
+    "changed_python_syntax": "valid"
+  },
+  "score_policy_balance": {
+    "date": "2026-10-09",
+    "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+    "scope": "Whole score scale, weights, eligibility and cutoff workflow after evidence deduplication",
+    "score_model_version": "family-evidence-v2",
+    "score_policy_version": "family-policy-v2",
+    "score_calibration": "reference_policy_uncalibrated",
+    "decision": "backend/diagnostics/decisions/2026-10-09__score-policy-balance.md",
+    "backups": [
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a",
+      "C:\\Users\\macca\\AppData\\Local\\Temp\\score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a"
+    ],
+    "verification": {
+      "backend": {
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-policy-backend-final.txt",
+        "sha256": "69094097c28c83dd1b9036fb8968c9271e9ca0d5eed564a3b7dd37999f4efa84",
+        "passed": 2374,
+        "deselected": 0,
+        "warnings": 387,
+        "seconds": 320.18,
+        "guard_denial_checks": 7,
+        "guard_checks_passed": true,
+        "blocked_operations": [
+          "['os.mkdir outside fixture directory', 'subprocess.Popen']\r"
+        ],
+        "exit_code": 0
+      },
+      "baseline_reference": {
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-policy-before.txt",
+        "sha256": "c3afb5a13da3af6eaffa40248922a2b5221163a5b88ab6d1d5f15f51d4deffc3",
+        "passed": 64,
+        "deselected": 2180,
+        "warnings": 64,
+        "seconds": 11.21,
+        "guard_denial_checks": 7,
+        "guard_checks_passed": true,
+        "blocked_operations": [
+          "['subprocess.Popen']\r"
+        ],
+        "exit_code": 0
+      },
+      "reference": {
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-policy-after-final.txt",
+        "sha256": "db47c9d8096fdacddc5b873da8b9e73325d46cda60e81144c9b04e082d6c4b26",
+        "passed": 149,
+        "deselected": 2225,
+        "warnings": 173,
+        "seconds": 8.65,
+        "guard_denial_checks": 7,
+        "guard_checks_passed": true,
+        "blocked_operations": [
+          "['subprocess.Popen']\r"
+        ],
+        "exit_code": 0
+      },
+      "consumer_units": {
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-family-consumers-unit.txt",
+        "sha256": "bc386e7391767a79dd629a15733f422fdadfba9ba94529366a11068352796bac",
+        "passed": 235,
+        "deselected": 2103,
+        "warnings": 27,
+        "seconds": 25.63,
+        "guard_denial_checks": 7,
+        "guard_checks_passed": true,
+        "blocked_operations": [
+          "['subprocess.Popen']\r"
+        ],
+        "exit_code": 0
+      },
+      "raw_workflow": {
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-family-core-final.txt",
+        "sha256": "42a14c67ff26a6f2b20ac5fe013a835f3d8b552c834813041eed5f573dab3d57",
+        "passed": 31,
+        "deselected": 2337,
+        "warnings": 48,
+        "seconds": 250.1,
+        "guard_denial_checks": 7,
+        "guard_checks_passed": true,
+        "blocked_operations": [
+          "['subprocess.Popen']\r"
+        ],
+        "exit_code": 0
+      },
+      "reflection": {
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-family-reflection-final.txt",
+        "sha256": "328d13d4e54961f48adfc8a1590272ec15f541df430019d95756e68a6fa607f2",
+        "passed": 1,
+        "deselected": 2373,
+        "warnings": 0,
+        "seconds": 10.33,
+        "guard_denial_checks": 7,
+        "guard_checks_passed": true,
+        "blocked_operations": [
+          "['subprocess.Popen']\r"
+        ],
+        "exit_code": 0
+      },
+      "frontend": {
+        "passed": 40,
+        "files": 2,
+        "exit_code": 0,
+        "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-consumer-frontend-v2-boundary.txt",
+        "sha256": "83e5cabcb3d15015132dee7b8300b58d6483b8c52abe40e7ba90bd5f36b984a8"
+      },
+      "typescript": {
+        "command": "tsc --noEmit",
+        "exit_code": 0,
+        "evidence": "UI owner tool result after final frontend boundary change"
+      },
+      "contracts": {
+        "exit_code": 1,
+        "guard_checks_passed": 7,
+        "evidence": "independent backend-integrity tool output; no saved log",
+        "clean": [
+          "API",
+          "telemetry",
+          "pipeline"
+        ],
+        "intentional_drift": {
+          "live_signal_writer": "569d437bede7657e4bd0e3777f13fd6a5b4b2e1557b59480b101157720e4bbbb",
+          "paper_signal_writer": "a27f54b5899c97d2cd91fc85e8fa06c49fc94ea68c990a36ffb32150239a9498"
+        }
+      },
+      "smoke": {
+        "exit_code": 1,
+        "guard_checks_passed": 7,
+        "clean_groups": 7,
+        "intended_gate_changes": {
+          "overwatch": [
+            72,
+            75
+          ],
+          "stealth": [
+            70,
+            65
+          ],
+          "strike": [
+            68,
+            65
+          ]
+        },
+        "evidence": "independent backend-integrity tool output; no saved log"
+      },
+      "diff_check": {
+        "command": "git -c core.safecrlf=false diff --check",
+        "exit_code": 0
+      }
+    },
+    "independent_reviews": {
+      "status": "No remaining implementation blocker in reviewed scope",
+      "architecture_and_math": "Fixed budgets/alternatives compared with variable denominator and uniform threshold reduction; independent source and boundary review.",
+      "consumers": "Scorer to service/orchestrator/planner/bots/logs/cache/API/UI traced. UI changes also reviewed by root against pre-batch backups.",
+      "corrected_findings": [
+        "discarded opposing-wall safety",
+        "invalid or consumed anchors",
+        "negative macro erased by missing context",
+        "OB-only and unscoped sequence relief",
+        "default-flat-volume false evidence",
+        "tier rounding mismatch",
+        "implicit old cutoff defaults",
+        "missing actual scoring-mode/rejection provenance",
+        "asymmetric swing trend seed",
+        "crossed levels behind entry misclassified as walls",
+        "UI v2 eligibility missing-data fallback"
+      ]
+    },
+    "remaining_limits": [
+      "Reference budgets and gates are deliberate policy, not fitted win probabilities or proven optimal cutoffs.",
+      "Fixed synthetic raw tapes and controlled detector/plan fixtures do not establish representative market frequency, exchange fills, slippage or real process concurrency.",
+      "Existing SMC swing confirmation-time availability/look-ahead remains unverified; seed symmetry fix does not certify full causal detection.",
+      "Bots retain STEALTH/fusion execution and explicit custom UI cutoffs; paper dynamic-floor/thesis and live hard-gate semantics remain distinct.",
+      "Old model-unaware diagnostic aggregators and historical completed records cannot be pooled as v2 calibration evidence.",
+      "Frontend verification is static rendering/classification/type checking, not visual browser verification.",
+      "Telemetry DB changed during this task. Its responsible writer is unverified. Previously running API PID4672 (started2026-10-08 21:12:35 local) and UI PID18696 were observed listening; guarded tests denied real-store access. These facts do not prove cause.",
+      "No app restart, live order, historical repair, ML implementation/training, deployment, commit or push in this batch."
+    ],
+    "protected_files": [
+      {
+        "path": "backend/cache/trade_journal.jsonl",
+        "before": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+        "after": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+        "unchanged": true,
+        "observed_at_utc": "2026-10-09T11:35:29.952539+00:00",
+        "mtime_utc": "2026-07-01T23:58:59.104913+00:00"
+      },
+      {
+        "path": "backend/cache/telemetry.db",
+        "before": "342935783cb0d768613f3df45d72c24be3479378c07ebf01d195e865772e69e8",
+        "after": "3d45d9c70f0d43779761c5153937f2b0fd3b10f36b169a6da74f661001d83824",
+        "unchanged": false,
+        "observed_at_utc": "2026-10-09T11:35:33.048580+00:00",
+        "mtime_utc": "2026-10-09T11:35:33.016905+00:00"
+      },
+      {
+        "path": "backend/diagnostics/contracts/db_contracts.json",
+        "before": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+        "after": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+        "unchanged": true,
+        "observed_at_utc": "2026-10-09T11:35:33.048580+00:00",
+        "mtime_utc": "2026-10-08T16:04:59.935953+00:00"
+      },
+      {
+        "path": "backend/diagnostics/capture_contracts.py",
+        "before": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+        "after": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+        "unchanged": true,
+        "observed_at_utc": "2026-10-09T11:35:33.049102+00:00",
+        "mtime_utc": "2026-10-08T16:04:18.198492+00:00"
+      }
+    ],
+    "source_hashes": {
+      "backend/api_server.py": "5284dde246d2ef03ebf0a7ecf878777fc39b06e73fd37dce6576fec2f7bba131",
+      "docs/ARCHITECTURE_INDEX.md": "b0072372591d0c7a5285d625eb070cea654aafa513dc622f84a7cb9e5849e64c",
+      "backend/bot/live_trading_service.py": "9cd259052e46619c708e3c331876b513dbffcb254fd75ad0e3f94944eda25745",
+      "backend/bot/paper_trading_service.py": "9aa662327dba0cbf8c59926ce412de0d2d6c064ae56c12d990a6f1cd5c4f9c9b",
+      "backend/diagnostics/offline_checks.json": "ac09e22533449ac98bc66ba89292dd9e07a9bb92341fad835b48253a3a576957",
+      "backend/engine/orchestrator.py": "c51dd06dd1418717173882e0f568a56b643548a3f6de501b9119596c88c0fc9d",
+      "backend/routers/observability.py": "0df1fb1134841159b3de3053832f8dc9571f6cd6eb9ca07545572fd15e053a68",
+      "backend/services/confluence_service.py": "2abca6fd334ad93ca544b47a864580f411eabc4b5cf86b5f76303ad523f20ef3",
+      "backend/shared/config/defaults.py": "0196e71874483288ba3e7ae1b969be1de7dadfb17f777e43c8a12f5b467a96c7",
+      "backend/shared/config/scanner_modes.py": "00b45917bc58b9e93719e170167e493a1a4e9692ce7c1641a78bd85f72b256f1",
+      "backend/shared/config/sensitivity.py": "c4dc9485da5980f77b9600591e3697de7e4481933056994731055d83b2c30694",
+      "backend/shared/models/scoring.py": "ebafa476b2db1b6fe0ed420d9b9a38815174d2f6ba43cbf5d8205d5a8f8bfac0",
+      "backend/strategy/confluence/scorer.py": "2aa66e103cd38a99c0dff106b7f464badd8b5c0a389c6f62bd7302fe6dc1a1f7",
+      "backend/strategy/smc/bos_choch.py": "36a86bc406477adc6d906d47712834abc73adf6bd36b395e5b8badb6e481d19d",
+      "backend/tests/integration/test_core_workflow.py": "cb0ec21996aceb12b000049f3d5dae25a99a591049556ec0e0a8dec1acf8a74f",
+      "backend/tests/integration/test_rejection_consumers.py": "2a0bc201416440deaad1d7775e6b8d7b2e6a4e3437e6024f426f574960ed0bea",
+      "backend/tests/integration/test_scan_rejection_evidence.py": "134134693252fda20982f98e213461c5ea6fd9dae41e75ca426a655e4e3e6cc2",
+      "backend/tests/unit/test_evidence_accounting.py": "c3135f1ee422428b9ad06ccfcfedd37af7e7036d2537f5382f5cc26d68dcb480",
+      "backend/tests/unit/test_live_reconciliation.py": "cac723a6fd51cd35611a13117d634b3d2126861b242ea9cbf86bde2fd3661a58",
+      "backend/tests/unit/test_scoring_confidence_contract.py": "16017b926e48cda2ace77596ed66ffe4134723dd9fdf6c54e0d75e0b0ad08a2a",
+      "backend/tests/unit/test_sensitivity_contract.py": "47d74d17e8f92e44a6cf1f8770e3846a8050c32484678d6b4f89781d5b7b9efb",
+      "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": "67adec2f7065b7e5da0f421be34005fd5364977d1d3650657038a8cee165c4fe",
+      "src/pages/Scanner.score.test.tsx": "8ae40557f5042c6645622d63bfb59127ee974080b1c502c17fdd22403f6827c9",
+      "src/pages/Scanner.tsx": "2611477511939ff14a7c27e871ca2eb3d8bcbf955cf80142d294e409ce11ad58",
+      "src/utils/scoreEvidence.ts": "714cb379b1e9e8e7b8559a3ca24a0ab92d91e0e35b024a58236f1e7adfe38aef",
+      "src/components/hud/ConfluenceBreakdown.tsx": "9d8d7c6e4967de8e00b88740d3fec463b2830a1f91a9350b1f35fd3092473786",
+      "src/components/hud/GauntletBreakdown.tsx": "3e2a478772624050e626cf3bb0b98d3181ba256896af6e0d0749234a35741aaa",
+      "src/components/hud/rejectionEvidence.test.ts": "c99c9cdfe363c549b939024eebea62b8cfa92948cd8694139d08ad7cf269441f",
+      "src/components/hud/RejectionPanel.tsx": "7c7851b49b903736a03572598542c72c8b660839ce0dd16c58849fd7e00aaaae",
+      "src/pages/training/RangeBot.tsx": "b0b3ad73544bf6fe62a91034bf4566432c016a61a2388c0ee7baa3077091d237",
+      "backend/shared/config/rr_matrix.py": "f240e797966f3538b1bc7c715b0e6f8fe89ee02d0ecf7415e90132e49ce472ae",
+      "src/context/ScannerContext.tsx": "f3bfcea7e9d5389f45cec85a2d7e2748e8479b4d83cbfd370b33b9ffbaa0a502",
+      "src/pages/BotSetup.tsx": "4f47352e0323937ed8149566d33c8d18707b802a066e1441a80d28110394b3f8",
+      "backend/shared/config/score_policy.py": "05db0254c0eeaac4ac914679b1bb26f4f61a7bf644e20f1180c37fadfe01c19f",
+      "backend/strategy/confluence/evidence_policy.py": "edf75927dd59efab9a49f65104f3970b11a4217994466b2ebb47def14145f062",
+      "backend/tests/unit/test_score_policy_balance.py": "38f7814ad762d38dc85f9bc28fe24fa60a8a62250f84455b0f4af5ba3c948111",
+      "backend/diagnostics/decisions/2026-10-09__score-policy-balance.md": "86cba297277b354fb7a39a3c188858b29b6e74c4d1a33e68c54d7ecbdea0c2eb"
+    },
+    "comparison_record": "docs/audits/SCORE_POLICY_BALANCE_2026-10-09.json",
+    "comparison_sha256": "175194826ada99d7836c1ecba76c417633b96838179cb18501eda87e71461fb4"
+  },
+  "mode_regime_integration": {
+    "date": "2026-10-09",
+    "status": "offline_implementation_and_verification_complete",
+    "scope": "Regime validity, authoritative scanner recommendation, consistent fixed playbooks and opt-in adaptive simulated-paper routing; ML excluded",
+    "evidence": "docs/audits/MODE_REGIME_INTEGRATION_2026-10-09.json",
+    "decision": "backend/diagnostics/decisions/2026-10-09__mode-regime-integration.md",
+    "verification": {
+      "backend_unique_selected": 2439,
+      "all_selected_pass_after_reruns": true,
+      "frontend": 45,
+      "typescript": 0,
+      "contracts": "6 intended JSONL drifts",
+      "smoke": "5 intended drifts,3 inherited from prior batch"
+    },
+    "limitations": [
+      "Offline synthetic paper fixtures establish software behavior, not forward profitability, optimal recommendation routing or calibrated win probabilities.",
+      "Global daily ATR cutoffs, intraday planner volatility bands and representative signal frequency remain uncalibrated.",
+      "Existing fixed-profile pullback/backing heuristics are not fully consolidated into timeframe-role fields; nested triggers are not mandatory for every fallback setup.",
+      "Policy provenance is not a full historical replay snapshot of all inputs/planner/management settings.",
+      "Serialized inline worker fixtures do not certify actual process spawning/concurrency, exchange fills, live startup or automatic restart.",
+      "Frontend checks use static rendered markup and pure freshness tests, not a browser/mobile interaction session.",
+      "No service restart, deployment, bot startup, credential access, real orders, ML implementation/training or historical record rewrite performed for this batch.",
+      "Runtime protected hashes were captured for the final verification phase, not at batch start; external running processes may write runtime data.",
+      "The legacy composite regime score retains a neutral derivatives contribution because no verified derivatives feed exists. The UI marks derivatives unavailable and new mode routing uses measured trend/volatility/participation dimensions rather than this composite score."
+    ]
   }
 }

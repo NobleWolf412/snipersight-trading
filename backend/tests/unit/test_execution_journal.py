@@ -330,7 +330,8 @@ def test_paper_start_stop_reset_are_excluded_during_async_transition():
             entered.set()
             await release.wait()
         svc._start_session = starting
-        task = asyncio.create_task(svc.start(S(use_testnet=True)))
+        from backend.bot.paper_trading_service import PaperTradingConfig
+        task = asyncio.create_task(svc.start(PaperTradingConfig(use_testnet=True)))
         await entered.wait()
         try:
             for command in (svc.start(S()), svc.stop()):

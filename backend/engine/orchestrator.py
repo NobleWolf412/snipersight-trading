@@ -27,8 +27,9 @@ import copy
 import pandas as pd
 
 from backend.shared.config.defaults import ScanConfig
+from backend.shared.config.sensitivity import passes_confluence_gate
 from backend.shared.config.smc_config import SMCConfig
-from backend.shared.config.scanner_modes import get_mode, RELATIVITY_MAP
+from backend.shared.config.scanner_modes import get_mode, get_volume_profile_config
 from backend.shared.models.data import MultiTimeframeData
 from backend.data.ingestion_pipeline import IngestionPipeline
 from backend.shared.models.indicators import IndicatorSet
@@ -620,7 +621,11 @@ class Orchestrator:
             for future in as_completed(future_to_symbol):
                 sym = future_to_symbol[future]
                 try:
-                    result, rejection_info = future.result(timeout=120)  # 120s timeout per symbol
+                    result, rejection_info, worker_diagnostics = future.result(timeout=120)
+                    # Feature failures are occurrences, not additional rejected symbols.
+                    # Merge once, including partial failures on accepted plans.
+                    for bucket, records in worker_diagnostics.items():
+                        self.diagnostics.setdefault(bucket, []).extend(records)
                     processed_symbol_results.append((sym, result, rejection_info))
                     _update_stale_counter_from_result(sym, rejection_info)
                     completed += 1
@@ -922,8 +927,11 @@ class Orchestrator:
                 start_time = rejection_summary.get("start_time") or outer_start
 
                 by_reason = (rejection_summary.get("by_reason") or {})
-                # Materialize as plain dict (defaultdict serialization quirk)
-                signals_per_stage: Dict[str, int] = {k: int(v) for k, v in by_reason.items()}
+                # Heartbeat conservation counts terminal outcomes. The legacy FEATURES
+                # rollup counts diagnostic occurrences, including on accepted symbols.
+                signals_per_stage: Dict[str, int] = {
+                    k: int(v) for k, v in by_reason.items() if k != "features"
+                }
 
                 # Bottleneck: highest-count stage that's > 0. Count-based by
                 # design — rate-based would require stage-entering counts the
@@ -1175,6 +1183,7 @@ class Orchestrator:
         logger.info("🎯 %s: Analyzing symbol...", symbol)
 
         # Stage 1: Initialize context
+        self.config.min_confluence_score = max(self.scanner_mode.min_confluence_score, self.config.min_confluence_score)
         context = SniperContext(
             symbol=symbol, profile=self.config.profile, run_id=run_id, timestamp=timestamp
         )
@@ -1335,11 +1344,14 @@ class Orchestrator:
 
         # Stage 3: Indicator computation
         try:
-            context.multi_tf_indicators = self.indicator_service.compute(context.multi_tf_data)
-
-            # Merge diagnostics
-            failures = self.indicator_service.diagnostics.get("indicator_failures", [])
-            self.diagnostics["indicator_failures"].extend(failures)
+            self.indicator_service.diagnostics.get("indicator_failures", []).clear()
+            try:
+                context.multi_tf_indicators = self.indicator_service.compute(context.multi_tf_data)
+            finally:
+                # Preserve partial evidence even if the service aborts after a TF failure.
+                self.diagnostics["indicator_failures"].extend(
+                    self.indicator_service.diagnostics.get("indicator_failures", [])
+                )
 
             ind_tfs = (
                 list(context.multi_tf_indicators.by_timeframe.keys())
@@ -1352,6 +1364,7 @@ class Orchestrator:
             time.sleep(0.001)
         except Exception as e:
             logger.error(f"Indicator service failed for {symbol}: {e}")
+            self.diagnostics["indicator_failures"].append({"symbol": symbol, "error": str(e), "stage": "service"})
             return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
 
         # Stage 3.5: Detect symbol-specific regime (after indicators computed)
@@ -1422,15 +1435,17 @@ class Orchestrator:
             # Get current price for P/D zones
             current_price = context.multi_tf_data.get_current_price() or 0
 
-            context.smc_snapshot = self.smc_service.detect(
-                context.multi_tf_data, current_price,
-                **({"as_of": context.timestamp} if self.replay_mode else {}),
-            )
+            self.smc_service.diagnostics.get("smc_rejections", []).clear()
+            try:
+                context.smc_snapshot = self.smc_service.detect(
+                    context.multi_tf_data, current_price,
+                    **({"as_of": context.timestamp} if self.replay_mode else {}),
+                )
+            finally:
+                self.diagnostics["smc_rejections"].extend(
+                    self.smc_service.diagnostics.get("smc_rejections", [])
+                )
             logger.debug("%s [%s]: SMC detection completed", symbol, trace_id)
-
-            # Merge diagnostics
-            rejections = self.smc_service.diagnostics.get("smc_rejections", [])
-            self.diagnostics["smc_rejections"].extend(rejections)
 
             snap = context.smc_snapshot
             ob_count = len(getattr(snap, "order_blocks", []) or [])
@@ -1468,6 +1483,7 @@ class Orchestrator:
             time.sleep(0.001)
         except Exception as e:
             logger.error(f"SMC service failed for {symbol}: {e}")
+            self.diagnostics["smc_rejections"].append({"symbol": symbol, "error": str(e), "stage": "service"})
             return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
 
         # Stage 4a: HTF Level Detection (S/R and Fibs)
@@ -1499,11 +1515,7 @@ class Orchestrator:
         # Stage 4b: Volume Profile calculation (institutional-grade VAP analysis)
         logger.debug("%s [%s]: 🔎 Stage 4b: Volume Profile", symbol, trace_id)
         try:
-            # Use RELATIVITY_MAP for dynamic timeframe and lookback
-            auto_mode = context.metadata.get("auto_regime_mode", "swing").lower()
-            rel_config = RELATIVITY_MAP.get(auto_mode, RELATIVITY_MAP["swing"])
-            vp_tf = rel_config["plan"].lower()
-            lookback_hours = rel_config.get("vol_profile_lookback", 240)
+            vp_tf, lookback_hours = get_volume_profile_config(self.scanner_mode.name)
             
             vp_df = context.multi_tf_data.timeframes.get(vp_tf)
             if vp_df is not None:
@@ -1556,7 +1568,6 @@ class Orchestrator:
 
         # Stage 5: Confluence scoring (Delegated to service)
         logger.info("%s [%s]: 📊 Starting confluence scoring", symbol, trace_id)
-        _fusion_active = False
         try:
             # --- Inline Context Detection ---
             # Get current price once for all context detectors below
@@ -1677,26 +1688,42 @@ class Orchestrator:
                 indicators=context.multi_tf_indicators,
             )
 
-            # ── DYNAMIC LOGIC FUSION (Bot-only) ───────────────────────────────────
-            # When enable_fusion=True (paper trader / live bot), Stealth temporarily
-            # adopts Surgical weights for ranging markets and Strike weights for
-            # trending markets, then restores the original profile in finally.
-            # Scanner always uses pure Stealth (enable_fusion defaults to False).
-            _original_profile = self.config.profile
-            if (
-                getattr(self.config, "enable_fusion", False)
-                and _original_profile.lower() in ("stealth", "stealth_balanced")
-            ):
-                auto_mode = context.metadata.get("auto_regime_mode", "swing").lower()
-                fused_profile = {"scalp": "surgical", "intraday": "strike"}.get(auto_mode)
-                if fused_profile:
-                    self.config.profile = fused_profile
-                    _fusion_active = True
-                    logger.info(
-                        "\U0001f500 %s: Logic Fusion | Stealth \u2192 %s weights (regime=%s)",
-                        symbol, fused_profile.upper(), auto_mode,
+            # The complete selected playbook already owns indicators, detection and scoring.
+            # Adaptive selection happens between scans, never by substituting a profile here.
+
+            # Thesis owns direction before any directional gate or score selection.
+            if self._thesis_mode:
+                _decision = self.decision_policy.decide(context)
+                context.metadata["decision"] = _decision
+                if _decision.is_flat:
+                    _flat_score = 0.0  # Not scored: no actionable thesis.
+                    self.telemetry.log_event(
+                        create_signal_rejected_event(
+                            run_id=run_id,
+                            symbol=symbol,
+                            reason=f"Thesis abstained: {_decision.reason}",
+                            gate_name="thesis",
+                            score=_flat_score,
+                            threshold=self.config.min_confluence_score,
+                        )
                     )
-            # ─────────────────────────────────────────────────────────────────────
+                    self._progress(
+                        "GATE_FAIL",
+                        {"symbol": symbol, "gate": "thesis", "score": _flat_score, "threshold": 0.0},
+                    )
+                    logger.info("%s: ❌ REJECTED (thesis) | %s", symbol, _decision.reason)
+                    return None, {
+                        "symbol": symbol,
+                        "direction": "FLAT",
+                        "reason_type": "no_thesis",
+                        "reason": f"Thesis abstained ({_decision.reason}) — no structural setup; sitting out.",
+                        "score": _flat_score,
+                        "threshold": self.config.min_confluence_score,
+                        "__telemeterized": True,
+                        "top_factors": [],
+                    }
+                context.metadata["chosen_direction"] = _decision.legacy_str
+                context.metadata["pre_dir_tie_break"] = "thesis_direction"
 
             # ── PRE-SCORING HARD GATES ────────────────────────────────────────────
             # Run structural/regime/BTC/conflict gates BEFORE scoring.
@@ -1851,7 +1878,7 @@ class Orchestrator:
                             )
                             _flip_succeeded = True  # continue with original direction
 
-                        else:
+                        elif not self._thesis_mode:
                             _flip_gate = run_pre_scoring_gates(
                                 smc_snapshot=context.smc_snapshot,
                                 config=_session_gate_config,
@@ -1982,23 +2009,19 @@ class Orchestrator:
                 cycle_context=cycle_context,
                 reversal_context_long=rev_ctx_long,
                 reversal_context_short=rev_ctx_short,
+                **({"selected_direction": context.metadata["chosen_direction"]} if self._thesis_mode else {}),
             )
 
             # Merge diagnostics
             rejections = self.confluence_service.diagnostics.get("confluence_rejections", [])
             self.diagnostics["confluence_rejections"].extend(rejections)
 
-            # --- Decision seam (heart-change chunk 2, behavior-preserving) ---
-            # confluence_service.score() has set context.metadata['chosen_direction'] via the legacy
-            # argmax + tiebreakers. Run the DecisionPolicy as the source of truth and reflect its
-            # verdict back into chosen_direction so ALL downstream consumers (gate, direction guard,
-            # planner) act on the policy. With LegacyScorePolicy this is a no-op (it reads the same
-            # chosen_direction); swapping ThesisPolicy (chunk 3) changes the decision here without
-            # touching consumers. FLAT-in-happy-path routing lands in chunk 4.
-            decision = self.decision_policy.decide(context)
-            context.metadata["decision"] = decision
-            if decision.legacy_str:
-                context.metadata["chosen_direction"] = decision.legacy_str
+            if not self._thesis_mode:
+                # Legacy policy reads the selected score winner.
+                decision = self.decision_policy.decide(context)
+                context.metadata["decision"] = decision
+                if decision.legacy_str:
+                    context.metadata["chosen_direction"] = decision.legacy_str
 
         except Exception as e:
             import traceback as _tb
@@ -2010,9 +2033,9 @@ class Orchestrator:
             logger.error(f"Full traceback:\n{full_tb}")  # Promoted to ERROR so it lands in logs
 
             # ========== UNIFIED DIRECTIONAL CONFLICT HANDLING ==========
-            # Check if this is a directional conflict exception by message content
-            # This is more reliable than isinstance() which can fail due to import paths
-            is_directional_conflict = ("No directional edge" in error_msg or 
+            # Structured failures preserve side and cause; retain legacy text fallback.
+            is_directional_conflict = (isinstance(e, ConflictingDirectionsException) or
+                                       "No directional edge" in error_msg or
                                        "Conflicting signals" in error_msg or
                                        "scores too close" in error_msg)
             
@@ -2117,18 +2140,31 @@ class Orchestrator:
                 # both directions. Exact-tie label is "UNKNOWN" — the legacy
                 # `>=` defaulted to LONG, polluting the rejection-direction
                 # telemetry counters (symmetry-guard SYM-01 finding).
-                if bull_score > bear_score:
+                _selected_side = getattr(e, "selected_direction", None)
+                _thesis_decision = context.metadata.get("decision") if self._thesis_mode else None
+                if _thesis_decision is not None and _thesis_decision.legacy_str:
+                    _selected_side = _thesis_decision.legacy_str
+                if _selected_side in ("LONG", "SHORT"):
+                    _payload_direction = _selected_side
+                elif bull_score > bear_score:
                     _payload_direction = "LONG"
                 elif bear_score > bull_score:
                     _payload_direction = "SHORT"
                 else:
                     _payload_direction = "UNKNOWN"
+                _rejection_gate = getattr(e, "gate_name", "confluence_tie_break")
+                _rejection_score = (bull_score if _selected_side == "LONG" else
+                                    bear_score if _selected_side == "SHORT" else max(bull_score, bear_score))
+                _selected_breakdown = (bull_breakdown if _payload_direction == 'LONG' else
+                                       bear_breakdown if _payload_direction == 'SHORT' else None)
+                _selected_meta = getattr(_selected_breakdown,'metadata',{}) or {}
                 payload = {
                     "symbol": symbol,
                     "direction": _payload_direction,
+                    "score": _rejection_score,
                     "reason": error_msg,
-                    "reason_type": "low_confluence",
-                    "detail": "Bullish and bearish confluence scores too close to determine direction",
+                    "reason_type": "evidence_requirements" if _rejection_gate == "evidence_requirements" else "low_confluence",
+                    "detail": error_msg if _rejection_gate in ("counter_htf","evidence_requirements") else "Bullish and bearish confluence scores too close to determine direction",
                     "bullish_score": bull_score,
                     "bearish_score": bear_score,
                     "gap": gap,
@@ -2139,6 +2175,10 @@ class Orchestrator:
                     "bullish_conflict": bull_conflict,
                     "bearish_synergy": bear_synergy,
                     "bearish_conflict": bear_conflict,
+                    **{key:_selected_meta.get(key) for key in (
+                        'score_model_version','score_policy_version','score_calibration','scoring_mode',
+                        'score_gate','score_gate_passed','evidence_eligible','evidence_missing',
+                        'admission_passed','evidence_families')},
                     # Critical factor convergence (from winning direction breakdown if available)
                     "convergence_score": (context.confluence_breakdown.metadata or {}).get("convergence_score", 0) if context.confluence_breakdown else 0,
                     "convergence_critical_count": (context.confluence_breakdown.metadata or {}).get("convergence_critical_count", 0) if context.confluence_breakdown else 0,
@@ -2156,8 +2196,8 @@ class Orchestrator:
                             run_id=run_id,
                             symbol=symbol,
                             reason=error_msg,
-                            gate_name="confluence_tie_break",
-                            score=max(bull_score, bear_score),
+                            gate_name=_rejection_gate,
+                            score=_rejection_score,
                             threshold=self.config.min_confluence_score,
                             diagnostics={
                                 "bullish_score": bull_score,
@@ -2173,7 +2213,7 @@ class Orchestrator:
 
                 logger.info(f"{symbol}: Directional conflict payload ready with {len(bull_factors)} bull, {len(bear_factors)} bear factors")
 
-                # Per-site emit above already fired with gate_name="confluence_tie_break".
+                # The rejection event above owns this outcome.
                 # Flag prevents parent-loop double-emit.
                 payload["__telemeterized"] = True
                 return None, payload
@@ -2192,11 +2232,6 @@ class Orchestrator:
                 "traceback_hint": _tb_hint,
                 "score": 0,
             }
-        finally:
-            # ALWAYS restore profile — even if the except handler returns early.
-            # Prevents config.profile from leaking to subsequent symbols in the same worker.
-            if _fusion_active:
-                self.config.profile = _original_profile
         try:
             br = context.confluence_breakdown
             top_factors = [
@@ -2225,47 +2260,8 @@ class Orchestrator:
         except Exception:
             pass
 
-        # ── Decision gate (heart-change chunk 4, flag-gated) ─────────────────────
-        # In thesis mode the DecisionPolicy is the go/no-go authority for direction:
-        #   FLAT       -> reject (the engine abstains — no structural thesis; loud, telemeterized)
-        #   LONG/SHORT -> proceed, and the score < min_confluence_score gate below is DEMOTED
-        #                 (skipped). The 4 pre-scoring gates already ran upstream; the confluence
-        #                 score becomes logged context, not a go/no-go gate.
-        # Legacy mode (default, flag off) is byte-identical: _thesis_mode is False, this block is
-        # skipped, and the score-gate below is authoritative exactly as before.
-        _decision = context.metadata.get("decision")
-        if self._thesis_mode and _decision is not None and _decision.is_flat:
-            _flat_score = float(getattr(context.confluence_breakdown, "total_score", 0.0))
-            self.telemetry.log_event(
-                create_signal_rejected_event(
-                    run_id=run_id,
-                    symbol=symbol,
-                    reason=f"Thesis abstained: {_decision.reason}",
-                    gate_name="thesis",
-                    score=_flat_score,
-                    threshold=self.config.min_confluence_score,
-                )
-            )
-            self._progress(
-                "GATE_FAIL",
-                {"symbol": symbol, "gate": "thesis", "score": _flat_score, "threshold": 0.0},
-            )
-            logger.info("%s: ❌ REJECTED (thesis) | %s", symbol, _decision.reason)
-            return None, {
-                "symbol": symbol,
-                "direction": "FLAT",
-                "reason_type": "no_thesis",
-                "reason": f"Thesis abstained ({_decision.reason}) — no structural setup; sitting out.",
-                "score": _flat_score,
-                "threshold": self.config.min_confluence_score,
-                "__telemeterized": True,
-                "top_factors": [],
-            }
-
         # Check quality gate (round to 1 decimal to avoid floating point precision issues)
-        score_rounded = round(context.confluence_breakdown.total_score, 1)
-        threshold_rounded = round(self.config.min_confluence_score, 1)
-        if (not self._thesis_mode) and score_rounded < threshold_rounded:
+        if not passes_confluence_gate(context.confluence_breakdown.total_score, max(self.scanner_mode.min_confluence_score, self.config.min_confluence_score)):
             top_factors_str = " | ".join(
                 [f"{f.name}={f.score:.1f}" for f in context.confluence_breakdown.factors[:3]]
             )
@@ -2320,7 +2316,7 @@ class Orchestrator:
             gap = threshold - score
             # Find the top factors that scored lowest (biggest drag)
             weak_factors = sorted(
-                context.confluence_breakdown.factors, key=lambda f: f.score * f.weight
+                (f for f in context.confluence_breakdown.factors if f.weight > 0), key=lambda f: f.score * f.weight
             )[:3]
 
             def _weak_factor_str(f):
@@ -2333,9 +2329,9 @@ class Orchestrator:
 
             weak_str = ", ".join(_weak_factor_str(f) for f in weak_factors)
             readable_reason = (
-                f"Score {score:.1f}% is {gap:.1f} points below the {threshold:.0f}% gate. "
+                f"Score {score:.1f}/100 is {gap:.1f} points below the {threshold:.1f}/100 gate. "
                 f"Weakest signals: {weak_str}. "
-                f"Strengthen these factors or lower the confluence gate."
+                f"This setup does not meet the configured evidence cutoff."
             )
 
             return None, {
@@ -2365,6 +2361,17 @@ class Orchestrator:
                 "conflict_penalty": context.confluence_breakdown.conflict_penalty,
                 "htf_aligned": context.confluence_breakdown.htf_aligned,
                 "btc_impulse_gate": context.confluence_breakdown.btc_impulse_gate,
+                "score_model_version": (context.confluence_breakdown.metadata or {}).get("score_model_version"),
+                "score_policy_version": (context.confluence_breakdown.metadata or {}).get("score_policy_version"),
+                "scoring_mode": (context.confluence_breakdown.metadata or {}).get("scoring_mode"),
+                "score_gate": (context.confluence_breakdown.metadata or {}).get("score_gate"),
+                "score_gate_passed": (context.confluence_breakdown.metadata or {}).get("score_gate_passed"),
+                "evidence_families": (context.confluence_breakdown.metadata or {}).get("evidence_families"),
+                "evidence_eligible": (context.confluence_breakdown.metadata or {}).get("evidence_eligible"),
+                "evidence_missing": (context.confluence_breakdown.metadata or {}).get("evidence_missing"),
+                "admission_passed": (context.confluence_breakdown.metadata or {}).get("admission_passed"),
+
+                "score_calibration": (context.confluence_breakdown.metadata or {}).get("score_calibration"),
                 # Critical factor convergence metadata (from scorer)
                 "convergence_score": (context.confluence_breakdown.metadata or {}).get("convergence_score", 0),
                 "convergence_critical_count": (context.confluence_breakdown.metadata or {}).get("convergence_critical_count", 0),
@@ -2562,7 +2569,10 @@ class Orchestrator:
                     },
                 )
             else:
-                self._progress("PLANNER_FAIL", {"symbol": symbol, "reason": "no_plan"})
+                self._progress("PLANNER_FAIL", {
+                    "symbol": symbol, "direction": chosen_direction,
+                    "reason": context.metadata.get("plan_failure_reason") or "Planner returned no plan",
+                })
         except Exception as e:
             logger.error(f"Failed to generate trade plan: {e}", exc_info=True)
             self._progress("PLANNER_FAIL", {"symbol": symbol, "reason": "error"})
@@ -2574,7 +2584,7 @@ class Orchestrator:
             # Store the actual risk validation failure reason
             if not self._validate_risk(context.plan):
                 # Extract actual reason from last risk_manager call (stored in instance variable)
-                risk_failure_reason = getattr(self, "_last_risk_failure", "Failed risk validation")
+                risk_failure_reason = getattr(self, "_last_risk_failure", None) or "Failed risk validation"
                 logger.info(
                     "%s [%s]: ❌ GATE FAIL (risk) | R:R=%.2f | Reason: %s",
                     symbol,
@@ -2591,8 +2601,9 @@ class Orchestrator:
                 )
 
         if not context.plan or risk_failure_reason:
-            reason = "No trade plan generated" if not context.plan else risk_failure_reason
-            reason_type = "no_trade_plan" if not context.plan else "risk_validation"
+            reason = (context.metadata.get("plan_failure_reason") or "Planner returned no plan") if not context.plan else risk_failure_reason
+            reason_type = context.metadata.get("plan_failure_gate", "no_trade_plan") if not context.plan else "risk_validation"
+            direction = context.plan.direction if context.plan else chosen_direction
 
             if context.plan:
                 logger.info(
@@ -2620,9 +2631,7 @@ class Orchestrator:
             else:
                 logger.debug("%s [%s]: REJECTED - No trade plan generated", symbol, trace_id)
                 # Use actual failure reason if available from planner
-                actual_reason = context.metadata.get(
-                    "plan_failure_reason", "Insufficient SMC patterns for entry/stop placement"
-                )
+                actual_reason = reason
                 self.diagnostics["planner_rejections"].append(
                     {"symbol": symbol, "trace_id": trace_id, "reason": actual_reason}
                 )
@@ -2633,8 +2642,12 @@ class Orchestrator:
                     "trace_id": trace_id,
                 }
 
-            # Log rejection event with diagnostics for UI visibility
-            diagnostics = {}
+            rejection_info["direction"] = direction
+            if context.metadata.get("cascade_attempts"):
+                rejection_info["cascade_attempts"] = copy.deepcopy(context.metadata["cascade_attempts"])
+
+            # Use the same cause and side in returned evidence, telemetry and progress.
+            diagnostics = copy.deepcopy(context.metadata.get("plan_failure_diagnostics", {})) if not context.plan else {}
             if context.plan:
                 try:
                     avg_entry = (
@@ -2657,12 +2670,14 @@ class Orchestrator:
                 except Exception:
                     diagnostics = {"risk_reward": getattr(context.plan, "risk_reward", None)}
 
-            self.telemetry.log_event(
+            diagnostics.update({"direction": direction, "trace_id": trace_id})
+            rejection_info["diagnostics"] = diagnostics
+            emitted = self.telemetry.log_event(
                 create_signal_rejected_event(
                     run_id=run_id,
                     symbol=symbol,
                     reason=reason,
-                    gate_name="risk_validation",
+                    gate_name=reason_type,
                     diagnostics=diagnostics,
                 )
             )
@@ -2671,8 +2686,9 @@ class Orchestrator:
                     "GATE_FAIL",
                     {
                         "symbol": symbol,
-                        "gate": "risk_validation",
+                        "gate": reason_type,
                         "reason": reason,
+                        "direction": direction,
                         "rr": (
                             float(getattr(context.plan, "risk_reward", 0)) if context.plan else None
                         ),
@@ -2681,10 +2697,8 @@ class Orchestrator:
             except Exception:
                 pass
 
-            # Per-site emit at line 2243 already fired with gate_name="risk_validation".
-            # Flag the rejection_info dict so the parent-loop emit-of-last-resort
-            # doesn't double-emit when this dict reaches the scan loop.
-            rejection_info["__telemeterized"] = True
+            # A failed persistence attempt must still allow the parent fallback.
+            rejection_info["__telemeterized"] = emitted is not False
             return None, rejection_info
 
         # Log successful signal generation
@@ -2733,6 +2747,16 @@ class Orchestrator:
                 "reason": reason,
                 "reason_type": "risk_validation" if "revalidation" in reason else "no_trade_plan",
                 "details": {"context": context.metadata},
+                "score_model_version": _bd_meta.get("score_model_version"),
+                "score_policy_version": _bd_meta.get("score_policy_version"),
+                "scoring_mode": _bd_meta.get("scoring_mode"),
+                "score_gate": _bd_meta.get("score_gate"),
+                "score_gate_passed": _bd_meta.get("score_gate_passed"),
+                "evidence_families": _bd_meta.get("evidence_families"),
+                "score_calibration": _bd_meta.get("score_calibration"),
+                "evidence_eligible": _bd_meta.get("evidence_eligible"),
+                "evidence_missing": _bd_meta.get("evidence_missing", []),
+                "admission_passed": _bd_meta.get("admission_passed"),
                 # If post_plan_revalidation already emitted upstream at the
                 # _post_plan_revalidate site, honor that flag so the parent-loop
                 # emit-of-last-resort doesn't double-emit. For genuine
@@ -3050,6 +3074,7 @@ class Orchestrator:
 
         # Determine setup type based on SMC patterns
         setup_type = self._classify_setup_type(context.smc_snapshot)
+        rejection_details = {}
 
         try:
             # Resolve active config: cascade overrides take precedence over self.config
@@ -3114,17 +3139,10 @@ class Orchestrator:
                     cascade_allowed[0] if cascade_allowed else self.scanner_mode.expected_trade_type
                 )
             else:
-                # Dynamic Regime Selection - Override mode if auto-detected
-                auto_mode = context.metadata.get("auto_regime_mode")
                 current_trade_type = (
-                    auto_mode
-                    or context.metadata.get("counter_htf_type")
-                    or self.scanner_mode.expected_trade_type
+                    context.metadata.get("counter_htf_type") or self.scanner_mode.expected_trade_type
                 )
                 planner_config = self.config
-                if auto_mode:
-                    planner_config = copy.copy(self.config)
-                    planner_config.profile = auto_mode
 
             plan = generate_trade_plan(
                 symbol=context.symbol,
@@ -3141,7 +3159,13 @@ class Orchestrator:
                 volume_profile=context.metadata.get("_volume_profile_obj"),
                 tick_size=tick_size,
                 lot_size=lot_size,
+                rejection_details=rejection_details,
             )
+            if plan is None:
+                context.metadata["plan_failure_reason"] = rejection_details.get("reason", "Planner returned no plan")
+                context.metadata["plan_failure_gate"] = "no_trade_plan"
+                context.metadata["plan_failure_diagnostics"] = rejection_details
+                return None
 
             # === POST-PLAN ADJUSTMENTS ===
             # Apply modifications based on metadata set during confluence scoring.
@@ -3630,30 +3654,16 @@ class Orchestrator:
                     context.metadata["plan_failure_reason"] = (
                         f"Post-plan revalidation failed: {invalid_reason}"
                     )
-                    self.telemetry.log_event(
-                        create_signal_rejected_event(
-                            run_id=context.run_id,
-                            symbol=context.symbol,
-                            reason=invalid_reason,
-                            gate_name="post_plan_revalidation",
-                            diagnostics={
-                                "live_price": live_price,
-                                "near_entry": plan.entry_zone.near_entry,
-                                "far_entry": plan.entry_zone.far_entry,
-                                "drift_pct": drift_pct,
-                                "drift_atr": drift_atr,
-                                "max_drift_pct": max_drift_pct,
-                                "max_drift_atr": max_drift_atr,
-                            },
-                        )
-                    )
-                    # Per-site emit above fired with gate_name="post_plan_revalidation".
-                    # Flag in metadata so the downstream "no plan generated" path at
-                    # _process_symbol's tail (the unconditional rejection dict built
-                    # after context.plan is set to None) can read this flag and mark
-                    # its own rejection_info dict as already-telemeterized, preventing
-                    # the parent-loop emit-of-last-resort from double-emitting.
-                    context.metadata["__revalidation_telemeterized"] = True
+                    # This is a candidate decline. The scan owns the terminal event;
+                    # a later cascade scale may still produce an accepted plan.
+                    context.metadata["plan_failure_gate"] = "post_plan_revalidation"
+                    context.metadata["plan_failure_diagnostics"] = {
+                        "live_price": live_price,
+                        "near_entry": plan.entry_zone.near_entry,
+                        "far_entry": plan.entry_zone.far_entry,
+                        "drift_pct": drift_pct, "drift_atr": drift_atr,
+                        "max_drift_pct": max_drift_pct, "max_drift_atr": max_drift_atr,
+                    }
                     return None
                 else:
                     # Store live price & drift metrics for downstream visibility
@@ -3673,6 +3683,10 @@ class Orchestrator:
 
                 logger.debug("Post-plan revalidation skipped: %s", _reval_err)
 
+            if plan is not None:
+                from backend.shared.config.strategy_policy import strategy_snapshot
+                plan.metadata["strategy"] = strategy_snapshot(self.scanner_mode, self.config)
+
             return plan
 
         except (
@@ -3683,7 +3697,9 @@ class Orchestrator:
             logger.error("Trade plan generation failed: %s", e)
             logger.error("Full traceback:\\n%s", traceback.format_exc())
             # Store the actual failure reason for accurate rejection reporting
-            context.metadata["plan_failure_reason"] = str(e)
+            context.metadata["plan_failure_reason"] = rejection_details.get("reason") or str(e)
+            context.metadata["plan_failure_gate"] = "no_trade_plan"
+            context.metadata["plan_failure_diagnostics"] = rejection_details
             return None
 
     # -------------------------------------------------------------------------
@@ -3818,6 +3834,10 @@ class Orchestrator:
             return None
 
         for trade_type in cascade_types:
+            # Each scale owns its decline evidence; none may inherit a prior reason.
+            for key in ("plan_failure_reason", "plan_failure_gate", "plan_failure_diagnostics",
+                        "__revalidation_telemeterized"):
+                context.metadata.pop(key, None)
             try:
                 scale_cfg = self._build_cascade_config(trade_type)
 
@@ -3889,7 +3909,12 @@ class Orchestrator:
                         effective,
                     )
                 else:
-                    cascade_attempts.append({"type": trade_type, "result": "no_plan"})
+                    cascade_attempts.append({
+                        "type": trade_type, "result": "no_plan",
+                        "reason": context.metadata.get("plan_failure_reason") or "Planner returned no plan",
+                        "gate": context.metadata.get("plan_failure_gate", "no_trade_plan"),
+                        "diagnostics": copy.deepcopy(context.metadata.get("plan_failure_diagnostics", {})),
+                    })
                     logger.info(
                         "🔀 %s CASCADE %s → no valid plan (entry/stop/RR failed)",
                         context.symbol, trade_type,
@@ -3909,8 +3934,17 @@ class Orchestrator:
         context.metadata["cascade_attempts"] = cascade_attempts
 
         if not candidates:
+            context.metadata["plan_failure_reason"] = "All planning scales declined: " + "; ".join(
+                f"{attempt['type']}: {attempt.get('reason') or attempt.get('error') or attempt['result']}"
+                for attempt in cascade_attempts
+            )
+            context.metadata["plan_failure_gate"] = "no_trade_plan"
+            context.metadata["plan_failure_diagnostics"] = {"cascade_attempts": copy.deepcopy(cascade_attempts)}
             return None
 
+        for key in ("plan_failure_reason", "plan_failure_gate", "plan_failure_diagnostics",
+                    "__revalidation_telemeterized"):
+            context.metadata.pop(key, None)
         if is_thesis_mode():
             # Chunk 5b: pick by REGIME->TYPE preference (seeded hypothesis), NOT score+bonus.
             # Range -> scalp, trend -> intraday; swing rank 0 (deferred). Tiebreak by confluence
@@ -3979,7 +4013,9 @@ class Orchestrator:
         Returns:
             True if plan passes risk validation
         """
+        self._last_risk_failure = None
         if not plan:
+            self._last_risk_failure = "No trade plan supplied"
             return False
 
         # Calculate position size
@@ -3990,6 +4026,7 @@ class Orchestrator:
                 stop_price=plan.stop_loss.level,
             )
         except Exception as e:  # pyright: ignore - intentional broad catch for robustness
+            self._last_risk_failure = f"Position sizing failed: {e}"
             logger.warning("Position sizing failed: %s", e)
             return False
 
@@ -4071,6 +4108,8 @@ class Orchestrator:
                 | set(mode.structure_timeframes)
                 | set(getattr(mode, "stop_timeframes", ()))
                 | set(getattr(mode, "target_timeframes", ()))
+                | set(mode.zone_timeframes)
+                | set(mode.entry_trigger_timeframes)
             )
             self.config.timeframes = tuple(
                 sorted(
@@ -4082,17 +4121,13 @@ class Orchestrator:
                     ),
                 )
             )
-            # Always enforce the mode's min_confluence_score as a floor.
-            # Using `<` (not `<= 0`) ensures that:
-            #   • overwatch (mode=72.0) upgrades a default config 65.0 → 72.0, fixing
-            #     setup_state="READY" being computed with T=65 when gate is actually 72
-            #   • a user-set threshold above the mode floor (e.g. paper trading at 70
-            #     for stealth mode=65) is preserved — the higher value stays
-            # The old check (`<= 0`) never fired because ScanConfig defaults to 65.0.
-            if hasattr(self.config, "min_confluence_score"):
-                if getattr(self.config, "min_confluence_score", 0) < mode.min_confluence_score:
-                    self.config.min_confluence_score = mode.min_confluence_score
-
+            # Resolve a fresh baseline on every mode change. Callers apply explicit
+            # restrictions afterwards; a prior mode must not leave its gate behind.
+            self.config.min_confluence_score = mode.min_confluence_score
+            self.config.expected_trade_type = mode.expected_trade_type
+            self.config.enable_fusion = False
+            from backend.shared.config.planner_config import PlannerConfig
+            self.config.planner = PlannerConfig.defaults_for_mode(mode.name)
             # Wire planner-specific knobs from mode into config
             self.config.primary_planning_timeframe = mode.primary_planning_timeframe
             self.config.max_pullback_atr = mode.max_pullback_atr
@@ -4100,6 +4135,8 @@ class Orchestrator:
             self.config.max_stop_atr = mode.max_stop_atr
             # Enforce timeframe responsibility into config for planner
             self.config.entry_timeframes = mode.entry_timeframes
+            self.config.zone_timeframes = mode.zone_timeframes
+            self.config.entry_trigger_timeframes = mode.entry_trigger_timeframes
             self.config.structure_timeframes = mode.structure_timeframes
             self.config.stop_timeframes = getattr(mode, "stop_timeframes", ())
             self.config.target_timeframes = getattr(mode, "target_timeframes", ())
@@ -4107,6 +4144,9 @@ class Orchestrator:
                 mode, "allowed_trade_types", ("swing", "intraday", "scalp")
             )
             # Apply per-mode overrides if present
+            self.config.overrides = dict(mode.overrides or {})
+            if "entry_zone_offset_atr" in self.config.overrides:
+                self.config.planner.entry_zone_offset_atr = self.config.overrides["entry_zone_offset_atr"]
             if getattr(mode, "overrides", None):
                 ov = mode.overrides
                 if "min_rr_ratio" in ov:
@@ -4162,7 +4202,7 @@ class Orchestrator:
                 mode.primary_planning_timeframe,
             )
         except Exception as e:
-            logger.warning("Failed to apply mode %s: %s", getattr(mode, "name", "unknown"), e)
+            raise ValueError(f"Failed to apply mode {getattr(mode, 'name', 'unknown')}: {e}") from e
 
     def _check_critical_timeframes(self, multi_tf_data: MultiTimeframeData) -> List[str]:
         """
@@ -4247,6 +4287,12 @@ class Orchestrator:
             if not btc_data or not btc_data.timeframes:
                 logger.warning("Unable to fetch BTC data for regime detection")
                 return None
+
+            if "1d" not in btc_data.timeframes:
+                daily_data = self.ingestion_pipeline.fetch_multi_timeframe("BTC/USDT", ["1d"])
+                if not daily_data or "1d" not in daily_data.timeframes:
+                    return None
+                btc_data = daily_data
 
             # Compute BTC indicators
             btc_indicators = self.indicator_service.compute(btc_data)
@@ -4911,10 +4957,11 @@ class Orchestrator:
                 "score", "threshold", "cooldown_hours_remaining", "stop_price",
                 "current_price", "convergence_score", "veto_blocked", "active_vetoes",
                 "setup_state", "missing_timeframes", "traceback_hint", "direction",
-                "risk_reward", "price_distance_pct",
+                "risk_reward", "price_distance_pct", "cascade_attempts",
             )
-            diagnostics = {k: v for k, v in rejection_info.items() if k in diag_keys}
-            self.telemetry.log_event(
+            diagnostics = copy.deepcopy(rejection_info.get("diagnostics") or {})
+            diagnostics.update({k: v for k, v in rejection_info.items() if k in diag_keys})
+            emitted = self.telemetry.log_event(
                 create_signal_rejected_event(
                     run_id=run_id,
                     symbol=rejection_info.get("symbol", "UNKNOWN"),
@@ -4923,6 +4970,10 @@ class Orchestrator:
                     diagnostics=diagnostics or None,
                 )
             )
+            if emitted is False:
+                logger.warning("Rejection telemetry persistence FAILED for %s (run_id=%s)",
+                               rejection_info.get("symbol"), run_id)
+                return
             rejection_info["__telemeterized"] = True
         except Exception as exc:
             # §11 prefer-loud-failures: surface emit failures at WARNING so the
@@ -4973,18 +5024,26 @@ def _parallel_process_symbol_worker(args):
     Module-level worker for ProcessPoolExecutor.
     Runs symbol analysis in a separate CPU process.
 
-    The Orchestrator is cached at module level per worker process so that
-    initialisation (RegimeDetector, HTFLevelDetector, domain services, etc.)
-    only happens once per worker, not once per symbol.
+    The Orchestrator can be reused while the same config object and mode remain
+    available in this process. Separately unpickled tasks normally reconstruct it;
+    this identity cache does not promise one initialization per worker lifetime.
     """
     global _WORKER_ORCHESTRATOR, _WORKER_CONFIG_ID
 
+    diagnostics = {key: [] for key in (
+        "data_failures", "indicator_failures", "smc_rejections",
+        "confluence_rejections", "planner_rejections", "risk_rejections",
+    )}
     symbol, run_id, timestamp, prefetched_data, config, macro_context, current_regime, scanner_mode, tick_size, lot_size = args
 
     try:
-        # Rebuild the orchestrator only when the worker is brand-new or the
-        # config object has been replaced between scans.
-        if _WORKER_ORCHESTRATOR is None or id(config) != _WORKER_CONFIG_ID:
+        from copy import deepcopy
+
+        # The parent has already applied mode settings and caller overrides.
+        # Constructor mode setup must not mutate or replace that resolved snapshot.
+        resolved_values = deepcopy(vars(config))
+        if (_WORKER_ORCHESTRATOR is None or id(config) != _WORKER_CONFIG_ID
+                or _WORKER_ORCHESTRATOR.scanner_mode != scanner_mode):
             from backend.engine.orchestrator import Orchestrator
 
             class DummyAdapter:
@@ -5000,11 +5059,22 @@ def _parallel_process_symbol_worker(args):
             # dedicated orchestrator per session (replay_engine.py
             # _build_orchestrator) and never going through the worker pool.
             _WORKER_ORCHESTRATOR = Orchestrator(
-                config=config,
+                config=deepcopy(config),
                 exchange_adapter=DummyAdapter(),
                 concurrency_workers=1,
             )
             _WORKER_CONFIG_ID = id(config)
+
+        # Keep the config object shared by the worker's services; replace its values
+        # in place so scoring/planning/risk all see the parent's effective settings.
+        vars(_WORKER_ORCHESTRATOR.config).clear()
+        vars(_WORKER_ORCHESTRATOR.config).update(resolved_values)
+        # Retain the source while its id is used as the cache key (prevent id reuse).
+        _WORKER_ORCHESTRATOR._worker_config_source = config
+        logger.debug(
+            "Worker effective config: profile=%s min_score=%s min_rr=%s",
+            config.profile, config.min_confluence_score, config.min_rr_ratio,
+        )
 
         # Sync per-scan state (lightweight attribute assignment, not re-init).
         # current_regime was previously NEVER synced → it stayed __init__ None in the
@@ -5014,7 +5084,9 @@ def _parallel_process_symbol_worker(args):
         _WORKER_ORCHESTRATOR.current_regime = current_regime
         _WORKER_ORCHESTRATOR.scanner_mode = scanner_mode
 
-        return _WORKER_ORCHESTRATOR._process_symbol(
+        # Cached workers must not retain another symbol or scan's diagnostics.
+        _WORKER_ORCHESTRATOR.diagnostics = diagnostics
+        plan, rejection = _WORKER_ORCHESTRATOR._process_symbol(
             symbol,
             run_id,
             timestamp,
@@ -5026,9 +5098,17 @@ def _parallel_process_symbol_worker(args):
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        return None, {
+        logger.error("Process worker failed for %s: %s", symbol, tb)
+        plan, rejection = None, {
             "symbol": symbol,
             "reason_type": "errors",
             "reason": f"Process worker error: {str(e)}",
             "error_details": tb,
         }
+
+    # Detached and picklable even when a cached worker is called again in-process.
+    snapshot = {
+        key: [dict(copy.deepcopy(record), symbol=symbol) for record in records]
+        for key, records in diagnostics.items()
+    }
+    return plan, rejection, snapshot

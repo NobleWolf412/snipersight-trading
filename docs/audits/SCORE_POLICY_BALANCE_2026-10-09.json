@@ -1,0 +1,6113 @@
+{
+  "date": "2026-10-09",
+  "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+  "branch": "claude/decision-core-heart",
+  "scope": "Whole score scale, weights, eligibility and cutoff workflow after evidence deduplication",
+  "score_model_version": "family-evidence-v2",
+  "score_policy_version": "family-policy-v2",
+  "score_calibration": "reference_policy_uncalibrated",
+  "decision": "backend/diagnostics/decisions/2026-10-09__score-policy-balance.md",
+  "backups": [
+    "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a",
+    "C:\\Users\\macca\\AppData\\Local\\Temp\\score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a"
+  ],
+  "policy": {
+    "families": [
+      "Entry anchor",
+      "Structural confirmation",
+      "Directional context",
+      "Momentum evidence",
+      "Entry location",
+      "Participation",
+      "Destination",
+      "Session timing"
+    ],
+    "budgets": {
+      "overwatch": [
+        20,
+        15,
+        25,
+        10,
+        15,
+        10,
+        5,
+        0
+      ],
+      "strike": [
+        20,
+        15,
+        15,
+        20,
+        10,
+        10,
+        5,
+        5
+      ],
+      "surgical": [
+        20,
+        15,
+        10,
+        15,
+        15,
+        10,
+        5,
+        10
+      ],
+      "stealth": [
+        20,
+        15,
+        20,
+        15,
+        15,
+        10,
+        5,
+        0
+      ]
+    },
+    "mode_gates": {
+      "overwatch": 75,
+      "strike": 65,
+      "surgical": 70,
+      "stealth": 65
+    },
+    "bot_gate_floors": {
+      "conservative": [
+        75,
+        65
+      ],
+      "balanced": [
+        65,
+        55
+      ],
+      "aggressive": [
+        60,
+        50
+      ]
+    },
+    "bands": {
+      "standard": 65,
+      "strong": 75,
+      "exceptional": 85
+    },
+    "raw_scale_maxima": {
+      "single_ideal_htf_fvg": 85,
+      "regime_alignment": 83.3,
+      "volume_profile": 80,
+      "liquidity_draw": 40,
+      "session_timing": 35
+    }
+  },
+  "reference_comparison": [
+    {
+      "mode": "overwatch",
+      "direction": "bullish",
+      "case": "ob_continuation",
+      "before": {
+        "score": 60.421020134228186,
+        "gate": 72.0,
+        "passed": false,
+        "base": 60.421020134228186,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bullish",
+      "case": "ob_continuation",
+      "before": {
+        "score": 54.93737451737452,
+        "gate": 68.0,
+        "passed": false,
+        "base": 54.93737451737452,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bullish",
+      "case": "ob_continuation",
+      "before": {
+        "score": 53.08854771784232,
+        "gate": 70.0,
+        "passed": false,
+        "base": 53.08854771784232,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bullish",
+      "case": "ob_continuation",
+      "before": {
+        "score": 57.73230046948357,
+        "gate": 70.0,
+        "passed": false,
+        "base": 57.73230046948357,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bearish",
+      "case": "ob_continuation",
+      "before": {
+        "score": 60.421020134228186,
+        "gate": 72.0,
+        "passed": false,
+        "base": 60.421020134228186,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bearish",
+      "case": "ob_continuation",
+      "before": {
+        "score": 54.93737451737452,
+        "gate": 68.0,
+        "passed": false,
+        "base": 54.93737451737452,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bearish",
+      "case": "ob_continuation",
+      "before": {
+        "score": 53.08854771784232,
+        "gate": 70.0,
+        "passed": false,
+        "base": 53.08854771784232,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bearish",
+      "case": "ob_continuation",
+      "before": {
+        "score": 57.73230046948357,
+        "gate": 70.0,
+        "passed": false,
+        "base": 57.73230046948357,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bullish",
+      "case": "fvg_continuation",
+      "before": {
+        "score": 53.40759731543624,
+        "gate": 72.0,
+        "passed": false,
+        "base": 53.40759731543624,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bullish",
+      "case": "fvg_continuation",
+      "before": {
+        "score": 48.50880308880309,
+        "gate": 68.0,
+        "passed": false,
+        "base": 48.50880308880309,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bullish",
+      "case": "fvg_continuation",
+      "before": {
+        "score": 46.25867219917012,
+        "gate": 70.0,
+        "passed": false,
+        "base": 46.25867219917012,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bullish",
+      "case": "fvg_continuation",
+      "before": {
+        "score": 50.2487323943662,
+        "gate": 70.0,
+        "passed": false,
+        "base": 50.2487323943662,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bearish",
+      "case": "fvg_continuation",
+      "before": {
+        "score": 53.40759731543624,
+        "gate": 72.0,
+        "passed": false,
+        "base": 53.40759731543624,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bearish",
+      "case": "fvg_continuation",
+      "before": {
+        "score": 48.50880308880309,
+        "gate": 68.0,
+        "passed": false,
+        "base": 48.50880308880309,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bearish",
+      "case": "fvg_continuation",
+      "before": {
+        "score": 46.25867219917012,
+        "gate": 70.0,
+        "passed": false,
+        "base": 46.25867219917012,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bearish",
+      "case": "fvg_continuation",
+      "before": {
+        "score": 50.2487323943662,
+        "gate": 70.0,
+        "passed": false,
+        "base": 50.2487323943662,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bullish",
+      "case": "ob_reversal",
+      "before": {
+        "score": 67.73645637583893,
+        "gate": 72.0,
+        "passed": false,
+        "base": 67.73645637583893,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bullish",
+      "case": "ob_reversal",
+      "before": {
+        "score": 59.030038610038616,
+        "gate": 68.0,
+        "passed": false,
+        "base": 59.030038610038616,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bullish",
+      "case": "ob_reversal",
+      "before": {
+        "score": 56.36655601659751,
+        "gate": 70.0,
+        "passed": false,
+        "base": 56.36655601659751,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bullish",
+      "case": "ob_reversal",
+      "before": {
+        "score": 62.99051643192489,
+        "gate": 70.0,
+        "passed": false,
+        "base": 62.99051643192489,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bearish",
+      "case": "ob_reversal",
+      "before": {
+        "score": 67.73645637583893,
+        "gate": 72.0,
+        "passed": false,
+        "base": 67.73645637583893,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bearish",
+      "case": "ob_reversal",
+      "before": {
+        "score": 59.030038610038616,
+        "gate": 68.0,
+        "passed": false,
+        "base": 59.030038610038616,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bearish",
+      "case": "ob_reversal",
+      "before": {
+        "score": 56.36655601659751,
+        "gate": 70.0,
+        "passed": false,
+        "base": 56.36655601659751,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bearish",
+      "case": "ob_reversal",
+      "before": {
+        "score": 62.99051643192489,
+        "gate": 70.0,
+        "passed": false,
+        "base": 62.99051643192489,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bullish",
+      "case": "fvg_reversal",
+      "before": {
+        "score": 61.72974496644295,
+        "gate": 72.0,
+        "passed": false,
+        "base": 61.72974496644295,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bullish",
+      "case": "fvg_reversal",
+      "before": {
+        "score": 53.528108108108114,
+        "gate": 68.0,
+        "passed": false,
+        "base": 53.528108108108114,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bullish",
+      "case": "fvg_reversal",
+      "before": {
+        "score": 50.36655601659751,
+        "gate": 70.0,
+        "passed": false,
+        "base": 50.36655601659751,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bullish",
+      "case": "fvg_reversal",
+      "before": {
+        "score": 56.44591549295775,
+        "gate": 70.0,
+        "passed": false,
+        "base": 56.44591549295775,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bearish",
+      "case": "fvg_reversal",
+      "before": {
+        "score": 61.72974496644295,
+        "gate": 72.0,
+        "passed": false,
+        "base": 61.72974496644295,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bearish",
+      "case": "fvg_reversal",
+      "before": {
+        "score": 53.528108108108114,
+        "gate": 68.0,
+        "passed": false,
+        "base": 53.528108108108114,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bearish",
+      "case": "fvg_reversal",
+      "before": {
+        "score": 50.36655601659751,
+        "gate": 70.0,
+        "passed": false,
+        "base": 50.36655601659751,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bearish",
+      "case": "fvg_reversal",
+      "before": {
+        "score": 56.44591549295775,
+        "gate": 70.0,
+        "passed": false,
+        "base": 56.44591549295775,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Fair Value Gap"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bullish",
+      "case": "local_continuation",
+      "before": {
+        "score": 53.702899328859054,
+        "gate": 72.0,
+        "passed": false,
+        "base": 53.702899328859054,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Multi-Candle Confirmation"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bullish",
+      "case": "local_continuation",
+      "before": {
+        "score": 45.09953667953668,
+        "gate": 68.0,
+        "passed": false,
+        "base": 45.09953667953668,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bullish",
+      "case": "local_continuation",
+      "before": {
+        "score": 42.5159336099585,
+        "gate": 70.0,
+        "passed": false,
+        "base": 42.5159336099585,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bullish",
+      "case": "local_continuation",
+      "before": {
+        "score": 49.18769953051643,
+        "gate": 70.0,
+        "passed": false,
+        "base": 49.18769953051643,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bearish",
+      "case": "local_continuation",
+      "before": {
+        "score": 53.702899328859054,
+        "gate": 72.0,
+        "passed": false,
+        "base": 53.702899328859054,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 90.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 90.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Multi-Candle Confirmation"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bearish",
+      "case": "local_continuation",
+      "before": {
+        "score": 45.09953667953668,
+        "gate": 68.0,
+        "passed": false,
+        "base": 45.09953667953668,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 86.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 86.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bearish",
+      "case": "local_continuation",
+      "before": {
+        "score": 42.5159336099585,
+        "gate": 70.0,
+        "passed": false,
+        "base": 42.5159336099585,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 89.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 89.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bearish",
+      "case": "local_continuation",
+      "before": {
+        "score": 49.18769953051643,
+        "gate": 70.0,
+        "passed": false,
+        "base": 49.18769953051643,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 88.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 88.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": true,
+        "admitted": true,
+        "missing": [],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bullish",
+      "case": "no_anchor",
+      "before": {
+        "score": 30.0,
+        "gate": 72.0,
+        "passed": false,
+        "base": 42.665633037694015,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 69.25,
+        "gate": 75.0,
+        "passed": false,
+        "base": 69.25,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 95.0,
+            "contribution": 14.25,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bullish",
+      "case": "no_anchor",
+      "before": {
+        "score": 43.159118989118994,
+        "gate": 68.0,
+        "passed": false,
+        "base": 43.159118989118994,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 66.43,
+        "gate": 65.0,
+        "passed": true,
+        "base": 66.43,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 95.0,
+            "contribution": 9.5,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bullish",
+      "case": "no_anchor",
+      "before": {
+        "score": 40.55893625047152,
+        "gate": 70.0,
+        "passed": false,
+        "base": 40.55893625047152,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 68.39750000000001,
+        "gate": 70.0,
+        "passed": false,
+        "base": 68.39750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 95.0,
+            "contribution": 14.25,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bullish",
+      "case": "no_anchor",
+      "before": {
+        "score": 30.0,
+        "gate": 70.0,
+        "passed": false,
+        "base": 40.39292181069958,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 67.2975,
+        "gate": 65.0,
+        "passed": true,
+        "base": 67.2975,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 95.0,
+            "contribution": 14.25,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bearish",
+      "case": "no_anchor",
+      "before": {
+        "score": 30.0,
+        "gate": 72.0,
+        "passed": false,
+        "base": 42.665633037694015,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 69.25,
+        "gate": 75.0,
+        "passed": false,
+        "base": 69.25,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 95.0,
+            "contribution": 14.25,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bearish",
+      "case": "no_anchor",
+      "before": {
+        "score": 43.159118989118994,
+        "gate": 68.0,
+        "passed": false,
+        "base": 43.159118989118994,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 66.43,
+        "gate": 65.0,
+        "passed": true,
+        "base": 66.43,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 95.0,
+            "contribution": 9.5,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bearish",
+      "case": "no_anchor",
+      "before": {
+        "score": 40.55893625047152,
+        "gate": 70.0,
+        "passed": false,
+        "base": 40.55893625047152,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 68.39750000000001,
+        "gate": 70.0,
+        "passed": false,
+        "base": 68.39750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 95.0,
+            "contribution": 14.25,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bearish",
+      "case": "no_anchor",
+      "before": {
+        "score": 30.0,
+        "gate": 70.0,
+        "passed": false,
+        "base": 40.39292181069958,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 67.2975,
+        "gate": 65.0,
+        "passed": true,
+        "base": 67.2975,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 95.0,
+            "contribution": 14.25,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bullish",
+      "case": "unconfirmed",
+      "before": {
+        "score": 47.83712751677852,
+        "gate": 72.0,
+        "passed": false,
+        "base": 47.83712751677852,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 75.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 75.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bullish",
+      "case": "unconfirmed",
+      "before": {
+        "score": 39.10725868725869,
+        "gate": 68.0,
+        "passed": false,
+        "base": 39.10725868725869,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 71.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 71.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bullish",
+      "case": "unconfirmed",
+      "before": {
+        "score": 36.905975103734434,
+        "gate": 70.0,
+        "passed": false,
+        "base": 36.905975103734434,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 74.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 74.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bullish",
+      "case": "unconfirmed",
+      "before": {
+        "score": 43.64779342723005,
+        "gate": 70.0,
+        "passed": false,
+        "base": 43.64779342723005,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 73.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 73.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bearish",
+      "case": "unconfirmed",
+      "before": {
+        "score": 47.83712751677852,
+        "gate": 72.0,
+        "passed": false,
+        "base": 47.83712751677852,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 75.0,
+        "gate": 75.0,
+        "passed": true,
+        "base": 75.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 89.0,
+            "contribution": 22.25,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 75.0,
+            "contribution": 7.5,
+            "selected_evidence": "Momentum"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Premium/Discount Zone"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bearish",
+      "case": "unconfirmed",
+      "before": {
+        "score": 39.10725868725869,
+        "gate": 68.0,
+        "passed": false,
+        "base": 39.10725868725869,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 71.93,
+        "gate": 65.0,
+        "passed": true,
+        "base": 71.93,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 89.0,
+            "contribution": 13.35,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 66.65,
+            "contribution": 13.33,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bearish",
+      "case": "unconfirmed",
+      "before": {
+        "score": 36.905975103734434,
+        "gate": 70.0,
+        "passed": false,
+        "base": 36.905975103734434,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 74.14750000000001,
+        "gate": 70.0,
+        "passed": true,
+        "base": 74.14750000000001,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 89.0,
+            "contribution": 8.9,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bearish",
+      "case": "unconfirmed",
+      "before": {
+        "score": 43.64779342723005,
+        "gate": 70.0,
+        "passed": false,
+        "base": 43.64779342723005,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 73.0475,
+        "gate": 65.0,
+        "passed": true,
+        "base": 73.0475,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 100.0,
+            "contribution": 20.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 89.0,
+            "contribution": 17.8,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 66.65,
+            "contribution": 9.9975,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 100.0,
+            "contribution": 15.0,
+            "selected_evidence": "Fibonacci Proximity"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 65.0,
+            "contribution": 6.5,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bullish",
+      "case": "weak",
+      "before": {
+        "score": 30.60344827586207,
+        "gate": 72.0,
+        "passed": false,
+        "base": 30.60344827586207,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 32.625,
+        "gate": 75.0,
+        "passed": false,
+        "base": 32.625,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap",
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 35.0,
+            "contribution": 7.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 42.5,
+            "contribution": 10.625,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 50.0,
+            "contribution": 5.0,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 15.0,
+            "contribution": 2.25,
+            "selected_evidence": "OB Precision"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 40.0,
+            "contribution": 4.0,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bullish",
+      "case": "weak",
+      "before": {
+        "score": 23.72047244094488,
+        "gate": 68.0,
+        "passed": false,
+        "base": 23.72047244094488,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 37.625,
+        "gate": 65.0,
+        "passed": false,
+        "base": 37.625,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap",
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 35.0,
+            "contribution": 7.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 42.5,
+            "contribution": 6.375,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 50.0,
+            "contribution": 10.0,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 15.0,
+            "contribution": 1.5,
+            "selected_evidence": "OB Precision"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 40.0,
+            "contribution": 4.0,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bullish",
+      "case": "weak",
+      "before": {
+        "score": 23.153191489361703,
+        "gate": 70.0,
+        "passed": false,
+        "base": 23.153191489361703,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 40.250750750750754,
+        "gate": 70.0,
+        "passed": false,
+        "base": 40.250750750750754,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap",
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 35.0,
+            "contribution": 7.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 57.50750750750751,
+            "contribution": 5.750750750750751,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 50.0,
+            "contribution": 7.5,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 15.0,
+            "contribution": 2.25,
+            "selected_evidence": "OB Precision"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 40.0,
+            "contribution": 4.0,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bullish",
+      "case": "weak",
+      "before": {
+        "score": 26.009615384615387,
+        "gate": 70.0,
+        "passed": false,
+        "base": 26.009615384615387,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 34.0,
+        "gate": 65.0,
+        "passed": false,
+        "base": 34.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap",
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 35.0,
+            "contribution": 7.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 47.5,
+            "contribution": 9.5,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 50.0,
+            "contribution": 7.5,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 15.0,
+            "contribution": 2.25,
+            "selected_evidence": "OB Precision"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 40.0,
+            "contribution": 4.0,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "overwatch",
+      "direction": "bearish",
+      "case": "weak",
+      "before": {
+        "score": 30.60344827586207,
+        "gate": 72.0,
+        "passed": false,
+        "base": 30.60344827586207,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 32.625,
+        "gate": 75.0,
+        "passed": false,
+        "base": 32.625,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap",
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 35.0,
+            "contribution": 7.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 25.0,
+            "quality": 42.5,
+            "contribution": 10.625,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 10.0,
+            "quality": 50.0,
+            "contribution": 5.0,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 15.0,
+            "contribution": 2.25,
+            "selected_evidence": "OB Precision"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 40.0,
+            "contribution": 4.0,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "strike",
+      "direction": "bearish",
+      "case": "weak",
+      "before": {
+        "score": 23.72047244094488,
+        "gate": 68.0,
+        "passed": false,
+        "base": 23.72047244094488,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 37.625,
+        "gate": 65.0,
+        "passed": false,
+        "base": 37.625,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap",
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 35.0,
+            "contribution": 7.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 15.0,
+            "quality": 42.5,
+            "contribution": 6.375,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 20.0,
+            "quality": 50.0,
+            "contribution": 10.0,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 10.0,
+            "quality": 15.0,
+            "contribution": 1.5,
+            "selected_evidence": "OB Precision"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 40.0,
+            "contribution": 4.0,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 5.0,
+            "quality": 100.0,
+            "contribution": 5.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "surgical",
+      "direction": "bearish",
+      "case": "weak",
+      "before": {
+        "score": 23.153191489361703,
+        "gate": 70.0,
+        "passed": false,
+        "base": 23.153191489361703,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 40.250750750750754,
+        "gate": 70.0,
+        "passed": false,
+        "base": 40.250750750750754,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap",
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 35.0,
+            "contribution": 7.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 10.0,
+            "quality": 57.50750750750751,
+            "contribution": 5.750750750750751,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 50.0,
+            "contribution": 7.5,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 15.0,
+            "contribution": 2.25,
+            "selected_evidence": "OB Precision"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 40.0,
+            "contribution": 4.0,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 10.0,
+            "quality": 100.0,
+            "contribution": 10.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "stealth",
+      "direction": "bearish",
+      "case": "weak",
+      "before": {
+        "score": 26.009615384615387,
+        "gate": 70.0,
+        "passed": false,
+        "base": 26.009615384615387,
+        "synergy": 0.0,
+        "conflict": 0.0
+      },
+      "after": {
+        "score": 34.0,
+        "gate": 65.0,
+        "passed": false,
+        "base": 34.0,
+        "synergy": 0.0,
+        "conflict": 0.0,
+        "eligible": false,
+        "admitted": false,
+        "missing": [
+          "Qualified order block or fair value gap",
+          "Confirmed direction-aligned structural shift on an allowed timeframe"
+        ],
+        "families": [
+          {
+            "family": "Entry anchor",
+            "budget": 20.0,
+            "quality": 35.0,
+            "contribution": 7.0,
+            "selected_evidence": "Order Block"
+          },
+          {
+            "family": "Structural confirmation",
+            "budget": 15.0,
+            "quality": 0.0,
+            "contribution": 0.0,
+            "selected_evidence": "Mode-scoped structural shift"
+          },
+          {
+            "family": "Directional context",
+            "budget": 20.0,
+            "quality": 47.5,
+            "contribution": 9.5,
+            "selected_evidence": "HTF direction and regime"
+          },
+          {
+            "family": "Momentum evidence",
+            "budget": 15.0,
+            "quality": 50.0,
+            "contribution": 7.5,
+            "selected_evidence": "MTF Indicator Alignment"
+          },
+          {
+            "family": "Entry location",
+            "budget": 15.0,
+            "quality": 15.0,
+            "contribution": 2.25,
+            "selected_evidence": "OB Precision"
+          },
+          {
+            "family": "Participation",
+            "budget": 10.0,
+            "quality": 40.0,
+            "contribution": 4.0,
+            "selected_evidence": "Volume"
+          },
+          {
+            "family": "Destination",
+            "budget": 5.0,
+            "quality": 75.0,
+            "contribution": 3.75,
+            "selected_evidence": "Liquidity Draw"
+          },
+          {
+            "family": "Session timing",
+            "budget": 0.0,
+            "quality": 100.0,
+            "contribution": 0.0,
+            "selected_evidence": "Kill Zone Timing"
+          }
+        ]
+      }
+    }
+  ],
+  "raw_candle_admission": [
+    {
+      "direction": "LONG",
+      "fixture": "original",
+      "seed": 2,
+      "impulse": 0.012,
+      "hour": 15,
+      "preset": "balanced",
+      "gate": 65.0,
+      "floor": 55.0,
+      "score": 76.5475,
+      "accepted": 1,
+      "detected_shifts": [
+        [
+          "bullish",
+          "15m",
+          "BOS",
+          "A"
+        ]
+      ],
+      "allowed_structure_timeframes": [
+        "1d",
+        "4h",
+        "1h",
+        "15m"
+      ],
+      "reasons": [
+        null
+      ]
+    },
+    {
+      "direction": "LONG",
+      "fixture": "original",
+      "seed": 2,
+      "impulse": 0.012,
+      "hour": 15,
+      "preset": "aggressive",
+      "gate": 60.0,
+      "floor": 50.0,
+      "score": 76.5475,
+      "accepted": 1,
+      "detected_shifts": [
+        [
+          "bullish",
+          "15m",
+          "BOS",
+          "A"
+        ]
+      ],
+      "allowed_structure_timeframes": [
+        "1d",
+        "4h",
+        "1h",
+        "15m"
+      ],
+      "reasons": [
+        null
+      ]
+    },
+    {
+      "direction": "SHORT",
+      "fixture": "original",
+      "seed": 2,
+      "impulse": 0.01,
+      "hour": 15,
+      "preset": "balanced",
+      "gate": 65.0,
+      "floor": 55.0,
+      "score": 77.2475,
+      "accepted": 1,
+      "detected_shifts": [
+        [
+          "bearish",
+          "15m",
+          "BOS",
+          "A"
+        ],
+        [
+          "bearish",
+          "15m",
+          "BOS",
+          "B"
+        ]
+      ],
+      "allowed_structure_timeframes": [
+        "1d",
+        "4h",
+        "1h",
+        "15m"
+      ],
+      "reasons": [
+        null
+      ]
+    },
+    {
+      "direction": "SHORT",
+      "fixture": "original",
+      "seed": 2,
+      "impulse": 0.01,
+      "hour": 15,
+      "preset": "aggressive",
+      "gate": 60.0,
+      "floor": 50.0,
+      "score": 77.2475,
+      "accepted": 1,
+      "detected_shifts": [
+        [
+          "bearish",
+          "15m",
+          "BOS",
+          "A"
+        ],
+        [
+          "bearish",
+          "15m",
+          "BOS",
+          "B"
+        ]
+      ],
+      "allowed_structure_timeframes": [
+        "1d",
+        "4h",
+        "1h",
+        "15m"
+      ],
+      "reasons": [
+        null
+      ]
+    }
+  ],
+  "raw_structural_reflection": [
+    {
+      "timeframe": "15m",
+      "initial_trends": [
+        "ranging",
+        "ranging"
+      ],
+      "first_swings": [
+        [
+          [
+            104.60125661631955,
+            103.22876345681419
+          ],
+          [
+            99.85969302097882,
+            101.87301227256945
+          ]
+        ],
+        [
+          [
+            100.14030697902118,
+            98.12698772743055
+          ],
+          [
+            95.39874338368045,
+            96.77123654318581
+          ]
+        ]
+      ],
+      "short_events": [
+        [
+          "2025-12-03T13:30:00+00:00",
+          "BOS",
+          "bearish",
+          "B"
+        ],
+        [
+          "2025-12-03T13:45:00+00:00",
+          "BOS",
+          "bearish",
+          "A"
+        ],
+        [
+          "2025-12-03T14:00:00+00:00",
+          "BOS",
+          "bearish",
+          "A"
+        ],
+        [
+          "2025-12-03T14:15:00+00:00",
+          "BOS",
+          "bearish",
+          "A"
+        ],
+        [
+          "2025-12-03T14:30:00+00:00",
+          "BOS",
+          "bearish",
+          "A"
+        ]
+      ],
+      "reflected_events": [
+        [
+          "2025-12-03T13:30:00+00:00",
+          "BOS",
+          "bullish",
+          "B"
+        ],
+        [
+          "2025-12-03T13:45:00+00:00",
+          "BOS",
+          "bullish",
+          "A"
+        ],
+        [
+          "2025-12-03T14:00:00+00:00",
+          "BOS",
+          "bullish",
+          "A"
+        ],
+        [
+          "2025-12-03T14:15:00+00:00",
+          "BOS",
+          "bullish",
+          "A"
+        ],
+        [
+          "2025-12-03T14:30:00+00:00",
+          "BOS",
+          "bullish",
+          "A"
+        ]
+      ]
+    },
+    {
+      "timeframe": "1h",
+      "initial_trends": [
+        "downtrend",
+        "uptrend"
+      ],
+      "first_swings": [
+        [
+          [
+            105.40409736490743,
+            102.94533512488155
+          ],
+          [
+            101.53116227220971,
+            100.4883128547344
+          ]
+        ],
+        [
+          [
+            98.46883772779029,
+            99.5116871452656
+          ],
+          [
+            94.59590263509257,
+            97.05466487511845
+          ]
+        ]
+      ],
+      "short_events": [],
+      "reflected_events": []
+    },
+    {
+      "timeframe": "4h",
+      "initial_trends": [
+        "downtrend",
+        "uptrend"
+      ],
+      "first_swings": [
+        [
+          [
+            114.63786247808751,
+            114.1511089597967
+          ],
+          [
+            111.55005730713815,
+            110.67606950076217
+          ]
+        ],
+        [
+          [
+            88.44994269286185,
+            89.32393049923783
+          ],
+          [
+            85.36213752191249,
+            85.8488910402033
+          ]
+        ]
+      ],
+      "short_events": [],
+      "reflected_events": []
+    },
+    {
+      "timeframe": "1d",
+      "initial_trends": [
+        "downtrend",
+        "uptrend"
+      ],
+      "first_swings": [
+        [
+          [
+            169.477331652488,
+            165.20792390251444
+          ],
+          [
+            162.04328580580392,
+            154.20255120942795
+          ]
+        ],
+        [
+          [
+            37.95671419419608,
+            45.79744879057205
+          ],
+          [
+            30.522668347511996,
+            34.79207609748556
+          ]
+        ]
+      ],
+      "short_events": [],
+      "reflected_events": []
+    }
+  ],
+  "verification": {
+    "backend": {
+      "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-policy-backend-final.txt",
+      "sha256": "69094097c28c83dd1b9036fb8968c9271e9ca0d5eed564a3b7dd37999f4efa84",
+      "passed": 2374,
+      "deselected": 0,
+      "warnings": 387,
+      "seconds": 320.18,
+      "guard_denial_checks": 7,
+      "guard_checks_passed": true,
+      "blocked_operations": [
+        "['os.mkdir outside fixture directory', 'subprocess.Popen']\r"
+      ],
+      "exit_code": 0
+    },
+    "baseline_reference": {
+      "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-policy-before.txt",
+      "sha256": "c3afb5a13da3af6eaffa40248922a2b5221163a5b88ab6d1d5f15f51d4deffc3",
+      "passed": 64,
+      "deselected": 2180,
+      "warnings": 64,
+      "seconds": 11.21,
+      "guard_denial_checks": 7,
+      "guard_checks_passed": true,
+      "blocked_operations": [
+        "['subprocess.Popen']\r"
+      ],
+      "exit_code": 0
+    },
+    "reference": {
+      "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-policy-after-final.txt",
+      "sha256": "db47c9d8096fdacddc5b873da8b9e73325d46cda60e81144c9b04e082d6c4b26",
+      "passed": 149,
+      "deselected": 2225,
+      "warnings": 173,
+      "seconds": 8.65,
+      "guard_denial_checks": 7,
+      "guard_checks_passed": true,
+      "blocked_operations": [
+        "['subprocess.Popen']\r"
+      ],
+      "exit_code": 0
+    },
+    "consumer_units": {
+      "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-family-consumers-unit.txt",
+      "sha256": "bc386e7391767a79dd629a15733f422fdadfba9ba94529366a11068352796bac",
+      "passed": 235,
+      "deselected": 2103,
+      "warnings": 27,
+      "seconds": 25.63,
+      "guard_denial_checks": 7,
+      "guard_checks_passed": true,
+      "blocked_operations": [
+        "['subprocess.Popen']\r"
+      ],
+      "exit_code": 0
+    },
+    "raw_workflow": {
+      "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-family-core-final.txt",
+      "sha256": "42a14c67ff26a6f2b20ac5fe013a835f3d8b552c834813041eed5f573dab3d57",
+      "passed": 31,
+      "deselected": 2337,
+      "warnings": 48,
+      "seconds": 250.1,
+      "guard_denial_checks": 7,
+      "guard_checks_passed": true,
+      "blocked_operations": [
+        "['subprocess.Popen']\r"
+      ],
+      "exit_code": 0
+    },
+    "reflection": {
+      "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-family-reflection-final.txt",
+      "sha256": "328d13d4e54961f48adfc8a1590272ec15f541df430019d95756e68a6fa607f2",
+      "passed": 1,
+      "deselected": 2373,
+      "warnings": 0,
+      "seconds": 10.33,
+      "guard_denial_checks": 7,
+      "guard_checks_passed": true,
+      "blocked_operations": [
+        "['subprocess.Popen']\r"
+      ],
+      "exit_code": 0
+    },
+    "frontend": {
+      "passed": 40,
+      "files": 2,
+      "exit_code": 0,
+      "log": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-consumer-frontend-v2-boundary.txt",
+      "sha256": "83e5cabcb3d15015132dee7b8300b58d6483b8c52abe40e7ba90bd5f36b984a8"
+    },
+    "typescript": {
+      "command": "tsc --noEmit",
+      "exit_code": 0,
+      "evidence": "UI owner tool result after final frontend boundary change"
+    },
+    "contracts": {
+      "exit_code": 1,
+      "guard_checks_passed": 7,
+      "evidence": "independent backend-integrity tool output; no saved log",
+      "clean": [
+        "API",
+        "telemetry",
+        "pipeline"
+      ],
+      "intentional_drift": {
+        "live_signal_writer": "569d437bede7657e4bd0e3777f13fd6a5b4b2e1557b59480b101157720e4bbbb",
+        "paper_signal_writer": "a27f54b5899c97d2cd91fc85e8fa06c49fc94ea68c990a36ffb32150239a9498"
+      }
+    },
+    "smoke": {
+      "exit_code": 1,
+      "guard_checks_passed": 7,
+      "clean_groups": 7,
+      "intended_gate_changes": {
+        "overwatch": [
+          72,
+          75
+        ],
+        "stealth": [
+          70,
+          65
+        ],
+        "strike": [
+          68,
+          65
+        ]
+      },
+      "evidence": "independent backend-integrity tool output; no saved log"
+    },
+    "diff_check": {
+      "command": "git -c core.safecrlf=false diff --check",
+      "exit_code": 0
+    }
+  },
+  "source_changes": {
+    "backend/api_server.py": {
+      "before_sha256": "212e66dbc8548449427778beac709b0f48f8b747800c0c42fcef3b74014a0838",
+      "after_sha256": "5284dde246d2ef03ebf0a7ecf878777fc39b06e73fd37dce6576fec2f7bba131",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\api_server.py"
+    },
+    "docs/ARCHITECTURE_INDEX.md": {
+      "before_sha256": "68e5d835044b16e560f0d0a24e6268e26dca18bd7ef690b2cda87611f456c2f0",
+      "after_sha256": "b0072372591d0c7a5285d625eb070cea654aafa513dc622f84a7cb9e5849e64c",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\docs\\ARCHITECTURE_INDEX.md"
+    },
+    "backend/bot/live_trading_service.py": {
+      "before_sha256": "3e0ba6e3d0786e19ca2423397c466dedc48ff5cda994ce5af672b7bd771e2910",
+      "after_sha256": "9cd259052e46619c708e3c331876b513dbffcb254fd75ad0e3f94944eda25745",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\bot\\live_trading_service.py"
+    },
+    "backend/bot/paper_trading_service.py": {
+      "before_sha256": "c7baed54b750ffc97638466130f4e0321087a20bb552f5f689c9f8188fa61027",
+      "after_sha256": "9aa662327dba0cbf8c59926ce412de0d2d6c064ae56c12d990a6f1cd5c4f9c9b",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\bot\\paper_trading_service.py"
+    },
+    "backend/diagnostics/offline_checks.json": {
+      "before_sha256": "cf37f6aada8209c857cdca1b1f79d383c2fc0d68c2810691b02760622ac1df9d",
+      "after_sha256": "ac09e22533449ac98bc66ba89292dd9e07a9bb92341fad835b48253a3a576957",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\diagnostics\\offline_checks.json"
+    },
+    "backend/engine/orchestrator.py": {
+      "before_sha256": "d8b4da483b934a46d632930bb3133f6fa11ff433b937b8cf2cbeb2f23bff6b95",
+      "after_sha256": "c51dd06dd1418717173882e0f568a56b643548a3f6de501b9119596c88c0fc9d",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\engine\\orchestrator.py"
+    },
+    "backend/routers/observability.py": {
+      "before_sha256": "2e3549ee7402ab0ea230577c760acb52a4d29500b5d5bfb61856b9bea5ed43d1",
+      "after_sha256": "0df1fb1134841159b3de3053832f8dc9571f6cd6eb9ca07545572fd15e053a68",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\routers\\observability.py"
+    },
+    "backend/services/confluence_service.py": {
+      "before_sha256": "097d9ac699a065c995671961d0bb9e2b8a5d893c1280bce227feaff423a94066",
+      "after_sha256": "2abca6fd334ad93ca544b47a864580f411eabc4b5cf86b5f76303ad523f20ef3",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\services\\confluence_service.py"
+    },
+    "backend/shared/config/defaults.py": {
+      "before_sha256": "c2167270c91f18003349574f17770e2034c9aff8384405a9a7e6b3101d278970",
+      "after_sha256": "0196e71874483288ba3e7ae1b969be1de7dadfb17f777e43c8a12f5b467a96c7",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\shared\\config\\defaults.py"
+    },
+    "backend/shared/config/scanner_modes.py": {
+      "before_sha256": "e663fb322e62426bf235a4893f9a50ed9638d771653e8b13c546c0f08c599d5a",
+      "after_sha256": "00b45917bc58b9e93719e170167e493a1a4e9692ce7c1641a78bd85f72b256f1",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\shared\\config\\scanner_modes.py"
+    },
+    "backend/shared/config/sensitivity.py": {
+      "before_sha256": "e69a75ae069ba3687dc1fd70d473500fd5febd48ce50eaf643a53a5517c7e543",
+      "after_sha256": "c4dc9485da5980f77b9600591e3697de7e4481933056994731055d83b2c30694",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\shared\\config\\sensitivity.py"
+    },
+    "backend/shared/models/scoring.py": {
+      "before_sha256": "6b2feec8cb5fef3711982889ae1f187e5ffcc84e53fc96aca9449c8ca508d5fe",
+      "after_sha256": "ebafa476b2db1b6fe0ed420d9b9a38815174d2f6ba43cbf5d8205d5a8f8bfac0",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\shared\\models\\scoring.py"
+    },
+    "backend/strategy/confluence/scorer.py": {
+      "before_sha256": "3fb18990d3ee713836d80cb03b60d5b7b283243e9f3c8fc47e1c4a440d9783a6",
+      "after_sha256": "2aa66e103cd38a99c0dff106b7f464badd8b5c0a389c6f62bd7302fe6dc1a1f7",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\strategy\\confluence\\scorer.py"
+    },
+    "backend/strategy/smc/bos_choch.py": {
+      "before_sha256": "29a1b8b9bee603c00511c30aed74e7d3d958136c77e4152cf2ae2ac5a205f8aa",
+      "after_sha256": "36a86bc406477adc6d906d47712834abc73adf6bd36b395e5b8badb6e481d19d",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\strategy\\smc\\bos_choch.py"
+    },
+    "backend/tests/integration/test_core_workflow.py": {
+      "before_sha256": "e05cb69562f1e75370479ddb05c1488d4631477672415fda0950e5a91f3d6d93",
+      "after_sha256": "cb0ec21996aceb12b000049f3d5dae25a99a591049556ec0e0a8dec1acf8a74f",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\tests\\integration\\test_core_workflow.py"
+    },
+    "backend/tests/integration/test_rejection_consumers.py": {
+      "before_sha256": "6c5dc5bd30c6920b3c73fcb84c234a9513aa1bcd8a5aab806c8cf8f1808ce44f",
+      "after_sha256": "2a0bc201416440deaad1d7775e6b8d7b2e6a4e3437e6024f426f574960ed0bea",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\tests\\integration\\test_rejection_consumers.py"
+    },
+    "backend/tests/integration/test_scan_rejection_evidence.py": {
+      "before_sha256": "cdc0b042060e3ec5adf913ed1f5d6dec5ec408503bad3965b67eb704d07bbb2b",
+      "after_sha256": "134134693252fda20982f98e213461c5ea6fd9dae41e75ca426a655e4e3e6cc2",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\tests\\integration\\test_scan_rejection_evidence.py"
+    },
+    "backend/tests/unit/test_evidence_accounting.py": {
+      "before_sha256": "447cc660e0f4abafc74c0831ab152afaf424978627aa56c9c447d574c5a6ab8d",
+      "after_sha256": "c3135f1ee422428b9ad06ccfcfedd37af7e7036d2537f5382f5cc26d68dcb480",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\tests\\unit\\test_evidence_accounting.py"
+    },
+    "backend/tests/unit/test_live_reconciliation.py": {
+      "before_sha256": "f29c39fb59da8b74daabe1f2b328b862bacbbf3259a71c7754d04cb91b3efd01",
+      "after_sha256": "cac723a6fd51cd35611a13117d634b3d2126861b242ea9cbf86bde2fd3661a58",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\tests\\unit\\test_live_reconciliation.py"
+    },
+    "backend/tests/unit/test_scoring_confidence_contract.py": {
+      "before_sha256": "8d71d8cce7402adfdd6da60bebac908be53d090940f92a64e8e65992ea65a3e5",
+      "after_sha256": "16017b926e48cda2ace77596ed66ffe4134723dd9fdf6c54e0d75e0b0ad08a2a",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\tests\\unit\\test_scoring_confidence_contract.py"
+    },
+    "backend/tests/unit/test_sensitivity_contract.py": {
+      "before_sha256": "b9ddff40683517c9cb53cedced992fae62a8c891983d6546fc73ce1ca63b586a",
+      "after_sha256": "47d74d17e8f92e44a6cf1f8770e3846a8050c32484678d6b4f89781d5b7b9efb",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\tests\\unit\\test_sensitivity_contract.py"
+    },
+    "docs/audits/SYSTEM_DISCOVERY_2026-10-07.md": {
+      "before_sha256": "5c1c49116da9dd5ac007b778308e03a29b5af4de7bb073cf05ff94ebd25bda00",
+      "after_sha256": "67adec2f7065b7e5da0f421be34005fd5364977d1d3650657038a8cee165c4fe",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\docs\\audits\\SYSTEM_DISCOVERY_2026-10-07.md"
+    },
+    "src/pages/Scanner.score.test.tsx": {
+      "before_sha256": "7f1faa607bc4876f44112f73f9c461a1d406213083927bf9cc25ddfba0ed8a78",
+      "after_sha256": "8ae40557f5042c6645622d63bfb59127ee974080b1c502c17fdd22403f6827c9",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\pages\\Scanner.score.test.tsx"
+    },
+    "src/pages/Scanner.tsx": {
+      "before_sha256": "73e09eaacbff6edf2530030e4c7467866978a7784b2c7a7f65c9d66bffc75186",
+      "after_sha256": "2611477511939ff14a7c27e871ca2eb3d8bcbf955cf80142d294e409ce11ad58",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\pages\\Scanner.tsx"
+    },
+    "src/utils/scoreEvidence.ts": {
+      "before_sha256": "192a90cf17eb71561f49716dbe47f72a18d72dccb1949d155722ecf3db2daba3",
+      "after_sha256": "714cb379b1e9e8e7b8559a3ca24a0ab92d91e0e35b024a58236f1e7adfe38aef",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\utils\\scoreEvidence.ts"
+    },
+    "src/components/hud/ConfluenceBreakdown.tsx": {
+      "before_sha256": "3cda9111413ca42bd63e5c21f1ae5509fbab8088124c71eecf5de671b19695f4",
+      "after_sha256": "9d8d7c6e4967de8e00b88740d3fec463b2830a1f91a9350b1f35fd3092473786",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\components\\hud\\ConfluenceBreakdown.tsx"
+    },
+    "src/components/hud/GauntletBreakdown.tsx": {
+      "before_sha256": "012d453d3507518f9758f0e287a45a0a37a654dd3961b403dd812b8e65984bca",
+      "after_sha256": "3e2a478772624050e626cf3bb0b98d3181ba256896af6e0d0749234a35741aaa",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\components\\hud\\GauntletBreakdown.tsx"
+    },
+    "src/components/hud/rejectionEvidence.test.ts": {
+      "before_sha256": "86c9ce1da2d88f7c76832b59d872eaa30b03245cbbcac962a4929ccb685e6347",
+      "after_sha256": "c99c9cdfe363c549b939024eebea62b8cfa92948cd8694139d08ad7cf269441f",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\components\\hud\\rejectionEvidence.test.ts"
+    },
+    "src/components/hud/RejectionPanel.tsx": {
+      "before_sha256": "66d12e46aa6b7b9a79b1b64dd6f5235459f82095241c72477468851db9f54be6",
+      "after_sha256": "7c7851b49b903736a03572598542c72c8b660839ce0dd16c58849fd7e00aaaae",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\components\\hud\\RejectionPanel.tsx"
+    },
+    "src/pages/training/RangeBot.tsx": {
+      "before_sha256": "aea57936e78ad579c72020bf42b052a7d20e1632f9c9990301c30c5d2fa37e26",
+      "after_sha256": "b0b3ad73544bf6fe62a91034bf4566432c016a61a2388c0ee7baa3077091d237",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\pages\\training\\RangeBot.tsx"
+    },
+    "backend/shared/config/rr_matrix.py": {
+      "before_sha256": "628e9e3604e8429641562fa614c7ff19cfc807ec0b8759aa69fa3484122600ee",
+      "after_sha256": "f240e797966f3538b1bc7c715b0e6f8fe89ee02d0ecf7415e90132e49ce472ae",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\backend\\shared\\config\\rr_matrix.py"
+    },
+    "src/context/ScannerContext.tsx": {
+      "before_sha256": "af7026d399a4155d95635ef602b679057414ccca98947a7d014f884bd4fe27a0",
+      "after_sha256": "f3bfcea7e9d5389f45cec85a2d7e2748e8479b4d83cbfd370b33b9ffbaa0a502",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\context\\ScannerContext.tsx"
+    },
+    "src/pages/BotSetup.tsx": {
+      "before_sha256": "5136f5d1d1356e1524a7beff4b4b177e2e2a30e91902fa359f597227e88c7a91",
+      "after_sha256": "4f47352e0323937ed8149566d33c8d18707b802a066e1441a80d28110394b3f8",
+      "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\score-balance-base-ee47e56e-3f39-4834-9e3c-0278c1a68b0a\\src\\pages\\BotSetup.tsx"
+    },
+    "backend/shared/config/score_policy.py": {
+      "before_sha256": null,
+      "after_sha256": "05db0254c0eeaac4ac914679b1bb26f4f61a7bf644e20f1180c37fadfe01c19f",
+      "backup": null
+    },
+    "backend/strategy/confluence/evidence_policy.py": {
+      "before_sha256": null,
+      "after_sha256": "edf75927dd59efab9a49f65104f3970b11a4217994466b2ebb47def14145f062",
+      "backup": null
+    },
+    "backend/tests/unit/test_score_policy_balance.py": {
+      "before_sha256": null,
+      "after_sha256": "38f7814ad762d38dc85f9bc28fe24fa60a8a62250f84455b0f4af5ba3c948111",
+      "backup": null
+    },
+    "backend/diagnostics/decisions/2026-10-09__score-policy-balance.md": {
+      "before_sha256": null,
+      "after_sha256": "86cba297277b354fb7a39a3c188858b29b6e74c4d1a33e68c54d7ecbdea0c2eb",
+      "backup": null
+    }
+  },
+  "protected_files": [
+    {
+      "path": "backend/cache/trade_journal.jsonl",
+      "before": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "after": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T11:35:29.952539+00:00",
+      "mtime_utc": "2026-07-01T23:58:59.104913+00:00"
+    },
+    {
+      "path": "backend/cache/telemetry.db",
+      "before": "342935783cb0d768613f3df45d72c24be3479378c07ebf01d195e865772e69e8",
+      "after": "3d45d9c70f0d43779761c5153937f2b0fd3b10f36b169a6da74f661001d83824",
+      "unchanged": false,
+      "observed_at_utc": "2026-10-09T11:35:33.048580+00:00",
+      "mtime_utc": "2026-10-09T11:35:33.016905+00:00"
+    },
+    {
+      "path": "backend/diagnostics/contracts/db_contracts.json",
+      "before": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      "after": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T11:35:33.048580+00:00",
+      "mtime_utc": "2026-10-08T16:04:59.935953+00:00"
+    },
+    {
+      "path": "backend/diagnostics/capture_contracts.py",
+      "before": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "after": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "unchanged": true,
+      "observed_at_utc": "2026-10-09T11:35:33.049102+00:00",
+      "mtime_utc": "2026-10-08T16:04:18.198492+00:00"
+    }
+  ],
+  "independent_reviews": {
+    "status": "No remaining implementation blocker in reviewed scope",
+    "architecture_and_math": "Fixed budgets/alternatives compared with variable denominator and uniform threshold reduction; independent source and boundary review.",
+    "consumers": "Scorer to service/orchestrator/planner/bots/logs/cache/API/UI traced. UI changes also reviewed by root against pre-batch backups.",
+    "corrected_findings": [
+      "discarded opposing-wall safety",
+      "invalid or consumed anchors",
+      "negative macro erased by missing context",
+      "OB-only and unscoped sequence relief",
+      "default-flat-volume false evidence",
+      "tier rounding mismatch",
+      "implicit old cutoff defaults",
+      "missing actual scoring-mode/rejection provenance",
+      "asymmetric swing trend seed",
+      "crossed levels behind entry misclassified as walls",
+      "UI v2 eligibility missing-data fallback"
+    ]
+  },
+  "remaining_limits": [
+    "Reference budgets and gates are deliberate policy, not fitted win probabilities or proven optimal cutoffs.",
+    "Fixed synthetic raw tapes and controlled detector/plan fixtures do not establish representative market frequency, exchange fills, slippage or real process concurrency.",
+    "Existing SMC swing confirmation-time availability/look-ahead remains unverified; seed symmetry fix does not certify full causal detection.",
+    "Bots retain STEALTH/fusion execution and explicit custom UI cutoffs; paper dynamic-floor/thesis and live hard-gate semantics remain distinct.",
+    "Old model-unaware diagnostic aggregators and historical completed records cannot be pooled as v2 calibration evidence.",
+    "Frontend verification is static rendering/classification/type checking, not visual browser verification.",
+    "Telemetry DB changed during this task. Its responsible writer is unverified. Previously running API PID4672 (started2026-10-08 21:12:35 local) and UI PID18696 were observed listening; guarded tests denied real-store access. These facts do not prove cause.",
+    "No app restart, live order, historical repair, ML implementation/training, deployment, commit or push in this batch."
+  ]
+}

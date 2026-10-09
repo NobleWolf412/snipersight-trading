@@ -27,16 +27,18 @@ from backend.bot.executor.execution_fee_recovery import ExecutionFeeRecovery
 from backend.bot.executor.execution_reports import ExecutionReportPublisher
 from backend.bot.executor.paper_executor import OrderStatus, OrderType
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
+from backend.shared.config.sensitivity import resolve_sensitivity, passes_confluence_gate
+from backend.shared.config.score_policy import STRONG_SCORE, evidence_allows_entry
 from backend.bot.paper_trading_service import (
     CompletedTrade,
     PaperTradingStats,
     _PENDING_TTL_MINUTES,
-    _SENSITIVITY_PRESETS,
     _MAX_LIMIT_DISTANCE_PCT,
 )
 from backend.bot.trade_journal import get_trade_journal
 from backend.engine.orchestrator import Orchestrator
 from backend.shared.config.live_trading_config import LiveTradingConfig, load_phemex_credentials
+from backend.shared.config.strategy_policy import validate_strategy_selection, resolve_bot_sensitivity, plan_strategy_gate
 from backend.shared.config.scanner_modes import get_mode
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
@@ -171,6 +173,7 @@ class LiveTradingService:
     async def start(self, config: LiveTradingConfig) -> Dict[str, Any]:
         if self._lifecycle_busy or self._phase not in ("idle", "stopped"):
             raise LifecycleConflict("Start blocked: stop and resolve the existing session first")
+        validate_strategy_selection(config)
         self._lifecycle_busy = True
         try:
             if self.executor:
@@ -208,6 +211,7 @@ class LiveTradingService:
         if self.status == LiveBotStatus.RUNNING:
             raise ValueError("Live trading already running")
 
+        validate_strategy_selection(config)
         self.config = config
         self.session_id = str(uuid.uuid4())[:8]
 
@@ -265,19 +269,11 @@ class LiveTradingService:
         )
 
         # Orchestrator (same as paper)
-        mode = get_mode("stealth")
+        mode = get_mode(config.sniper_mode)
         if not mode:
             raise ValueError("Failed to load stealth mode")
 
-        _preset = (config.sensitivity_preset or "balanced").lower()
-        if _preset in _SENSITIVITY_PRESETS:
-            _gate = _SENSITIVITY_PRESETS[_preset]["gate"]
-            _floor = _SENSITIVITY_PRESETS[_preset]["floor"]
-            _min_conf = config.min_confluence if config.min_confluence is not None else _gate
-            _soft_floor = _floor
-        else:
-            _min_conf = config.min_confluence if config.min_confluence is not None else 65.0
-            _soft_floor = config.confluence_soft_floor if config.confluence_soft_floor is not None else max(0.0, _min_conf - 10.0)
+        _min_conf, _soft_floor, _preset = resolve_bot_sensitivity(config, mode.min_confluence_score)
 
         scan_config = ScanConfig(
             profile=mode.profile,
@@ -288,9 +284,11 @@ class LiveTradingService:
             min_rr_ratio=1.0,
             max_symbols=20,
         )
-        scan_config.enable_fusion = True
+        scan_config.enable_fusion = False
 
         self.orchestrator = Orchestrator(config=scan_config, exchange_adapter=self.adapter)
+        self.orchestrator.config.min_confluence_score = _min_conf
+        self.orchestrator.config.confluence_soft_floor = _soft_floor
 
         # Reset tracking
         self.completed_trades = []
@@ -1343,6 +1341,23 @@ class LiveTradingService:
         orchestrator = self.orchestrator
 
         self.last_scan_at = datetime.now(timezone.utc)
+        def _finish_without_candidates(error=None):
+            reason = "universe_selection_failed" if error is not None else "universe_empty"
+            details = {"reason": reason, "symbols_scanned": 0, "signals_found": 0}
+            if error is not None:
+                details["error"] = f"{type(error).__name__}: {error}"
+                logger.error("Universe selection failed; scan aborted: %s", details["error"])
+            else:
+                logger.info("No eligible universe candidates; scan skipped")
+            self.current_scan = {
+                "status": "error" if error is not None else "complete",
+                "started_at": self.last_scan_at.isoformat(),
+                "completed": 0, "total": 0, "passed": 0, "rejected": 0,
+                "progress_pct": 100, "current_symbol": None, "recent_symbols": [],
+                **details,
+            }
+            self._log_activity("scan_error" if error is not None else "scan_completed", details)
+
         self.stats.scans_completed += 1
         self._log_activity("scan_started", {"scan_number": self.stats.scans_completed})
 
@@ -1363,8 +1378,8 @@ class LiveTradingService:
                     leverage=config.leverage,
                 )
             except Exception as e:
-                logger.warning(f"Pair selection failed ({e}), using default majors")
-                scan_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
+                _finish_without_candidates(e)
+                return
 
         # Apply stale-symbol drop regardless of how scan_symbols was built.
         # The user-pinned path (config.symbols) bypasses select_symbols(), so
@@ -1382,6 +1397,10 @@ class LiveTradingService:
             # the mass-conservation assert. Scan continues with the unfiltered
             # list — graceful degradation, NOT silent failure.
             logger.warning(f"filter_stale_symbols failed: {_stale_exc}")
+
+        if not scan_symbols:
+            _finish_without_candidates()
+            return
 
         # Apply the LIQUIDITY floor regardless of how scan_symbols was built — covers user-pinned
         # AND auto-selected (operator decision 2026-06-18: pinned symbols ARE liquidity-filtered;
@@ -1409,6 +1428,10 @@ class LiveTradingService:
 
         if getattr(config, "exclude_symbols", None):
             scan_symbols = [s for s in scan_symbols if s not in config.exclude_symbols]
+
+        if not scan_symbols:
+            _finish_without_candidates()
+            return
 
         self.current_scan = {
             "status": "running",
@@ -1468,7 +1491,7 @@ class LiveTradingService:
                     from types import SimpleNamespace
                     mock_plan = SimpleNamespace(
                         symbol=item.get("symbol", "Unknown"),
-                        direction=item.get("direction", "LONG"),
+                        direction=item.get("direction") or "UNKNOWN",
                         confidence_score=item.get("score", 0.0),
                         setup_type="filtered",
                         trade_type=item.get("trade_type", "unknown"),
@@ -1485,6 +1508,16 @@ class LiveTradingService:
                         reason=item.get("reason", f"Scanner Filter: {reason_type}"),
                         reason_type=reason_type,
                         threshold=item.get("threshold"),
+                        score_model_version=item.get("score_model_version"),
+                        score_policy_version=item.get('score_policy_version'),
+                        scoring_mode=item.get('scoring_mode'),
+                        score_gate=item.get('score_gate'),
+                        score_gate_passed=item.get('score_gate_passed'),
+                        evidence_families=item.get('evidence_families'),
+                        evidence_eligible=item.get('evidence_eligible'),
+                        evidence_missing=item.get('evidence_missing'),
+                        admission_passed=item.get('admission_passed'),
+                        score_calibration=item.get("score_calibration"),
                         setup_state=item.get("setup_state", "NOISE"),
                         convergence_score=item.get("convergence_score", 0),
                         convergence_critical_count=item.get("convergence_critical_count", 0),
@@ -1551,13 +1584,12 @@ class LiveTradingService:
                 return
 
         # Confluence gate
-        _preset = (config.sensitivity_preset or "balanced").lower()
-        if _preset in _SENSITIVITY_PRESETS:
-            gate = config.min_confluence if config.min_confluence is not None else _SENSITIVITY_PRESETS[_preset]["gate"]
-        else:
-            gate = config.min_confluence if config.min_confluence is not None else 65.0
+        gate, _, _ = resolve_bot_sensitivity(config, plan_strategy_gate(plan, config.sniper_mode))
 
-        if score < gate:
+        if not evidence_allows_entry(plan):
+            self._log_signal(plan, 'filtered', 'Required entry evidence is incomplete', reason_type='evidence_requirements')
+            return
+        if not passes_confluence_gate(score, gate):
             self._log_signal(plan, "filtered", f"Confluence {score:.1f} < gate {gate:.1f}", reason_type="confluence", threshold=gate)
             return
 
@@ -1609,7 +1641,7 @@ class LiveTradingService:
         _trade_type_snap = getattr(plan, "trade_type", "intraday") or "intraday"
         _raw_limit = entry_price
         _max_dist = _MAX_LIMIT_DISTANCE_PCT.get(_trade_type_snap, 0.40)
-        if score >= 70.0:
+        if passes_confluence_gate(score, STRONG_SCORE):
             _max_dist /= 2.0
         _gap_pct = abs(_raw_limit - current_price) / current_price * 100 if current_price else 0
         if _gap_pct > _max_dist and current_price > 0:
@@ -1786,7 +1818,9 @@ class LiveTradingService:
         stop_val = getattr(sl_obj, "level", 0.0) or 0.0
 
         _symbol = getattr(plan, "symbol", "Unknown")
-        _direction = getattr(plan, "direction", "LONG")
+        # Pre-direction rejections carry no trading side. Preserve that absence
+        # in the ring buffer, trace identity and persisted evidence.
+        _direction = getattr(plan, "direction", None) or "UNKNOWN"
         _tf = getattr(plan, "primary_timeframe", None) or getattr(plan, "signal_timeframe", None) or "?"
         _scan_no = self.stats.scans_completed
         # Stable signal id — same (symbol, scan, tf, side) yields the same id.
@@ -1816,7 +1850,12 @@ class LiveTradingService:
             "regime": self._current_regime_composite,
             "pullback_probability": 0.0,
             "kill_zone": _kz,
+            "strategy": deepcopy((getattr(plan, "metadata", None) or {}).get("strategy", {})),
         }
+        _score_meta = getattr(getattr(plan, "confluence_breakdown", None), "metadata", {}) or {}
+        for key in ("score_model_version", "score_policy_version", "score_calibration", "scoring_mode", "score_gate", "score_gate_passed", "evidence_eligible", "evidence_missing", "admission_passed", "evidence_families"):
+            if key in _score_meta:
+                entry[key] = _score_meta[key]
         entry.update(extra)
         self.signal_log.append(entry)
         if len(self.signal_log) > 200:
@@ -2516,6 +2555,7 @@ class LiveTradingService:
             tp_final = remaining_targets[-1].level if len(remaining_targets) > 1 else None
             positions.append({
                 "position_id": pos.position_id,
+                "strategy": deepcopy(getattr(pos, "strategy", {})),
                 "symbol": pos.symbol,
                 "direction": pos.direction,
                 "entry_price": pos.entry_price,
@@ -2618,6 +2658,7 @@ class LiveTradingService:
                 alt_velocity_1h_at_entry=getattr(pos, "alt_velocity_1h_at_entry", 0.0),
                 macro_state_at_entry=getattr(pos, "macro_state_at_entry", "unknown"),
                 regime_trend_at_entry=getattr(pos, "entry_regime_trend", "sideways"),
+                strategy=deepcopy(getattr(pos, "strategy", {})),
                 regime_labeled_at=getattr(pos, "regime_labeled_at", "entry"),
                 htf_aligned_at_entry=getattr(pos, "htf_aligned_at_entry", False),
                 setup_qualifier=getattr(pos, "setup_qualifier", "Unknown"),

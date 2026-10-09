@@ -34,15 +34,10 @@ def test_dormant_cycle_failure_is_inspectable_without_activating_strategy(primar
 def test_early_confluence_failure_preserves_original_reason_and_profile():
     method = module.Orchestrator._process_symbol
     node = ast.parse(textwrap.dedent(inspect.getsource(method))).body[0]
-    index = next(i for i, n in enumerate(node.body) if isinstance(n, ast.Try) and n.finalbody
-                 and any(isinstance(x, ast.Name) and x.id == '_fusion_active'
-                         for x in ast.walk(n)))
-    # Keep the preceding guard initialization when present, then run the actual
-    # production try/except/finally through an early input failure.
-    prefix = node.body[index-1:index]
-    if not (prefix and isinstance(prefix[0], ast.Assign)):
-        prefix = []
-    node.body = prefix + [node.body[index]]
+    block = next(n for n in node.body if isinstance(n, ast.Try)
+                 and any(isinstance(x, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'current_price_val'
+                         for t in x.targets) for x in n.body))
+    node.body = [block]
     node.args = ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[])
     svc = SimpleNamespace(config=SimpleNamespace(profile='precision'))
     context = SimpleNamespace(metadata={}, multi_tf_data=SimpleNamespace(

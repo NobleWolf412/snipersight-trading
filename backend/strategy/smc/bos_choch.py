@@ -689,21 +689,16 @@ def _determine_initial_trend(swing_highs: pd.Series, swing_lows: pd.Series) -> s
     # information the scanner hasn't reached. A temporal guard (only swings with
     # index <= scan start) would push more starts to "ranging", which the ranging
     # branch now handles — candidate follow-up, deferred to keep Phase 3B minimal.
-    if len(swing_highs) >= 2:
-        highs_values = swing_highs.values
-        if highs_values[1] > highs_values[0]:
-            return "uptrend"
-        elif highs_values[1] < highs_values[0]:
-            return "downtrend"
-
-    if len(swing_lows) >= 2:
-        lows_values = swing_lows.values
-        if lows_values[1] > lows_values[0]:
-            return "uptrend"
-        elif lows_values[1] < lows_values[0]:
-            return "downtrend"
-
-    return "ranging"
+    # Highs and lows are symmetric evidence. Contracting/expanding swings
+    # disagree about direction; choosing highs first seeded both a tape and
+    # its price reflection as downtrend and suppressed valid LONG breaks.
+    signs = set()
+    for swings in (swing_highs,swing_lows):
+        if len(swings) >= 2:
+            first,second = swings.iloc[0],swings.iloc[1]
+            if second != first:
+                signs.add(1 if second > first else -1)
+    return 'uptrend' if signs == {1} else 'downtrend' if signs == {-1} else 'ranging'
 
 
 def _calculate_htf_trend(htf_df: pd.DataFrame) -> str:

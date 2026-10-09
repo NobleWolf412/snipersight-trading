@@ -4,6 +4,7 @@ const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VIT
   : '/api';
 
 export interface LiveTradingConfigRequest {
+  selection_mode?: 'fixed';
   exchange?: string;
   sniper_mode?: string;
   risk_per_trade?: number;

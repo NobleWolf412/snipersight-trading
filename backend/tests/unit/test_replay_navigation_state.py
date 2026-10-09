@@ -133,3 +133,62 @@ def test_jump_after_backtracking_rebuilds_prefix_and_preserves_advance_count():
     result,advanced=engine.jump_to_next_signal('session',max_lookahead=3)
     assert advanced==2 and result.index==2 and result.plan['prior']==[0,1]
     assert session.orchestrator.seen==[0,1,2]
+
+
+@pytest.mark.parametrize('operation', ['delete', 'gc', 'status'])
+def test_replay_active_navigation_owns_session_until_completion(operation):
+    engine, session = fixture_engine()
+    compute = engine._compute_step
+    entered, release = threading.Event(), threading.Event()
+    def blocked(session, index):
+        entered.set()
+        assert release.wait(3)
+        return compute(session, index)
+    engine._compute_step = blocked
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(engine.step, 'session')
+        try:
+            assert entered.wait(2)
+            session.last_touched = datetime.now(timezone.utc) - timedelta(hours=2)
+            if operation == 'gc':
+                with engine._lock:
+                    assert engine._gc_idle_locked() == 0
+            else:
+                second = pool.submit(engine.end_session if operation == 'delete' else engine.session_status, 'session')
+                from concurrent.futures import TimeoutError
+                with pytest.raises(TimeoutError):
+                    second.result(timeout=.05)
+        finally:
+            release.set()
+        assert first.result().index == 0
+        assert (datetime.now(timezone.utc) - session.last_touched).total_seconds() < 2
+        if operation == 'delete':
+            assert second.result() is True and engine.get_session('session') is None
+        elif operation == 'status':
+            assert second.result()['current_index'] == 0
+
+
+def test_replay_queued_reference_cannot_navigate_after_deletion(monkeypatch):
+    engine, session = fixture_engine()
+    get_session = engine.get_session
+    captured, release = threading.Event(), threading.Event()
+    first_lookup = True
+    def controlled(sid):
+        nonlocal first_lookup
+        result = get_session(sid)
+        if first_lookup:
+            first_lookup = False
+            captured.set()
+            assert release.wait(3)
+        return result
+    monkeypatch.setattr(engine, 'get_session', controlled)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        worker = pool.submit(engine.step, 'session')
+        try:
+            assert captured.wait(2)
+            assert engine.end_session('session')
+        finally:
+            release.set()
+        with pytest.raises(KeyError):
+            worker.result()
+    assert session.step_index == -1

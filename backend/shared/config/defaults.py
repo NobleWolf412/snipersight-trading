@@ -1,11 +1,12 @@
 """
 Default configuration for SniperSight scanner.
 
-Following ARCHITECTURE.md institutional-grade defaults.
+Score defaults follow the current versioned evidence policy.
 """
 
 from dataclasses import dataclass
 from typing import Tuple, Optional
+from backend.shared.config.score_policy import STANDARD_SCORE, BOT_SCORE_PRESETS
 
 # Forward reference for PlannerConfig (avoid circular import)
 try:
@@ -20,13 +21,10 @@ class ScanConfig:
 
     profile: str = "balanced"
     timeframes: Tuple[str, ...] = ("1W", "1D", "4H", "1H", "15m", "5m")
-    min_confluence_score: float = 70.0
-    # Signal Sensitivity system — replaces the single hard gate with a two-threshold band.
-    # confluence_soft_floor: signals between floor and min_confluence_score execute at
-    #   half position size ("near-miss" band). Signals below floor are skipped entirely.
-    # Session data shows 65-74% band = 37% win rate; 75-84% = 75% win rate.
-    # Raising gate to 70 cuts ~30% volume but eliminates the worst-performing tier.
-    confluence_soft_floor: float = 62.0
+    min_confluence_score: float = STANDARD_SCORE
+    # Paper can use this floor after dynamic tightening. Normal scanner/live
+    # admission still requires its gate; these values are not win probabilities.
+    confluence_soft_floor: float = BOT_SCORE_PRESETS['balanced']['floor']
     sensitivity_preset: str = "balanced"
     min_rr_ratio: float = 1.5  # Default minimum R:R; overridden per-mode via scanner_modes.py
     btc_impulse_gate_enabled: bool = True
@@ -41,7 +39,9 @@ class ScanConfig:
     max_symbols: int = 20
     max_risk_pct: float = 2.0
     leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
-    enable_fusion: bool = False  # Bot-only: adopt Surgical/Strike weights per market regime (scanner always uses pure Stealth)
+    enable_fusion: bool = False  # Deprecated compatibility field; profile-only fusion is disabled.
+    selection_mode: str = "fixed"
+    mode_recommendation: Optional[dict] = None
     max_drawdown_pct: float = 10.0  # Session kill-switch threshold
 
     # Regime detection assets - configurable for different exchanges

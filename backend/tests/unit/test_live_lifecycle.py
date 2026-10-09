@@ -356,8 +356,9 @@ def test_startup_transition_rejects_overlapping_lifecycle_commands(executor):
             await release.wait()
             return {'status': 'running'}
         svc._start_session = setup
-        first = asyncio.create_task(svc.start(S()))
-        await entered.wait()
+        from backend.shared.config.live_trading_config import LiveTradingConfig
+        first = asyncio.create_task(svc.start(LiveTradingConfig()))
+        await asyncio.wait_for(entered.wait(), timeout=3)
         for command in (svc.start(S()), svc.reset(), svc.stop(), svc.kill_switch()):
             with pytest.raises(LifecycleConflict):
                 await command

@@ -6,7 +6,7 @@
  * `prototype/intel.jsx`.
  *
  * Data wiring:
- *   - BTC.D / USDT.D / Alt.D from `useMarketRegime` (calls /api/market/regime).
+ *   - BTC.D / STABLE.D / Alt.D from `useMarketRegime` (calls /api/market/regime).
  *     Falls through to placeholder values when the hook returns the
  *     awaiting-backend default. No fake numbers presented as real.
  *   - Regime label + visibility chip from `useMarketRegime`.
@@ -189,7 +189,7 @@ const SESSIONS: SessionSeed[] = [
 
 // ─── DominanceDial ────────────────────────────────────────────────────────
 //
-// Pure-SVG semicircular dial. Used for BTC.D (real), USDT.D (real),
+// Pure-SVG semicircular dial. Used for BTC.D (real), STABLE.D (real),
 // Fear&Greed (placeholder).
 
 interface DominanceDialProps {
@@ -1322,7 +1322,7 @@ export function Intel() {
                 />
                 <DominanceDial
                   value={usdtDom}
-                  label="USDT.D"
+                  label="STABLE.D"
                   color="var(--green-soft)"
                   range={[3, 8]}
                   sub={

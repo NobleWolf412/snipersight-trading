@@ -12,6 +12,10 @@ import logging
 from typing import Dict, Any, Optional
 
 from backend.analysis.macro_context import MacroContext
+from backend.shared.config.sensitivity import passes_confluence_gate
+from backend.shared.config.score_policy import (
+    DIRECTION_MARGIN, SCORE_MODEL_VERSION, STANDARD_SCORE, STRONG_SCORE,
+)
 
 
 def _btc_dir_to_impulse(macro_context: Optional[MacroContext]) -> Optional[str]:
@@ -23,7 +27,10 @@ def _btc_dir_to_impulse(macro_context: Optional[MacroContext]) -> Optional[str]:
     )
 
 from backend.engine.context import SniperContext
-from backend.strategy.confluence.scorer import calculate_confluence_score, ConfluenceBreakdown
+from backend.strategy.confluence.scorer import (
+    calculate_confluence_score, ConfluenceBreakdown, refresh_score_classification,
+    _institutional_sequence_evidence,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +38,13 @@ logger = logging.getLogger(__name__)
 class ConflictingDirectionsException(Exception):
     """Raised when bullish and bearish scores are too close to call."""
 
-    def __init__(self, message: str, bullish_breakdown: ConfluenceBreakdown, bearish_breakdown: ConfluenceBreakdown):
+    def __init__(self, message: str, bullish_breakdown: ConfluenceBreakdown, bearish_breakdown: ConfluenceBreakdown,
+                 *, selected_direction: Optional[str] = None, gate_name: str = "confluence_tie_break"):
         super().__init__(message)
         self.bullish_breakdown = bullish_breakdown
         self.bearish_breakdown = bearish_breakdown
+        self.selected_direction = selected_direction
+        self.gate_name = gate_name
 
 
 def resolve_directional_tie(
@@ -155,6 +165,7 @@ class ConfluenceService:
         cycle_context: Optional[Any] = None,
         reversal_context_long: Optional[Any] = None,
         reversal_context_short: Optional[Any] = None,
+        selected_direction: Optional[str] = None,
     ) -> ConfluenceBreakdown:
         """
         Compute confluence score for both directions.
@@ -167,15 +178,18 @@ class ConfluenceService:
             cycle_context: Cycle timing context
             reversal_context_long: Reversal context for longs
             reversal_context_short: Reversal context for shorts
+            selected_direction: Optional LONG/SHORT thesis; bypasses only legacy selection
 
         Returns:
-            ConfluenceBreakdown with scoring details for the best direction
+            ConfluenceBreakdown for the selected thesis direction, or legacy score winner
 
         Side Effects:
             Sets context.metadata['chosen_direction'] to 'LONG' or 'SHORT'
             Sets context.metadata['alt_confluence'] with both direction scores
         """
         self._diagnostics = {"confluence_rejections": []}
+        if selected_direction is not None and selected_direction not in ("LONG", "SHORT"):
+            raise ValueError("selected_direction must be LONG or SHORT")
 
         if not context.smc_snapshot or not context.multi_tf_indicators:
             raise ValueError(
@@ -215,7 +229,6 @@ class ConfluenceService:
 
             # NEW: Require minimum margin for directional confidence
             # Close scores (within margin) are treated as indeterminate
-            DIRECTION_MARGIN = 5.0  # Minimum score edge required (was 8.0 — too aggressive, caused excessive compressed vol ties)
             score_diff = bullish_breakdown.total_score - bearish_breakdown.total_score
 
             # Determine winner - use STRICT greater-than to avoid long bias on ties
@@ -225,7 +238,17 @@ class ConfluenceService:
             # When pre-scoring gates found heavy structural opposition (3+ OBs) and
             # flipped direction, honour that structural evidence for close calls.
             _cd_flip = context.metadata.get("conflict_density_flip")
-            if _cd_flip and abs(score_diff) < DIRECTION_MARGIN:
+            bullish_eligible = bullish_breakdown.metadata.get("evidence_eligible") is not False
+            bearish_eligible = bearish_breakdown.metadata.get("evidence_eligible") is not False
+            if selected_direction is not None:
+                chosen_direction = selected_direction
+                chosen = bullish_breakdown if selected_direction == "LONG" else bearish_breakdown
+                tie_break_used = "thesis_direction"
+            elif bullish_eligible != bearish_eligible:
+                chosen_direction = "LONG" if bullish_eligible else "SHORT"
+                chosen = bullish_breakdown if bullish_eligible else bearish_breakdown
+                tie_break_used = "evidence_eligibility"
+            elif _cd_flip and abs(score_diff) < DIRECTION_MARGIN:
                 _flip_to = _cd_flip["to"]
                 if _flip_to == "SHORT":
                     chosen = bearish_breakdown
@@ -266,9 +289,9 @@ class ConfluenceService:
 
             else:
                 # Gap is within margin — but check THRESHOLD-BASED tiebreaker first
-                min_threshold = getattr(self._config, "min_confluence_score", 70.0)
-                bullish_passes = bullish_breakdown.total_score >= min_threshold
-                bearish_passes = bearish_breakdown.total_score >= min_threshold
+                min_threshold = getattr(self._config, "min_confluence_score", STANDARD_SCORE)
+                bullish_passes = passes_confluence_gate(bullish_breakdown.total_score, min_threshold)
+                bearish_passes = passes_confluence_gate(bearish_breakdown.total_score, min_threshold)
 
                 if bullish_passes and not bearish_passes:
                     chosen = bullish_breakdown
@@ -367,7 +390,8 @@ class ConfluenceService:
                         )
                         is_scalp_mode = current_profile in ("precision", "surgical", "intraday_aggressive", "strike")
                         both_scores_high = (
-                            bullish_breakdown.total_score >= 70 and bearish_breakdown.total_score >= 70
+                            passes_confluence_gate(bullish_breakdown.total_score, STRONG_SCORE)
+                            and passes_confluence_gate(bearish_breakdown.total_score, STRONG_SCORE)
                         )
 
                         if is_scalp_mode and both_scores_high:
@@ -398,10 +422,10 @@ class ConfluenceService:
                             # Non-scalp mode in neutral regime
                             # NEW: Check if local structure provides directional edge
 
-                            # Only attempt structure override if scores are strong (>70%)
+                            # Structure override requires both sides to meet the strong evidence band.
                             if (
-                                bullish_breakdown.total_score > 70
-                                and bearish_breakdown.total_score > 70
+                                passes_confluence_gate(bullish_breakdown.total_score, STRONG_SCORE)
+                                and passes_confluence_gate(bearish_breakdown.total_score, STRONG_SCORE)
                             ):
                                 # Count recent structural breaks for each direction
                                 bullish_structure = self._count_recent_structure(
@@ -464,11 +488,11 @@ class ConfluenceService:
                                     )
 
                                 # NOTE: This else branch is unreachable. We are inside the
-                                # `if bullish > 70 and bearish > 70` block, so both_scores_high
-                                # (which checks >= 70) is always True here. The elif above always
+                                # both-sides-STRONG_SCORE block, so both_scores_high
+                                # is always True here. The elif above always
                                 # matches. Dead code removed — ConflictingDirectionsException for
                                 # the neutral-regime tied-structure case is raised in the outer
-                                # `else` block below (non-scalp, scores <= 70).
+                                # `else` block below (non-scalp, scores below the strong band).
 
                             else:
                                 # Scores not strong enough for structure override (<=70%).
@@ -496,55 +520,57 @@ class ConfluenceService:
             # CRITICAL: Store chosen direction in context for downstream use
             context.metadata["chosen_direction"] = chosen_direction
 
-            # === HTF ALIGNMENT BONUS ===
-            # When global (daily) and local (symbol/4H) regimes both agree with the trade
-            # direction, amplify the confluence score to reward high-conviction setups.
-            global_regime = context.metadata.get("global_regime")
-            symbol_regime = context.metadata.get("symbol_regime")
-            if global_regime and symbol_regime:
-                global_trend = getattr(global_regime, "trend", "sideways")
-                symbol_trend = getattr(symbol_regime, "trend", "sideways")
-                direction_lower = chosen_direction.lower()
+            # The raw diagnostic scores are retained separately from the adjusted winner.
+            context.metadata["raw_directional_scores"] = {
+                "long": bullish_breakdown.total_score, "short": bearish_breakdown.total_score,
+            }
+            for key in ("htf_alignment_bonus", "counter_htf_penalty", "counter_htf_scalp",
+                        "counter_htf_type", "counter_htf_tf", "reversal"):
+                context.metadata.pop(key, None)
 
-                macro_aligned = (
-                    (direction_lower in ("bullish", "long") and global_trend in ("up", "strong_up"))
-                    or (direction_lower in ("bearish", "short") and global_trend in ("down", "strong_down"))
-                )
-                local_aligned = (
-                    (direction_lower in ("bullish", "long") and symbol_trend in ("up", "strong_up"))
-                    or (direction_lower in ("bearish", "short") and symbol_trend in ("down", "strong_down"))
+            if chosen.metadata.get("evidence_eligible") is False:
+                missing = chosen.metadata.get("evidence_missing") or ["required evidence is missing"]
+                raise ConflictingDirectionsException(
+                    f"{context.symbol}: Evidence requirements failed — {', '.join(map(str, missing))}",
+                    bullish_breakdown=bullish_breakdown,
+                    bearish_breakdown=bearish_breakdown,
+                    selected_direction=chosen_direction,
+                    gate_name="evidence_requirements",
                 )
 
-                if macro_aligned and local_aligned:
-                    alignment_bonus = 5.0
-                    chosen.total_score = min(100.0, chosen.total_score + alignment_bonus)
-                    context.metadata["htf_alignment_bonus"] = alignment_bonus
-                    logger.debug(
-                        "%s: Full HTF alignment bonus +%.1f (global=%s, local=%s, dir=%s)",
-                        context.symbol, alignment_bonus, global_trend, symbol_trend, chosen_direction,
-                    )
-                elif local_aligned and not macro_aligned:
-                    local_bonus = 2.0
-                    chosen.total_score = min(100.0, chosen.total_score + local_bonus)
-                    context.metadata["htf_alignment_bonus"] = local_bonus
-                    logger.debug(
-                        "%s: Local HTF alignment bonus +%.1f (local=%s aligns, global=%s opposes)",
-                        context.symbol, local_bonus, symbol_trend, global_trend,
-                    )
+            def adjust_score(name: str, delta: float) -> None:
+                before = chosen.total_score
+                chosen.total_score = max(0.0, min(100.0, before + delta))
+                trace = chosen.metadata.setdefault("score_components", {
+                    "initial_score": before, "adjustments": [],
+                })
+                trace["adjustments"].append({"name": name, "delta": chosen.total_score - before,
+                                             "requested_delta": delta})
+                trace["final_score"] = chosen.total_score
+
+            # Regime Alignment already scores local directional alignment. Do
+            # not add another +2/+5 for the same observation after selecting a
+            # winner. Keep counter-HTF eligibility/risk policy below explicit.
 
             # === COUNTER-HTF EVALUATION ===
-            # When the trade is NOT aligned with the effective HTF trend (from symbol_regime,
-            # which is 4H-based for scalp modes), apply a score penalty instead of a hard block.
+            # The family model distinguishes opposition from neutral/missing HTF evidence.
+            # Only actual opposition invokes counter-HTF eligibility and penalties.
+            # Legacy breakdowns retain their prior htf_aligned interpretation.
             # A hard block is only used as a last resort when there is zero supporting evidence.
             #
             # Penalty tiers (applied to chosen.total_score):
             #   confirmed   (full inst_seq)  → −5
-            #   partial     (CHoCH + OB)     → −10
+            #   partial     (shift + OB/FVG) → −10
             #   soft        (sweep or diverg) → −15
             #   minimal     (ranging market) → −20
             #
             # The mode's min_confluence_score then acts as the natural gate.
-            if not chosen.htf_aligned:
+            is_family_score = chosen.metadata.get("score_model_version") == SCORE_MODEL_VERSION
+            counter_htf = (
+                chosen.metadata.get("htf_direction_status") == "opposed"
+                if is_family_score else not chosen.htf_aligned
+            )
+            if counter_htf:
                 smc = context.smc_snapshot
                 direction_normalized = chosen_direction.upper()
                 is_long = direction_normalized == "LONG"
@@ -593,13 +619,15 @@ class ConfluenceService:
 
                 ob_factor = next((f for f in chosen.factors if f.name == "Order Block"), None)
                 has_ob = ob_factor is not None and ob_factor.score >= 50
+                fvg_factor = next((f for f in chosen.factors if f.name == "Fair Value Gap"), None)
+                has_fvg = fvg_factor is not None and fvg_factor.score >= 50
+                has_entry_anchor = has_ob or has_fvg
 
                 # Soft conditions — divergence read directly from chosen breakdown factors.
                 # context.metadata["divergence_direction"] was never populated upstream,
                 # so we check the "Price-Indicator Divergence" factor score instead.
-                # Score >= 60 means a meaningful direction-aligned divergence was detected
-                # (the scorer is already called with the chosen direction, so any score
-                # above noise level confirms alignment).
+                # Deduplicated divergence is normalized to 0-100 per event.
+                # 60 remains a quality cutoff, not a count of RSI/MACD votes.
                 div_factor = next(
                     (f for f in chosen.factors if f.name == "Price-Indicator Divergence"), None
                 )
@@ -618,7 +646,9 @@ class ConfluenceService:
 
                 soft_conditions_met = has_any_sweep or has_structure_shift or has_divergence or has_pullback
 
-                inst_seq_confirmed = has_confirmed_sweep and has_structure_shift and has_ob
+                sequence = _institutional_sequence_evidence(smc, chosen_direction, allowed_timeframes=allowed_tfs)
+                inst_seq_confirmed = (has_confirmed_sweep and has_structure_shift and has_entry_anchor
+                                      and sequence["ordered"] and sequence["sweep_confirmation"] >= 1)
 
                 # Check global regime volatility — ranging markets require less confirmation.
                 # MarketRegime stores volatility at .dimensions.volatility, not as a top-level
@@ -640,24 +670,24 @@ class ConfluenceService:
                     # Hard block: no evidence whatsoever + actively trending against us
                     logger.info(
                         "🚫 %s Counter-HTF BLOCKED — no supporting evidence "
-                        "(sweep=%s, choch=%s, ob=%s, divergence=%s, pullback=%s, ranging=%s)",
-                        context.symbol, has_any_sweep, has_structure_shift, has_ob,
+                        "(sweep=%s, choch=%s, anchor=%s, divergence=%s, pullback=%s, ranging=%s)",
+                        context.symbol, has_any_sweep, has_structure_shift, has_entry_anchor,
                         has_divergence, has_pullback, is_ranging,
                     )
-                    context.metadata["chosen_direction"] = None
                     raise ConflictingDirectionsException(
                         f"{context.symbol}: Counter-HTF blocked — "
                         f"no sweep, CHoCH, divergence, or pullback evidence "
-                        f"(sweep={has_any_sweep}, choch={has_structure_shift}, ob={has_ob})",
+                        f"(sweep={has_any_sweep}, choch={has_structure_shift}, ob={has_ob}, fvg={has_fvg})",
                         bullish_breakdown=bullish_breakdown,
                         bearish_breakdown=bearish_breakdown,
+                        selected_direction=chosen_direction, gate_name="counter_htf",
                     )
 
                 # Apply score penalty based on how well-confirmed the counter-HTF setup is
                 if inst_seq_confirmed:
                     htf_penalty = -5.0
                     counter_htf_quality = "confirmed"
-                elif has_structure_shift and has_ob:
+                elif has_structure_shift and has_entry_anchor:
                     htf_penalty = -10.0
                     counter_htf_quality = "partial"
                 elif has_any_sweep or has_divergence or has_pullback:
@@ -667,7 +697,7 @@ class ConfluenceService:
                     htf_penalty = -20.0
                     counter_htf_quality = "minimal"
 
-                chosen.total_score = max(0.0, chosen.total_score + htf_penalty)
+                adjust_score("counter_htf", htf_penalty)
                 context.metadata["counter_htf_penalty"] = htf_penalty
                 context.metadata["counter_htf_quality"] = counter_htf_quality
 
@@ -721,6 +751,7 @@ class ConfluenceService:
                     "rationale": getattr(chosen_reversal, "rationale", ""),
                 }
 
+            refresh_score_classification(chosen, self._config)
             return chosen
 
         except Exception as e:
@@ -741,10 +772,8 @@ class ConfluenceService:
         current_price: float,
     ) -> ConfluenceBreakdown:
         """Score a single direction using the existing scorer."""
-        # Derive htf_trend from symbol_regime so the "HTF Alignment" factor actually fires.
-        # Previously htf_trend was never passed → the factor was never added → 0.15 weight
-        # was permanently dead. Now we read the symbol regime trend (or fall back to global)
-        # and map it to the scorer's "bullish"/"bearish" vocabulary.
+        # Map symbol/global regime direction into the scorer's context vocabulary.
+        # The scorer retains neutral/unknown separately from explicitly opposed.
         htf_trend_str: Optional[str] = None
         symbol_regime = context.metadata.get("symbol_regime")
         if not symbol_regime:

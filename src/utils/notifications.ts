@@ -132,7 +132,7 @@ class BrowserNotificationManager {
       acknowledged: false,
       config: {
         title: `🎯 High-Confidence Setup: ${signal.symbol}`,
-        body: `${signal.direction} • ${signal.confidence.toFixed(1)}% confidence • ${signal.riskReward.toFixed(1)}:1 R:R • Entry: $${signal.entry.toFixed(2)}`,
+        body: `${signal.direction} • score ${signal.confidence.toFixed(1)}/100 • ${signal.riskReward.toFixed(1)}:1 R:R • Entry: $${signal.entry.toFixed(2)}`,
         icon: '/icons/signal-icon.png',
         badge: '/icons/badge.png',
         tag: `signal-${signal.symbol}`,

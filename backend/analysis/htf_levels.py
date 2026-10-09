@@ -8,7 +8,7 @@ Also calculates Fibonacci retracement levels from significant swing ranges.
 
 from dataclasses import dataclass
 from typing import List, Optional, Literal
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as np
 import logging
 
@@ -542,12 +542,19 @@ class HTFLevelDetector:
         # Touch count (max 40 points)
         score += min(40, touches * 10)
 
+        # Candle timestamps are UTC; support legacy naive UTC inputs as well.
+        now = datetime.now(timezone.utc)
+        if first_seen.tzinfo is None:
+            first_seen = first_seen.replace(tzinfo=timezone.utc)
+        if last_touch.tzinfo is None:
+            last_touch = last_touch.replace(tzinfo=timezone.utc)
+
         # Age (max 20 points) - levels >30 days old are established
-        age_days = (datetime.now() - first_seen).days
+        age_days = (now - first_seen).days
         score += min(20, (age_days / 30) * 20)
 
         # Recency (max 20 points) - last touch within 7 days is relevant
-        recency_days = (datetime.now() - last_touch).days
+        recency_days = (now - last_touch).days
         if recency_days <= 7:
             score += 20
         elif recency_days <= 14:

@@ -173,7 +173,7 @@ export function PipelineTracer({ signalId, onClose }: Props) {
               className="mono"
               style={{
                 fontSize: 9,
-                color: trace.side === 'long' ? 'var(--green-soft)' : 'var(--red-2)',
+                color: trace.side === 'long' ? 'var(--green-soft)' : trace.side === 'short' ? 'var(--red-2)' : 'var(--fg-3)',
                 letterSpacing: '.16em',
                 fontWeight: 700,
               }}

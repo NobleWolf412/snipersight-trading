@@ -54,9 +54,7 @@ def _ctx() -> SniperContext:
 
 
 def _orch() -> Orchestrator:
-    o = object.__new__(Orchestrator)
-    o.config = ScanConfig()
-    o.scanner_mode = get_mode("stealth")
+    o = Orchestrator(ScanConfig(profile=get_mode("stealth").profile), exchange_adapter=object())
     o.current_regime = None        # read at orchestrator.py:3164 (global_regime enrichment)
     o.macro_context = None
     o.exchange_adapter = None

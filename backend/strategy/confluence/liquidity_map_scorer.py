@@ -1,17 +1,11 @@
 """
 Liquidity Map Scorer
 
-Scores a trade based on its alignment with the liquidity draw —
-the path from recently swept liquidity (origin) to the nearest
-unswept pool (target/magnet).
-
-Markets move from liquidity to liquidity. A trade long toward an
-unswept equal-highs cluster is inherently higher probability than
-one with no visible target.
+Scores target pools and session/weekly reference levels in a trade's direction.
+This is a heuristic geometry score, not a calibrated probability.
 
 Data sources (all already detected):
   - SMCSnapshot.liquidity_pools  — equal highs/lows (LiquidityPool objects)
-  - SMCSnapshot.liquidity_sweeps — recent sweeps (origin confirmation)
   - SMCSnapshot.key_levels       — dict with pwh/pwl/pdh/pdl
 """
 
@@ -78,25 +72,10 @@ def score_liquidity_draw(
             f"at {target_pool.level:.2f} ({distance_atr:.1f} ATR ahead)",
         ))
 
-    # ── 2. Recent sweep behind price (origin confirmation) ───────────────
-    # A confirmed sweep of lows (for longs) or highs (for shorts) means price
-    # has grabbed liquidity and is now likely drawing toward the opposite side.
-    origin_sweep_type = "low" if is_long else "high"
-    origin_sweeps = [
-        s for s in (smc.liquidity_sweeps or [])
-        if getattr(s, "sweep_type", "") == origin_sweep_type
-        and getattr(s, "confirmation_level", 1 if getattr(s, "confirmation", False) else 0) >= 1
-    ]
-    if origin_sweeps:
-        sweep_bonus = 15.0
-        raw_score += sweep_bonus
-        factors.append((
-            "Liquidity Origin Sweep",
-            sweep_bonus,
-            f"Confirmed {origin_sweep_type} sweep — price drawing opposite",
-        ))
+    # The origin sweep is already scored by Liquidity Sweep and its ordering
+    # by Institutional Sequence. It supplies no additional target evidence.
 
-    # ── 3. Key level proximity (session/weekly as reference) ─────────────
+    # ── 2. Key level proximity (session/weekly as reference) ─────────────
     key_levels: Optional[Dict[str, Any]] = smc.key_levels  # Stored as dict via to_dict()
     if key_levels and atr > 0:
         kl_score = _score_key_level_proximity(is_long, current_price, key_levels, atr)

@@ -8,6 +8,8 @@ Also supports mode-aware thresholds (scalp vs swing horizons).
 
 from typing import Dict, Literal, Optional
 from dataclasses import dataclass
+from backend.shared.config.score_policy import STANDARD_SCORE, STRONG_SCORE, WATCH_SCORE
+from backend.shared.config.sensitivity import passes_confluence_gate
 
 
 @dataclass(frozen=True)
@@ -118,16 +120,16 @@ def classify_conviction(
     if (
         plan_type == "SMC"
         and risk_reward >= threshold.ideal_rr
-        and confluence_score >= 80.0
+        and passes_confluence_gate(confluence_score, STRONG_SCORE)
         and has_all_critical_tfs
     ):
         return "A"
 
     # Class B: Close to ideal (allows good ATR_FALLBACK)
-    # - R:R near ideal (≥80% of ideal) + decent confluence (≥65)
+    # - R:R near ideal (≥80% of ideal) + standard evidence quality
     # - OR strong structure (SMC/HYBRID) with decent R:R
     rr_near_ideal = risk_reward >= (threshold.ideal_rr * 0.8)
-    decent_confluence = confluence_score >= 65.0
+    decent_confluence = passes_confluence_gate(confluence_score, STANDARD_SCORE)
 
     if rr_near_ideal and decent_confluence:
         return "B"
@@ -136,7 +138,7 @@ def classify_conviction(
         return "B"
 
     # ATR_FALLBACK cap: can be B if decent, but never A
-    if plan_type == "ATR_FALLBACK" and risk_reward >= threshold.min_rr and confluence_score >= 60.0:
+    if plan_type == "ATR_FALLBACK" and risk_reward >= threshold.min_rr and passes_confluence_gate(confluence_score, WATCH_SCORE):
         return "B"
 
     # Class C: Barely acceptable
@@ -171,7 +173,7 @@ def validate_rr(
 
     EV Override Logic (reserved for future callers; not used by planner):
     - If expected_value provided and > 0.02 (positive expected value)
-    - AND confluence_score >= 70 (strong confluence)
+    - AND confluence_score meets the policy's strong evidence band
     - Allow R:R down to 0.75 (25% below standard minimum)
     - Note: scalps are excluded from EV override regardless of confluence
 
@@ -234,7 +236,7 @@ def validate_rr(
         expected_value is not None
         and confluence_score is not None
         and expected_value > 0.02
-        and confluence_score >= 70.0
+        and passes_confluence_gate(confluence_score, STRONG_SCORE)
         and risk_reward >= ev_floor  # Trade-type-aware floor
     ):
         return (

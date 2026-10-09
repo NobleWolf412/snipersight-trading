@@ -69,6 +69,14 @@ const POLL_MS = 30_000;
 // (`structure`, `volume`, `momentum`, etc.). Anything not listed falls
 // back to the neutral `--fg-3` tone.
 const FACTOR_COLORS: Record<string, string> = {
+  'entry anchor': '#fbbf24',
+  'structural confirmation': 'var(--green-soft)',
+  'directional context': '#a78bfa',
+  'momentum evidence': '#7dd3fc',
+  'entry location': '#f472b6',
+  participation: 'var(--accent)',
+  destination: '#4ade80',
+  'session timing': '#fb923c',
   structure:   'var(--green-soft)',
   volume:      'var(--accent)',
   momentum:    '#7dd3fc',  // light blue
@@ -237,6 +245,7 @@ export function ConfluenceBreakdown() {
             letterSpacing: '.10em',
           }}
         >
+          <span>NET ADJUSTMENTS {(dist.avg_total_score - contributionTotal(dist.factors)).toFixed(1)}</span>
           <span>SYNERGY <span style={{ color: 'var(--green-soft)', fontWeight: 700 }}>+{dist.avg_synergy_bonus.toFixed(1)}</span></span>
           <span>CONFLICT <span style={{ color: 'var(--red-2)', fontWeight: 700 }}>{dist.avg_conflict_penalty.toFixed(1)}</span></span>
         </div>
@@ -264,7 +273,13 @@ export function ConfluenceBreakdown() {
 
 // ─── Subviews ────────────────────────────────────────────────────────
 
-function renderStackedBar(factors: FactorContribution[], label: string) {
+function contributionTotal(factors: FactorContribution[]): number {
+  return factors.filter(f => f.avg_weight > 0)
+    .reduce((sum, factor) => sum + Math.max(0, factor.avg_weighted_score), 0);
+}
+
+export function renderStackedBar(allFactors: FactorContribution[], label: string) {
+  const factors = allFactors.filter(f => f.avg_weight > 0);
   const total = factors.reduce((s, f) => s + Math.max(0, f.avg_weighted_score), 0);
   if (total === 0) {
     return (
@@ -291,7 +306,7 @@ function renderStackedBar(factors: FactorContribution[], label: string) {
         }}
       >
         <span>{label}</span>
-        <span>{total.toFixed(1)} TOTAL</span>
+        <span>{total.toFixed(1)} WEIGHTED BASE · BEFORE ADJUSTMENTS</span>
       </div>
       {/* Stacked bar */}
       <div
@@ -394,6 +409,7 @@ function renderDirectionRow(bd: DirectionDistribution) {
         </span>
         <span>{bd.sample_count} samples</span>
         <span>avg <span style={{ color: 'var(--fg-2)', fontWeight: 700 }}>{bd.avg_total_score.toFixed(1)}</span></span>
+        <span>net adjustments {(bd.avg_total_score - contributionTotal(bd.factors)).toFixed(1)}</span>
         <span>synergy <span style={{ color: 'var(--green-soft)' }}>+{bd.avg_synergy_bonus.toFixed(1)}</span></span>
         <span>conflict <span style={{ color: 'var(--red-2)' }}>{bd.avg_conflict_penalty.toFixed(1)}</span></span>
       </div>

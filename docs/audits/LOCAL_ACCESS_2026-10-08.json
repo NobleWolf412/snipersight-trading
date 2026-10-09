@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-08",
+  "scope": "User-authorized local dashboard startup and desktop/phone access setup",
+  "launcher": "scripts/start_windows.ps1",
+  "desktop_shortcut": "C:/Users/macca/OneDrive/Desktop/SniperSight.lnk",
+  "local_url": "http://127.0.0.1:5000",
+  "phone_url": "https://noblewolf.tailb37fc7.ts.net:8446/",
+  "tailscale_access": "tailnet only; no Funnel enabled for port 8446",
+  "tailscale_previous_config": "C:/Users/macca/AppData/Local/SniperSight/tailscale-before-20261008-211219.json",
+  "runtime_logs": "%LOCALAPPDATA%/SniperSight/logs",
+  "verification": [
+    "PowerShell launcher parsed successfully",
+    "Cold startup completed with installed Node and repository Python venv",
+    "Repeated invocation under Windows PowerShell reused the same listening process IDs",
+    "UI and API health returned HTTP 200 through localhost and private Tailscale HTTPS",
+    "Dashboard rendered in a browser through the private HTTPS address",
+    "Paper and live bot status endpoints both returned idle",
+    "Phone was reported online in Tailscale status"
+  ],
+  "limitations": [
+    "Phone browser access and home-screen installation require user verification on the phone",
+    "PC must stay awake; app is not configured to start automatically after reboot",
+    "Launcher has no automatic code reload",
+    "Dashboard startup and health checks do not establish scanner, exchange or trading correctness",
+    "This was an actual application startup with normal runtime initialization, not an isolated offline test"
+  ]
+}

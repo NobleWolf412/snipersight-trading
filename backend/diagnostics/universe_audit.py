@@ -9,11 +9,10 @@ misclassifying every symbol as non-perp).
 Invariants enforced (failures — provable bugs):
   (a) Every drop reason is in the documented vocabulary.
   (b) selected ∩ dropped is empty (no symbol in both buckets).
-  (c) Mass conservation: every symbol from the original fetched set is
-      either in `selected` or in `dropped`. Asserted inside
-      _select_symbols_impl as well; the audit re-checks externally.
-  (d) qualified > 0 when fetched > 0 (otherwise the adapter or every
-      filter rejected everything — almost certainly a bug, not user intent).
+  (c) Count conservation: fetched equals selected plus dropped. Original
+      candidate identity is checked inside _select_symbols_impl.
+  (d) No duplicate symbols within selected or dropped.
+      An empty qualified set can be the correct result of strict filters.
 
 Observations (notes — heuristic, not failures):
   - Per-reason proportions surfaced as informational data. Until 10–20
@@ -203,14 +202,21 @@ def audit_universe(
             f" ({len(overlap)} symbols)"
         )
 
-    # Invariant: qualified > 0 when fetched > 0
-    if fetched > 0 and len(selected) == 0:
+    if len(selected_set) != len(selected) or len(dropped_set) != len(dropped):
+        failures.append("duplicate symbols within selected or dropped")
+    if fetched != len(selected) + len(dropped):
         failures.append(
-            f"fetched={fetched} but qualified=0 — every candidate was dropped. "
-            f"drops_by_reason={drops_by_reason}"
+            f"candidate count mismatch: fetched={fetched}, "
+            f"qualified={len(selected)}, dropped={len(dropped)}"
         )
 
     notes: List[str] = []
+    # A strict filter may legitimately exclude the entire fetched pool.
+    if fetched > 0 and not selected:
+        notes.append(
+            f"fetched={fetched} but qualified=0 — every candidate was dropped. "
+            f"drops_by_reason={drops_by_reason}"
+        )
 
     # Provisional rate observations — NOT failures. The 90% / 50% bounds
     # in earlier drafts were untuned guesses; firing DEGRADED on guesses

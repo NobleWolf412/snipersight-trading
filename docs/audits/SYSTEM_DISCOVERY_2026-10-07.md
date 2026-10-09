@@ -945,10 +945,10 @@ No scores, weights or threshold calibration were changed to increase signal coun
 
 | Priority / type | Evidence and consequence | Concrete next batch / verification / rollback |
 |---|---|---|
-| P1 confirmed validation defect: ML chronology | Journal query is newest-first; feature dataset preserves order; combined training concatenates trades and signals. The synthetic probe trains on day 28 and tests on day 19. Purge is positional; computed embargo is unused. Filtered signals become weak negative labels without realized outcomes; missing P&L defaults to zero. Trained legacy paper gate can consume this model; thesis bypasses it. Current saved model and its actual activation were not read. | Define chronological observation/label-availability times, eliminate outcome-unknown loss labels, prevent duplicate trade/signal leakage, and validate on forward untouched cohorts. Version the dataset and invalidate incompatible model artifacts. Compare calibration and abstention, not just accuracy. Preserve old artifact for rollback; do not silently retrain or load it during audit. |
-| P1 conflicting universe contract | Controlled majors-only fixture selects DOGE and ADA while reporting both bucket_excluded. Older selection tests explicitly expect category backfill; reporting tests expect exclusion. Fallback/perp substitution can also revisit earlier exclusions. This affects both trading universe and macro basket. | Choose strict inclusion versus priority-with-backfill, then change selector, UI wording and conservation tests together. Require selected ∩ dropped = empty plus all-toggle/fallback fixtures. Do not infer intended behavior solely from stale comments. Revert the complete selection/reporting batch together. |
-| P1 architecture risk: shared/blocking API work | Market-regime endpoint synchronously calls shared scanner engine without its scan lock; replay async endpoints invoke synchronous load/step/jump. These can block event-loop work; shared mode context can race. Code trace only, no production load probe. | Give market reads immutable/private context and move blocking work off loop with bounded ownership/cancellation. Test concurrent modes, scan/read overlap, delete/step and cancelled workers. Keep endpoint schemas; roll back service/route ownership together. |
-| P1 evidence integrity: rejection direction | Paper rejection logging constructs a fallback LONG when direction is absent. Historical samples contain many zero-score LONG rows; not every one can be attributed to that fallback. | Introduce explicit unknown direction across producer, JSONL contract, TypeScript consumers and diagnostics. Test unknown/both directions; preserve old records without guessing. Do not interpret old direction counts as directional edge. |
+| Out of scope: pre-existing ML research code | Earlier synthetic inspection found chronology/label issues in repository code. The user confirms ML was never implemented in their workflow; no current model activation was established. | No ML implementation, training, activation, artifact invalidation or remediation is scheduled. Preserve the historical observation without treating an unused subsystem as an active product priority. |
+| Resolved: conflicting universe contract | Strict inclusion now keeps selected and dropped disjoint, filters initial fallbacks, and terminates empty/error bot scans. Paper uses the adapter-owned market type. | See the strict-universe follow-up below: 82 targeted / 1,951 selected backend passes and independent review. Revert selector, caller, diagnostic and UI semantics together if needed. Global snapshot ownership remains a separate question. |
+| Resolved in the bounded API ownership pass | Market/regime and recommendation now use private fixed-source contexts; replay work leaves the event loop, retains admitted workers through task cancellation, and coordinates navigation/status/delete/GC. | See the API read ownership follow-up and evidence ledger. Real ASGI/browser disconnect and deployment behavior remain unverified; revert the route/service/engine ownership batch together if needed. |
+| Resolved for new scan evidence: rejection direction | Paper's wrapper was corrected in the worker-evidence batch; the 2026-10-09 follow-up corrects live's wrapper and log writer. Missing/null/empty direction now remains UNKNOWN. Historical samples still contain zero-score LONG rows whose provenance cannot all be reconstructed. | See live rejection-direction verification below: 175 focused passes and one documented storage implementation-hash delta; baseline preserved. UI already renders unknown neutrally. Do not rewrite or infer directional edge from old rows. |
 | P1 evidence limitation: historical reconstruction | 384 unique journal IDs and three clean completed telemetry-run count reconciliations; frozen candles, revision, effective flags and complete execution-fee attribution are absent. Current replay correctly declares missing historical context. | Define minimal immutable decision package and retention before collecting a new paper baseline. Include source/as-of, effective config hash, revision, candidate/rejection identity and execution links. Reconstruct one accepted/rejected/winning/losing case exactly before claiming causal performance. |
 | P2 confirmed field mismatch / strategy interaction | Confluence post-score bonus reads global_regime.trend although source is dimensions.trend: fixture gets +2, not intended +5. Trend already affects composite/alignment, macro, gates and sizing. | Decide whether this bonus should exist using controlled ablation. Fixing the field alone activates additional correlated weight. Keep existing value until that change has a measured baseline; rollback by explicit config version. |
 | P2 config cohesion | Policy object and cached thesis flag are captured at construction while downstream branches reread environment. Mode → user score/sensitivity/soft-floor/planner/fusion overrides differ across scanner/paper/live. Some policy fields (allow_in_risk_off, rr_adjustment) have no active production reads located; adjustment helper is uncalled. | One immutable effective session configuration with provenance and a precedence table, then parity tests for intended differences. Do not merge modes or enforce a stale score floor by assumption. Preserve original resolved config for rollback. |
@@ -972,8 +972,418 @@ No scores, weights or threshold calibration were changed to increase signal coun
 | Unresolved | Other adapters, ML artifact versions, backtest/research variants, archived UI/CLI/plugin/dynamic modules | Inventory is not deletion evidence. No bulk deletion or recursive cleanup performed. |
 | Generated/vendor | Dependency/build output and derived graph artifacts | Excluded from first-party behavior claims; do not confuse regeneration with source verification. |
 
-Recommended order: fix evidence/ownership contracts (P1), collect reproducible
-forward paper cases, then evaluate strategy interactions (P2), then decompose or
-delete proven redundant code. Each batch should update the existing index and
+Revised order after the user's scope correction: verify the existing scanner-to-paper
+workflow and repair reproduced execution/persistence failures first; then resolve
+universe reporting, unknown rejection direction and shared API ownership. Collect
+reproducible inputs/configuration before evaluating strategy interactions. Cleanup
+follows correctness. ML is outside this work. Each batch should update the existing index and
 ledger, preserve exact rollback boundaries, and keep performance claims separate
 from software correctness.
+
+
+## Paper workflow integration — 2026-10-08
+
+The user approved prioritizing the existing scanner/bot workflow after clarifying
+that ML was never implemented in their workflow. This follow-up changes only
+paper execution, its service wiring, isolated verification and this documentation.
+
+The first joined test run reproduced **14 failures across LONG and SHORT**:
+actual stop-fill price differed from the published price; a partial market exit
+was treated as complete; the position cap was checked after a pending fill;
+a partial entry could refill after closure; journal retries consumed a different
+P&L value; and paper shutdown closed the manager without executing the order.
+A further two cases reproduced double-counted equity during pending reductions.
+
+The service now retains the same paper exit order until its cumulative priced
+receipt is complete, cancels entry remainders before exits, checks admission
+before simulated fills, and retains failed adoption for recovery. Shutdown
+executes reductions with bounded retries and reports ERROR while unresolved;
+start/reset cannot discard retained exposure or unpublished trades. Net cash P&L
+is frozen per completed position before journal publication or replacement entry.
+Equity, risk sizing, drawdown and status use executed holdings during partial
+reductions. The manager retains the logical exit slice until receipt completion;
+status views do not mutate that pending slice.
+
+Producer/consumer scope: supplied scanner TradePlans → real bot scan wrapper and
+signal admission → PaperExecutor orders/fills → PositionManager management
+callbacks → completed-trade journal and statistics. Additional callers are
+direction flips, stop/retry, status, risk sizing and session reports. The existing
+testnet accounting branch and live executor were not redesigned.
+
+[The integration module](../../backend/tests/integration/test_paper_workflow.py)
+covers **50 cases**, including full/partial fills, partial targets then stops,
+recrossed triggers, additional entry fills, failed immediate/resting adoption,
+same-symbol replacement accounting, cap enforcement, cancellation, shutdown
+failure/retry, before/after-write journal failures, checkpoint replacement and
+journal reopening. The supplied scanner-result fixture exercises the actual
+scan wrapper, accepted/no-plan handoff and stop-out callback.
+
+Verification: **1,741 selected backend tests passed** (1,691 previous + 50 new);
+four contract inventories and eight pipeline-smoke categories are clean.
+The guarded runner denies external transport and production-store writes.
+No frontend source, ML source/artifacts, scoring thresholds or live-order
+execution files changed in this follow-up.
+
+Run just this integration boundary:
+
+```powershell
+.\backend\venv\Scripts\python.exe -B backend/diagnostics/offline_verify.py backend -k paper_workflow
+```
+
+Limits: supplied plans/quotes are fixtures. This is not a raw-candle-to-profitable-
+signal test or a real-exchange execution test. A fresh paper service does not
+automatically resume a session. Its checkpoint now includes actual paper exposure,
+pending exit orders and unpublished positions for inspection; no restoration
+loader or historical-store repair was introduced. Current paper fee policy and
+simulated fill probabilities were not recalibrated.
+
+
+## Raw-candle workflow integration — 2026-10-08
+
+The previous paper-result boundary is now joined to raw synthetic candles through
+the actual worker, indicators, SMC, macro/regimes, pre-scoring gates, legacy policy,
+cascade planner, risk validation, bot admission, paper settlement and journal.
+Ten cases cover LONG/SHORT stop and profitable-target outcomes, missing 1h/4h
+inputs and absent structural anchors. Positive cases assert all five indicator
+sets, macro and both regimes, FVG/HTF evidence, risk approval, effective settings
+and exact cash/journal reconciliation. No decision output or trade plan is supplied.
+
+Four production modules repair reproduced root failures: UTC-aware candle ages
+broke pool freshness and HTF scoring; FVG formation wrongly rejected the middle
+candle's displacement body; worker construction overwrote resolved caller settings.
+The raw FVG reproduction failed 10 cases before repair; the worker override
+reproduction failed five. Dedicated regressions cover 27 timestamp, 18 FVG and
+seven worker configuration cases, including cached refresh and mode changes.
+The existing paper balanced preset remains 65/55. No gate constants or weights
+were lowered to manufacture passing fixtures.
+
+The [decision entry](../../backend/diagnostics/decisions/2026-10-08__raw-candle-workflow.md)
+records input construction, blast radius, alternatives and rollback. The
+`raw_candle_workflow` ledger entries hold exact validation and hashes. Focused
+independent UTC, FVG symmetry and worker configuration reviews found no blocking
+defect; final integrity review and guarded full-suite evidence supplement them.
+
+Limits remain explicit: synthetic market/dominance/quote inputs; serial worker
+execution despite input/output pickle; legacy STEALTH/balanced coverage rather
+than every policy/mode; no external exchange, browser/API startup, auto-resume or
+profitability claim. The dormant cycle branch stays unavailable and visible.
+Actual journals and telemetry were not repaired or rewritten in this pass.
+
+The next priority identified by this pass was evidence loss at the worker/rejection
+boundary; the follow-up below addresses that boundary. The previously documented
+universe-reporting conflict and shared API ownership remain. Cycle activation
+requires its own causal-input design and behavioral baseline.
+
+## Worker and rejection evidence — 2026-10-08
+
+Fifteen initial regressions reproduced lost worker diagnostics, stale per-symbol
+and per-attempt state, and missing terminal rejection direction. Workers now export
+per-symbol snapshots, including partial and fatal service failures, and the parent
+merges them once. Diagnostic occurrence counts do not create additional rejected
+symbols; the legacy FEATURES rollup remains overlapping rather than a partition
+of the rejection total.
+
+Planner, risk and progress reports now preserve the actual cause and known side.
+Sizing failures clear stale risk reasons. Cascade attempts keep separate evidence;
+all-failed outcomes include every attempt, and later successes clear failure state.
+The planner's optional `rejection_details` output preserves clean declines and
+existing error details without changing plan-or-None behavior. Standalone callers
+retain their old event behavior; orchestrated candidate failures do not emit a
+terminal rejection before the cascade outcome is known. Error/warning logs remain.
+
+The [decision entry](../../backend/diagnostics/decisions/2026-10-08__worker-rejection-evidence.md)
+records alternatives, blast radius and rollback. The `worker_rejection_evidence`
+ledger entries contain final counts, guarded artifacts and source hashes.
+Tests cover both directions, all planner rejection-event sites, accepted signals
+after failed candidates, real parent aggregation and cached worker isolation.
+
+Two initial recovery-fixture assertions were corrected: the positive tape has
+one valid scalp scale, so it cannot recover after that last candidate is deliberately
+invalidated. The accepted-case regression instead uses the tape's natural earlier
+trade-type rejection, then successful scalp plan. Separate tests exercise real
+price-drift rejection and revalidation-metadata isolation. No production threshold
+or candidate-selection rule was changed to make those tests pass.
+
+Independent consumer review also closed feature-warning double counts in both
+HUD summaries, missing feature-error text, incorrect post-plan trace classification
+and the paper wrapper's fabricated LONG direction. Unknown side colors are neutral.
+All existing planner error-event sites now respect scanner-owned terminal output;
+standalone planner callers retain their old telemetry behavior.
+
+The heartbeat consumer also treated feature occurrences as rejected symbols,
+raising its conservation assertion after completed scans. Two dedicated before-
+fix tests reproduced this with accepted and rejected outcomes. The reserved
+`features` rollup is now excluded from heartbeat terminal counts and bottleneck
+selection; the conservation assertion remains enabled. Every fault-injection scan
+now runs through `scan_with_heartbeat` and verifies its stored counts.
+
+The full audit rubric remains unavailable. These are selected offline tests with
+synthetic inputs and serial pickled workers; actual process isolation, transport,
+UI startup and live settlement are not certified. No historical stores were
+rewritten. Failed telemetry persistence can leave duplicate cache observations
+on retry; global exactly-once telemetry is not claimed. The separate live-service
+missing-side fallback and the trace endpoint's live-buffer ownership remain open.
+Next priority is the universe-reporting contract conflict, followed by shared API
+ownership.
+
+## Strict universe selection — 2026-10-08
+
+This resolves the earlier universe-contract finding. Category switches now mean
+strict inclusion and universe size is a maximum. Disabled categories cannot be
+backfilled; initial fallback candidates pass all filters. Each exact symbol is
+counted once and classified once, with one terminal selection/drop outcome.
+Snapshots detach nested evidence, and the audit treats a fully excluded pool as
+a valid empty result while rejecting overlap, duplicates and count mismatches.
+All switches off preserves all-category eligibility and is explained in setup.
+
+Paper/live callers stop before the decision engine on selection failure or an
+empty result, including emptiness after admission filters. Independent review
+found paper was passing unsupported `perp` to Phemex ranking; a real-adapter
+fixture reproduced it, and paper now uses the adapter-owned `swap` market type.
+Positive tests verify actual Phemex ranking and strict selection reach both bot
+engines and ScannerService. No executor or external transport is used.
+
+Reproduction: 24 of 28 new selector cases failed; ten caller stop-path cases
+failed; the additional Phemex case failed for paper while live passed. Final
+verification: **82 targeted tests**, **1,951 selected backend tests** (161
+existing warnings, 260.29 s), four clean contract inventories, eight clean smoke
+categories, TypeScript and diff checks. Follow-up independent review approves
+the bounded change after both findings were resolved. Runtime history hashes
+remain unchanged. See `strict_universe_selection` in both evidence ledgers and
+[the decision record](../../backend/diagnostics/decisions/2026-10-08__strict-universe-selection.md).
+
+The basket and basket-derived macro context can change; weights and thresholds
+were not retuned. Cached/heuristic taxonomy, alias identity, 1x swap enforcement,
+initial-fallback exchange recovery and process-global snapshot ownership remain
+outside this verification. Changes are local and uncommitted. Shared API
+ownership is the next bounded repair.
+
+## API read and replay ownership — 2026-10-08
+
+Market display no longer borrows the scanner's mutable mode/exchange/engine.
+A private Phemex swap reader owns its pipeline, indicator services and two
+detectors: startup STEALTH context for display, existing weekly context for mode
+recommendation. Blocking adapter construction, fetching, calculation and response
+construction run in an admitted worker. Recommendation uses validated dominance;
+unavailable analysis retains a low-confidence warning without regime details.
+The optional symbol hint still returns global context, now accurately documented.
+
+Replay's five operations run off the event loop with one admitted worker across
+sessions. A cancelled Python request cannot release a still-running worker;
+cancelled creation cleans up its session after loading. A cancelled step may
+still finish advancing. Navigation, status and deletion own the session lock and
+revalidate registry identity; GC skips locked sessions and completed operations
+refresh idle time. Status is a detached snapshot.
+
+Before-cases reproduced six route ownership/blocking failures and three existing
+session lifecycle failures; a fourth lifecycle case established the previously
+missing status boundary. Initial focused checks passed 149 cases. Independent
+review caught a pre-start cancellation gap in the first cleanup implementation;
+the new fixture reproduced a stranded admission timeout. Executor-completion
+callbacks now retain ownership through optional cleanup, with cause-bearing
+logs for late worker/cleanup failures. Dominance failures also retain their
+underlying cause. Follow-up review cleared both findings; backend-integrity
+review found no downstream contract incompatibility.
+
+Final guarded verification: **1,980 selected backend tests passed** (161 existing
+warnings, 249.03 s), including 29 new ownership/lifecycle cases. All four contract
+inventories and eight structural smoke groups are clean after the final fixes.
+
+The final selected-suite and source-hash evidence are under `api_read_ownership`
+in both ledgers and in the
+[decision record](../../backend/diagnostics/decisions/2026-10-08__api-read-ownership.md).
+Captured API/telemetry/pipeline/storage shapes remain unchanged. These tests
+exercise Python task cancellation, not automatic ASGI cancellation on browser
+disconnect. Lost-response retries, real server shutdown, transport, multi-process
+sessions and live trading remain unverified. No strategy thresholds or weights
+were retuned. Runtime histories were preserved.
+
+This closes the shared/blocking market-read and replay-lifecycle repair boundary.
+Process-global universe evidence and the live-only trace buffer still need an
+explicit owner/source contract. Existing live rejection logging still fabricates
+LONG for absent direction; paper logging was corrected in the earlier evidence
+batch. Immutable effective configuration and historical decision packages remain
+separate follow-ups; strategy activation/calibration requires measured evidence.
+
+## Live rejection direction — 2026-10-09
+
+The separate live fallback identified above is now repaired at the scan wrapper
+and log writer. Missing, null and empty direction become UNKNOWN; explicit
+LONG/SHORT/UNKNOWN remain unchanged. The same value reaches the in-memory entry,
+signal ID, fixture JSONL and trace response. Existing UI types and both direction
+badges already support unknown without classifying it as bullish or bearish.
+There is no order, score, risk, strategy or historical-record change.
+
+Twelve new joined regressions reproduced six failures before the correction.
+**175 focused guarded tests passed** afterward. API/telemetry/pipeline inventories
+and all eight smoke groups are clean. The storage inventory reports one expected
+writer implementation-hash delta for `_log_signal`; its keys are unchanged and
+the baseline was not overwritten. The contract command therefore exits 1 and
+is not an all-clean result. No full-suite or live-exchange claim is made.
+
+See [the decision record](../../backend/diagnostics/decisions/2026-10-09__live-rejection-direction.md)
+and `live_rejection_direction` in both evidence ledgers. The running application
+was checked read-only during this batch and was not restarted. Phone Tailscale
+access still needs reconnection on the phone. Trace source ownership, global
+universe provenance and immutable effective configuration remain separate work.
+
+## Scoring and confidence — 2026-10-09
+
+The requested deep scoring review now has bounded corrections across math,
+thesis direction ownership, score explanations/final labels, bot settings and
+frontend evidence. Neutral/strengthening indicator cases and current close
+streaks are symmetric; invalid regime scores reject. Thesis trades and their
+rejections retain the correct side and score. Explicit score/floor settings
+resolve consistently, and drawdown cannot lower stricter settings. Scanner
+history preserves unavailable scores, uses the backend gate result and displays
+heuristic scores out of 100. Weights, scoring point constants and preset values
+were not retuned. Corrected outputs and admission/sizing effects are intentional.
+
+Verification: **2,088 selected backend tests passed**; the final additive gate
+metadata then passed **96 focused tests**. **33 frontend tests** and TypeScript
+passed. Independent reviewers cleared the scoped math, architecture and consumer
+changes. All eight smoke groups are clean. Contracts retain only the previously
+documented live-log writer fingerprint delta (exit 1); baselines are unchanged.
+Trading journal and telemetry DB hashes match the pre-batch copies.
+
+The [decision record](../../backend/diagnostics/decisions/2026-10-09__scoring-confidence.md)
+and `scoring_confidence` in both ledgers retain reproductions, corrections, exact
+source hashes and limitations. This does not certify profitability or live
+execution. Conditional factor normalization, missing-data scoring, correlated
+HTF bonuses, differing policy consumers and calibration remain explicit
+follow-ups. No backend restart or historical-record rewrite occurred.
+
+## Technical-analysis evidence duplication — 2026-10-09
+
+The follow-up request examined whether the approximately 26 inputs supply
+independent confirmation. Current source has 24 literal factor names and a
+conditional Volume Profile factor; these include composites, context and
+constraints rather than 25 independent indicators. The
+[ownership and cutoff decision](../../backend/diagnostics/decisions/2026-10-09__evidence-deduplication.md)
+records the full inventory and retained relationships.
+
+The bounded repair removes repeated spike/relative-volume and acceleration/run
+credit, duplicate HTF swing bias, MACD sign presented as slope, positive credit
+for a passed MACD constraint, same-pivot divergence stacking, origin-sweep and
+sweep/shift add-ons, repeated regime alignment and stacked positive cycle views.
+Shared sequence chronology also governs conflict relief and scoped counter-HTF
+confirmation. Divergence event quality is explicitly normalized to 0–100 so
+existing confirmation consumers remain reachable after deduplication. This
+normalization can raise a lone divergence's contribution; the change is not
+uniformly subtractive.
+
+Scanner/service/model/paper/live gate comparisons now share validated
+one-decimal behavior. Four mode weight dictionaries and numerical cutoffs remain
+provisional and unchanged. Preserving old acceptance by lowering every cutoff
+would preserve the removed duplicate influence. The unchanged LONG candle
+fixture now scores 62.545 and rejects at balanced 65; SHORT scores 65.412 and
+passes. Both pass the supported aggressive 58 cutoff. That admission matrix
+remains explicit while paper settlement and downstream fault injection use the
+existing aggressive preset. Risk and settlement assertions are preserved.
+
+The [machine-readable evidence](SCORING_EVIDENCE_2026-10-09.json) retains 16 paired
+control cases, four raw-candle preset cases, exact verification and source hashes.
+Final guarded verification: **2,180 selected backend tests passed**, with 208
+warnings in 296.91 seconds; the preceding focused run passed 75 cases. All seven
+guard-denial selfchecks passed and protected journal/DB hashes remain unchanged.
+The new `evidence_deduplication` entries in both ledgers append this checkpoint
+without replacing the prior scoring batch. Independent reviewers checked math,
+cutoff/sizing consumers and backend compatibility; identified scale reachability,
+legacy-exception and provenance gaps were repaired, and direct sequence-consumer
+regressions were added.
+
+Future raw scores and scored signal/rejection records carry
+`score_model_version=evidence-dedup-v1` and `heuristic_uncalibrated`; unknown source
+versions remain unknown. Completed-trade schemas and historical rows are unchanged.
+Contracts have two intentional paper/live signal-writer fingerprints; API,
+telemetry and pipeline inventories are clean, as are all eight smoke groups.
+Contract baselines were not overwritten, so contract verification exits 1.
+
+These are guarded offline fixtures, including serial workers, not live exchange
+or profitability evidence. Variable denominators, related evidence families,
+absolute score policies and representative threshold calibration remain open.
+Historical records cannot establish an optimal new cutoff without frozen inputs,
+effective configuration, execution/cost provenance and model-version separation.
+No ML work, app restart, deployment, external orders, commit or push occurred.
+
+## Whole scoring-policy balance — 2026-10-09
+
+The user's subsequent clarification changed the scope from removing duplicate
+credit to making the score scale, weights, cutoff and downstream workflow
+coherent together. The earlier unchanged-cutoff conclusion above remains a
+historical checkpoint, not the current policy.
+
+The [new decision](../../backend/diagnostics/decisions/2026-10-09__score-policy-balance.md)
+defines `family-evidence-v2` / `family-policy-v2`: eight fixed evidence budgets
+sum to100, alternatives share their family's allowance, and missing evidence
+cannot redistribute the denominator. OB or FVG can supply an entry anchor;
+continuations need not collect reversal-only factors. Momentum alternatives no
+longer stack RSI/StochRSI/MACD/K-D rewards; MFI remains descriptive. Negative
+risk adjustments, usable structure/data requirements and immediate opposing
+walls remain separately visible. Numeric pass alone is not admission.
+
+Scanner gates are now OVERWATCH75, STRIKE65, SURGICAL70 and STEALTH65. Shared
+bot presets are75/65,65/55 and60/50; explicit values retain precedence. Tiers,
+planner confidence bands, startup defaults, paper tightening and entry checks
+use the same policy units and rounding. Actual bot STEALTH/fusion execution,
+custom numeric UI settings and paper/live policy differences remain explicit.
+New logs preserve actual scoring mode and versioned eligibility; UI labels and
+contribution charts reflect them.
+
+Controlled strong OB/FVG cases previously scored roughly46–60 and missed their
+original gates. The same reference shapes now score roughly87–90; weak cases
+remain roughly33–40, and invalid evidence fails admission even with a zero
+cutoff. Raw-candle integration also exposed two prerequisites: crossed levels
+behind price were misclassified as opposing walls, and contracting swing seeds
+favored highs over lows. Direction-aware wall filtering and symmetric ranging
+seeds fix those bounded defects. The unchanged original raw LONG/SHORT tapes
+now score76.5475/77.2475 and produce orders at balanced65. Exact reflected
+15m detection produces five mirrored nonempty BOS events with equal grades and
+times; this does not certify all swing-confirmation timing conventions.
+
+[Machine-readable evidence](SCORE_POLICY_BALANCE_2026-10-09.json) and the appended
+`score_policy_balance` entries in both ledgers contain final checks, scoped
+hashes and independent review findings. Final verification: **2,374 selected
+backend tests passed** (387 warnings,320.18 seconds), all seven guard checks,
+**40 frontend tests**, and TypeScript. Historical records and captured
+baselines are not relabeled to make checks pass. Contract writer fingerprints
+and three smoke cutoff values intentionally differ from their old baselines.
+The actual telemetry DB changed during this task; its responsible writer was
+not established. An already-running API process was observed from the previous
+evening, and guarded checks denied actual-store access, but those facts do not
+prove the cause. Journal and baseline/capture hashes remained unchanged at the
+review checkpoint; the artifact records exact before/after hashes.
+
+This establishes software behavior against controlled and fixed raw-candle
+fixtures, not market profitability, an optimal cutoff, live execution or
+representative trade frequency. Version-separated replay/paper calibration
+with frozen inputs and execution costs remains the next evidence step. No ML
+implementation, app restart, external order, history migration, deployment,
+commit or push occurred in this batch.
+
+
+## Mode and regime integration checkpoint — 2026-10-09
+
+[Plan and decision](../../backend/diagnostics/decisions/2026-10-09__mode-regime-integration.md)
+and [verification record](MODE_REGIME_INTEGRATION_2026-10-09.json).
+
+Completed locally: shared daily regime validity and Wilder ADX; one expiring
+backend recommendation for scanner and paper; consistent fixed playbooks;
+mode-minimum qualification under both decision policies; opt-in adaptive
+simulated-paper selection; per-trade strategy provenance. Live/testnet adaptive
+selection is rejected. Existing pending/open trade plans stay owned by their
+original mode. Scanner recommendations remain an explicit user choice.
+
+All2439 selected backend checks passed after targeted reruns, plus45 frontend
+checks and TypeScript. Contracts retain6 intentional JSONL writer changes; smoke
+retains5 intentional changes, including3 score cutoffs from the previous batch.
+Baselines and historical evidence were not replaced.
+
+This supersedes earlier claims that bot presets could lower the strategy baseline,
+STEALTH used a cross-profile cascade, or recommendation/display had separate
+weekly/daily observers. The original SHORT candle fixture now qualifies but is
+rejected at the existing bot RR cap after fixed VAP changes plan geometry; the
+fixture and cap are preserved. Raw LONG fixed/adaptive settlement and accepted-plan
+LONG/SHORT settlement were verified separately. No live execution, deployed
+restart or forward profitability is claimed. Forward paper comparison and
+regime/threshold calibration remain required before proposing live adaptive use.

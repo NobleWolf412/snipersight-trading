@@ -114,22 +114,13 @@ def test_mitigation_prefers_available_nonempty_15m_and_falls_back_when_empty(mon
     service._update_mitigation(data, [block], as_of=now)
     assert seen[-1] is other
 
-def test_paper_advisory_reads_its_own_regime_dimensions(monkeypatch):
+def test_fixed_paper_does_not_read_or_apply_advice(monkeypatch):
     from backend.bot.paper_trading_service import PaperTradingService
-    from backend.analysis import regime_detector
-    from backend.strategy.planner import regime_engine
-    from backend.shared.models.regime import MarketRegime, RegimeDimensions
-
-    regime = MarketRegime(RegimeDimensions('up', 'normal', 'healthy', 'risk_on', 'balanced'),
-                          'bullish_risk_on', 75., datetime(2001, 2, 5), 70., 75., 70., 80., 50.)
-    service = object.__new__(PaperTradingService)
-    service.config = SimpleNamespace(sniper_mode='stealth')
+    service = PaperTradingService()
+    service.config = SimpleNamespace(sniper_mode='strike', selection_mode='fixed')
     service.mode = get_mode('stealth')
-    service.orchestrator = SimpleNamespace(regime_detector=SimpleNamespace(get_confirmed_regime=lambda: regime))
-    monkeypatch.setattr(regime_detector, 'get_regime_detector', Mock(side_effect=AssertionError('foreign singleton')))
-    recommendation = Mock(return_value={'mode': 'strike', 'reason': 'controlled fixture'})
-    monkeypatch.setattr(regime_engine, 'get_mode_recommendation', recommendation)
-
+    service.orchestrator = SimpleNamespace()
+    service._regime_reader = SimpleNamespace(get_global=Mock(side_effect=AssertionError('fixed mode requested advice')))
     class StopBeforeScan(Exception):
         pass
     events = []
@@ -140,9 +131,9 @@ def test_paper_advisory_reads_its_own_regime_dimensions(monkeypatch):
     service._log_activity = activity
     with pytest.raises(StopBeforeScan):
         asyncio.run(service._run_scan())
-    recommendation.assert_called_once_with('up', 'normal', 'risk_on')
-    assert events[0][0] == 'system_update'
-    assert service.mode.name == 'stealth'
+    service._regime_reader.get_global.assert_not_called()
+    assert events == [('scan_started', {'mode': 'strike'})]
+    assert service.mode.name == 'strike'
 
 
 def test_replay_serializes_real_market_regime_dimensions():

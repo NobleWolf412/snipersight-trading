@@ -8,6 +8,8 @@ regime analysis to produce a unified setup quality score.
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional
+from backend.shared.config.sensitivity import passes_confluence_gate
+from backend.shared.config.score_policy import STANDARD_SCORE, STRONG_SCORE
 
 
 @dataclass
@@ -132,11 +134,11 @@ class ConfluenceBreakdown:
     @property
     def is_high_quality(self) -> bool:
         """Check if this is a high-quality setup (score >= 75)."""
-        return self.total_score >= 75
+        return passes_confluence_gate(self.total_score, STRONG_SCORE)
 
-    def passes_quality_gate(self, min_score: float = 65.0) -> bool:
-        """Check if setup passes minimum quality threshold."""
-        return self.total_score >= min_score
+    def passes_quality_gate(self, min_score: float = STANDARD_SCORE) -> bool:
+        """Numeric cutoff only; admission also requires metadata evidence_eligible."""
+        return passes_confluence_gate(self.total_score, min_score)
 
     def get_rationale_summary(self) -> str:
         """Generate a summary of all factor rationales."""

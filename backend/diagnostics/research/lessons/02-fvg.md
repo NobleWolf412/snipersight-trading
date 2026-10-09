@@ -13,7 +13,7 @@ A three-candle pattern where candle 1's wick and candle 3's wick fail to overlap
 
 The gap represents one-sided delivery — buy and sell orders did not overlap during the move.
 
-**What the bot does**: exactly the three-candle test above, with two additional gates: (1) middle-candle overlap with the gap must be ≤10% (filters partial overlaps), and (2) gap size in ATR units must clear a mode-specific threshold (`0.06` SURGICAL → `0.45` OVERWATCH). Grading: A if `gap_atr ≥ 2.5×` the mode minimum, B if `≥ 1.5×`, C otherwise. Fill is measured from the entry side per direction — an important nuance most retail traders miss.
+**What the bot does**: exactly the three-candle test above, with two additional gates: (1) middle-candle wick overlap with the gap must stay within the configured allowance, and (2) gap size in ATR units must clear a mode-specific threshold (`0.06` SURGICAL → `0.45` OVERWATCH). Grading: A if `gap_atr ≥ 2.5×` the mode minimum, B if `≥ 1.5×`, C otherwise. Fill is measured from the entry side per direction — an important nuance most retail traders miss.
 
 ## Why it works (microstructure)
 
@@ -40,7 +40,7 @@ FVG = shaded rectangle from 100.00 to 101.00. Price moves up further, then retra
 
 ## Common mistakes (flip-card material)
 
-1. **Counting any three-candle gap as an FVG without checking middle-candle overlap.** If candle 1's body intrudes deep into the gap region, the imbalance is half-filled at formation. Bot rejects via `max_overlap = 0.1`.
+1. **Counting any three-candle gap as an FVG without checking middle-candle wick overlap.** Candle 2's body creates the displacement. Its wicks must stay within the configured overlap allowance; later candles determine how much of the gap has filled.
 2. **Treating wick fills the same as body fills.** A wick into the FVG = mitigation; a body close *through* the far edge = invalidation.
 3. **Trading every FVG in sight.** Lower-TF gaps in a strong trend are continuation tells, not entries. Bot per-mode size filter exists exactly for this.
 4. **Ignoring direction symmetry.** Bullish FVG fill is measured top-down; bearish FVG fill bottom-up. Wrong reference inverts freshness math.

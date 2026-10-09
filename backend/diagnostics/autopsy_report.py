@@ -1,18 +1,13 @@
 """
 Headless Session Autopsy.
 
-Per CLAUDE.md §12: produces the post-run triage report the `/autopsy` skill
-generates, but as a standalone CLI/programmatic invocation. Same data sources
-(`backend/cache/telemetry.db` + `backend/cache/trade_journal.jsonl`), same
-paste-friendly output format (short summary first, structured detail second,
-raw data last), same anomaly-detection rules.
+Standalone CLI/programmatic summary using recorded telemetry and trade journals.
+Produces a short summary, structured detail and raw evidence. The former
+interactive forensic playbooks have been retired; follow-up suggestions use
+recorded lifecycle evidence and the current rejection-forensics reviewer.
 
-Why this is NOT the /autopsy skill:
-  - The skill is the interactive Claude-driven version. It reasons across
-    multiple data sources, follows up on threads, escalates to other skills.
-  - This diagnostic is the headless version. It runs in ~5 seconds, writes
-    a report to disk, exits with a status code, and stays out of the way.
-  - Both share the same forensic logic; they differ only in invocation surface.
+This cleanup updates operator guidance only. Existing anomaly heuristics are
+unchanged and are not a certification of strategy quality or complete provenance.
 
 Typical invocations:
   python -m backend.diagnostics.autopsy_report                          # most recent session
@@ -71,7 +66,7 @@ class Thread:
     severity: str   # NOTABLE | INVESTIGATE | URGENT
     title: str
     evidence: str
-    delegate: str   # e.g. "/trade-autopsy <id>" or "rejection-forensics on <SYM>"
+    delegate: str   # e.g. a recorded lifecycle review or "rejection-forensics on <SYM>"
 
 
 @dataclass
@@ -279,7 +274,7 @@ def _collect_telemetry(db_path: Path, start: str, end: str) -> Dict[str, Any]:
 
 
 def _build_threads(report: AutopsyReport, trades: List[Dict[str, Any]]) -> List[Thread]:
-    """Apply the same anomaly checklist /autopsy uses."""
+    """Apply the existing report anomaly heuristics."""
     threads: List[Thread] = []
 
     # Symmetry leak (LONG/SHORT count grossly skewed; only fires at N>=20)
@@ -309,7 +304,7 @@ def _build_threads(report: AutopsyReport, trades: List[Dict[str, Any]]) -> List[
                 severity="NOTABLE",
                 title=f"Single rejection reason dominates ({share*100:.0f}%)",
                 evidence=f"{(top_reason or '<null>')[:60]} ({top_n}/{report.signals_rejected})",
-                delegate="run /rejection-survey 50",
+                delegate="ask rejection-forensics to inspect this session/window and dominant reason",
             ))
 
     # High-confidence loss
@@ -322,7 +317,7 @@ def _build_threads(report: AutopsyReport, trades: List[Dict[str, Any]]) -> List[
             severity="NOTABLE",
             title=f"High-confidence loss — {t.get('symbol','?')} conf={t.get('confidence_score',0):.1f}",
             evidence=f"pnl={t.get('pnl',0):.2f} exit={t.get('exit_reason','?')}",
-            delegate=f"run /trade-autopsy {t.get('trade_id')}",
+            delegate=f"review recorded lifecycle evidence for trade {t.get('trade_id')}",
         ))
 
     # Weird exits — orphan / stagnation / target_strip / EMERGENCY
@@ -336,7 +331,7 @@ def _build_threads(report: AutopsyReport, trades: List[Dict[str, Any]]) -> List[
             severity="URGENT" if str(t.get("exit_reason", "")).startswith("EMERGENCY") else "NOTABLE",
             title=f"Suspect exit — {t.get('symbol','?')} {t.get('exit_reason')}",
             evidence=f"trade_id={t.get('trade_id')}",
-            delegate=f"run /trade-autopsy {t.get('trade_id')}",
+            delegate=f"review recorded lifecycle evidence for trade {t.get('trade_id')}",
         ))
 
     # Errors in window
@@ -348,18 +343,18 @@ def _build_threads(report: AutopsyReport, trades: List[Dict[str, Any]]) -> List[
             delegate="inspect inline; do not delegate",
         ))
 
-    # Bot-mode mismatch — STEALTH is the only sanctioned bot mode per §15
+    # Legacy report heuristic; verify the intended session mode before diagnosing a mismatch.
     profiles = list((getattr(report, "_scan_profiles", {}) or {}).keys())
     non_stealth = [p for p in profiles if p and p not in ("stealth_balanced", "stealth")]
     if non_stealth:
         threads.append(Thread(
             severity="URGENT",
             title=f"Bot mode mismatch — non-STEALTH profile detected: {non_stealth}",
-            evidence="CLAUDE.md §15: bot production mode is STEALTH",
-            delegate="halt + verify botConfig.sniperMode source",
+            evidence="Legacy report heuristic expects STEALTH; verify the intended session configuration",
+            delegate="verify intended bot mode and its effective configuration before treating this as a defect",
         ))
 
-    return threads[:3]  # top 3 only, like /autopsy
+    return threads[:3]  # retain the top 3 report threads
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -375,7 +370,7 @@ def build_report(
 ) -> AutopsyReport:
     """Construct an AutopsyReport from the live data sources.
 
-    Mirrors the /autopsy skill's protocol:
+    Builds the report from the selected recorded-data window:
       1. Resolve session window (journal → scan_cluster fallback → user-named)
       2. Pull session-level vitals from telemetry
       3. Run anomaly checklist
@@ -495,7 +490,7 @@ def build_report(
 
 
 def format_report(report: AutopsyReport) -> str:
-    """Paste-friendly markdown, mirroring /autopsy skill output format."""
+    """Render the report as paste-friendly markdown."""
     lines: List[str] = []
     sid = report.session_id or "(no session_id)"
     lines.append(f"SESSION AUTOPSY — {sid}")
@@ -628,8 +623,8 @@ _EXIT_INTERNAL_ERROR = 4
 def _main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Headless session autopsy. Same data sources as the /autopsy skill, "
-            "different invocation surface. Writes a paste-friendly report to "
+            "Headless session report from recorded telemetry and trade journals. "
+            "Writes a paste-friendly report to "
             ".claude/autopsy-reports/<utc>.md and stdout."
         )
     )

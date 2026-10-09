@@ -154,7 +154,7 @@ async def get_scanner_modes():
 
 @router.get("/api/scanner/recommendation")
 async def get_scanner_recommendation():
-    """Get AI-driven mode recommendation based on market regime."""
+    """Get versioned rule-based mode advice from fresh market evidence."""
     service = get_scanner_service()
 
     # Fallback if dependency injection failed (rare race condition)
@@ -635,7 +635,7 @@ async def get_signals(
                 raise HTTPException(status_code=400, detail=str(e)) from e
 
             # Determine effective threshold
-            effective_min = min_score if min_score > 0 else mode.min_confluence_score
+            effective_min = max(min_score, mode.min_confluence_score)
 
             logger.info(
                 "Scan request: mode=%s, exchange=%s, leverage=%dx, market=%s",

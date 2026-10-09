@@ -10,7 +10,7 @@ Logic is delegated to specialized engines:
 Following the "No-Null, Actionable Outputs" principle.
 """
 
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Any
 from datetime import datetime
 from loguru import logger
 
@@ -150,7 +150,8 @@ def generate_trade_plan(
     tick_size: float = 0.0,  # NEW: For exchange tick alignment
     lot_size: float = 0.0,
     fee_rate: float = 0.001,
-) -> TradePlan:
+    rejection_details: Optional[Dict[str, Any]] = None,
+) -> Optional[TradePlan]:
     """
     Generate a complete, actionable trade plan.
 
@@ -166,6 +167,8 @@ def generate_trade_plan(
         missing_critical_timeframes: List of critical TFs that failed to load
         multi_tf_data: Optional multi-timeframe candle data for swing-based stops
         expected_trade_type: Optional trade type hint (swing, scalp, intraday)
+        rejection_details: Optional caller-owned output for clean decline evidence.
+            When supplied, the caller owns terminal rejection telemetry.
 
     Returns:
         TradePlan: Complete trade plan with entries, stops, targets
@@ -173,6 +176,8 @@ def generate_trade_plan(
     Raises:
         ValueError: If unable to generate valid plan (insufficient structure)
     """
+    if rejection_details is not None:
+        rejection_details.clear()
     if missing_critical_timeframes is None:
         missing_critical_timeframes = []
 
@@ -230,20 +235,33 @@ def generate_trade_plan(
     overrides = getattr(config, "overrides", None) or {}
     if overrides:
         for key, value in overrides.items():
-            if hasattr(planner_cfg, key):
+            # HTF swing overrides are resolved against stop roles by risk_engine;
+            # its tuple must not replace the planner's profile->timeframes map.
+            if key != "htf_swing_allowed" and hasattr(planner_cfg, key):
                 setattr(planner_cfg, key, value)
 
     telemetry = get_telemetry_logger()
     run_id = datetime.utcnow().strftime("run-%Y%m%d")
 
+    def record_rejection(event, reason):
+        """Keep candidate evidence local when the scanner owns the final outcome."""
+        if rejection_details is None:
+            telemetry.log_event(event)
+        else:
+            rejection_details.update(
+                reason_code=event.data["reason"], reason=reason,
+                diagnostics=event.data.get("diagnostics", {}),
+            )
+
     if primary_indicators.atr is None or primary_indicators.atr <= 0:
-        telemetry.log_event(
+        record_rejection(
             create_signal_rejected_event(
                 run_id=run_id,
                 symbol=symbol,
                 reason="atr_invalid",
                 diagnostics={"atr": primary_indicators.atr},
-            )
+            ),
+            "ATR required for trade planning and must be positive",
         )
         raise ValueError("ATR required for trade planning and must be positive")
     atr = primary_indicators.atr
@@ -290,6 +308,8 @@ def generate_trade_plan(
     # next trade type (intraday / scalp) on the same symbol.
     if entry_zone is None:
         logger.info("Entry zone depth gate rejected plan for %s — no plan generated", symbol)
+        if rejection_details is not None:
+            rejection_details.update(reason_code="entry_depth", reason="Entry zone depth gate rejected plan")
         return None
 
     # === 2. Calculate Stop Loss (Delegate to Risk Engine) ===
@@ -313,13 +333,14 @@ def generate_trade_plan(
         )
     except ValueError as e:
         logger.warning(f"Stop loss calculation failed: {e}")
-        telemetry.log_event(
+        record_rejection(
             create_signal_rejected_event(
                 run_id=run_id,
                 symbol=symbol,
                 reason="stop_loss_calc_failed",
                 diagnostics={"error": str(e)},
-            )
+            ),
+            f"Stop loss calculation failed: {e}",
         )
         raise
 
@@ -465,14 +486,18 @@ def generate_trade_plan(
         # at this tier's R:R floor. NOT an error — the cascade may try a higher trade
         # type. Mirrors the entry-zone depth-gate clean skip above.
         logger.info("TP1 unreachable for %s — no plan generated: %s", symbol, e)
-        telemetry.log_event(
-            create_signal_rejected_event(
-                run_id=run_id,
-                symbol=symbol,
-                reason="tp1_unreachable",
-                diagnostics={"detail": str(e)},
+        if rejection_details is not None:
+            rejection_details.update(reason_code="tp1_unreachable", reason=f"TP1 unreachable: {e}")
+        else:
+            # Preserve standalone callers; orchestrated scans emit once after the cascade.
+            telemetry.log_event(
+                create_signal_rejected_event(
+                    run_id=run_id,
+                    symbol=symbol,
+                    reason="tp1_unreachable",
+                    diagnostics={"detail": str(e)},
+                )
             )
-        )
         return None
     except Exception as e:
         logger.error(f"Target calculation failed for {symbol}: {e}")
@@ -647,7 +672,7 @@ def generate_trade_plan(
         
         logger.warning(f"❌ {symbol} REJECTED ({mode_name}) | {trade_type} setup not allowed | {geometry_summary}")
         
-        telemetry.log_event(
+        record_rejection(
             create_signal_rejected_event(
                 run_id=run_id,
                 symbol=symbol,
@@ -659,7 +684,8 @@ def generate_trade_plan(
                     "tp1_move_pct": tp1_move_pct,
                     "stop_atr": stop_loss.distance_atr,
                 },
-            )
+            ),
+            rejection_msg,
         )
         raise ValueError(rejection_msg)
 
@@ -860,7 +886,7 @@ def generate_trade_plan(
             )
             logger.warning(f"❌ {symbol} REJECTED | {rejection_msg}")
 
-            telemetry.log_event(
+            record_rejection(
                 create_signal_rejected_event(
                     run_id=run_id,
                     symbol=symbol,
@@ -873,7 +899,8 @@ def generate_trade_plan(
                         "tp1_clamped": _tp1_clamped,
                         "tp1_level": targets[0].level if targets else None,
                     },
-                )
+                ),
+                rejection_msg,
             )
             raise ValueError(rejection_msg)
     except Exception as e:

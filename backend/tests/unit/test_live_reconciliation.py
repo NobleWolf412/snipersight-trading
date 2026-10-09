@@ -21,6 +21,11 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
+from backend.shared.config.scanner_modes import get_mode
+from backend.shared.config.sensitivity import resolve_sensitivity, passes_confluence_gate
+from backend.shared.config.strategy_policy import resolve_bot_sensitivity, plan_strategy_gate
+from backend.shared.config.score_policy import STRONG_SCORE, evidence_allows_entry
+
 
 ROOT = Path(__file__).resolve().parents[3]
 SYMBOL = "FIXTURE/USDT"
@@ -56,6 +61,9 @@ def source():
         timezone=timezone, Enum=Enum, Optional=Optional, Dict=Dict, List=List,
         Any=Any, Target=object, TradePlan=object, math=math, time=time, Decimal=Decimal,
         PaperTradingStats=S, logger=logging.getLogger("test.live_reconciliation"),
+        get_mode=get_mode, resolve_sensitivity=resolve_sensitivity, passes_confluence_gate=passes_confluence_gate,
+        resolve_bot_sensitivity=resolve_bot_sensitivity, plan_strategy_gate=plan_strategy_gate,
+        STRONG_SCORE=STRONG_SCORE, evidence_allows_entry=evidence_allows_entry,
         asyncio=S(get_running_loop=lambda: InlineLoop(), sleep=noop, to_thread=inline_thread, Lock=asyncio.Lock),
     )
     trees = {}
@@ -97,7 +105,6 @@ def source():
         if (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
                 and node.target.id in ("_PENDING_TTL_MINUTES", "_MAX_LIMIT_DISTANCE_PCT")):
             ns[node.target.id] = ast.literal_eval(node.value)
-    ns["_SENSITIVITY_PRESETS"] = {}  # Cases use the custom branch.
     path = "backend/shared/utils/math_utils.py"
     execute(path, [n for n in tree(path).body if isinstance(n, ast.FunctionDef) and n.name == "round_to_lot"])
     return ns, methods
@@ -165,7 +172,7 @@ def make_service(source, responses, direction=None, orders=None, cancel_result=N
     svc.executor = make_executor(source, responses)
     if direction == "SHORT":
         svc.executor._positions[SYMBOL] = -10.0
-    svc.config = S(dry_run=False, balance_reconcile_interval=60,
+    svc.config = S(dry_run=False, sniper_mode='stealth', balance_reconcile_interval=60,
                    kill_switch_enabled=False, max_positions=3, min_confluence=65.0,
                    sensitivity_preset="custom", risk_per_trade=1.0, max_position_size_usd=5000.0)
     svc.cancelled = []

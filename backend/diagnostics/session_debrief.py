@@ -2,8 +2,8 @@
 Session debrief - one-page post-session scorecard + routing. READ-ONLY.
 
 The big-picture rollup you actually want after a trading session, in ONE command,
-so you don't have to choose among /scan-autopsy /trade-autopsy /rejection-survey
-/confluence-trace. Consolidates trade_journal.jsonl (closed trades) + the latest
+using recorded evidence and current investigation tools.
+Consolidates trade_journal.jsonl (closed trades) + the latest
 signals.jsonl (rejections / attempts) into the metrics this codebase has repeatedly
 shown matter, then flags what's wrong and points at the right drill-down.
 
@@ -12,7 +12,7 @@ Usage (from repo root):
   python -m backend.diagnostics.session_debrief <session_id>
   python -m backend.diagnostics.session_debrief --all       # every journaled trade
 
-Output is §12 paste-friendly: SUMMARY first, SCORECARD second, RAW last.
+Output is paste-friendly: SUMMARY first, SCORECARD second, RAW last.
 Tolerant of older trades missing the 2026-06-02 calc-geometry keys (stop_loss_rationale,
 tp1_clamped) - they show as 'unrecorded'.
 """
@@ -222,19 +222,19 @@ def _factor_edge(flags):
 def _routing(flags):
     print("\n=== THREADS / DRILL-DOWNS ===")
     if not flags:
-        print("  No red flags. Spot-check: /trade-autopsy last-loss")
+        print("  No red flags. Spot-check the latest losing trade against its recorded fills and journal.")
     routes = {
-        "monoculture": "-> cascade/regime: /confluence-trace <SYM>  +  check regime_detector volatility bands",
-        "counter-trend": "-> direction logic: /confluence-trace <SYM> ; review pre-direction tally + counter-trend gate",
-        "wide stops": "-> stop geometry: grep 'WIDE STOP' logs/backend.err.log ; /trade-autopsy last-loss",
-        "negative expectancy": "-> worst trade: /trade-autopsy last-loss ; edge-by-regime cohort",
-        "not trading": "-> rejection bottleneck: /rejection-survey 50 ; /scan-autopsy last",
-        "mismatch": "-> /scan-autopsy last (why longs in a down regime) ; /confluence-trace <SYM>",
+        "monoculture": "-> cascade/regime: ask rejection-forensics for <SYM>, mode and run; check effective volatility bands",
+        "counter-trend": "-> direction logic: ask rejection-forensics for <SYM>, mode and run; inspect both directional paths",
+        "wide stops": "-> stop geometry: inspect 'WIDE STOP' evidence and the latest losing trade's recorded entry/stop",
+        "negative expectancy": "-> worst trade: compare recorded entry/exit evidence and regime cohort; distinguish missing data",
+        "not trading": "-> rejection bottleneck: ask rejection-forensics for the affected run and actual gate evidence",
+        "mismatch": "-> ask rejection-forensics for the affected run, symbol and effective configuration",
         "rationale not yet journaled": "-> restart the backend so new trades record stop branch + clamp",
         "factor edge": "-> factor analysis: python -m backend.diagnostics.factor_contribution (full per-factor table + redundancy). Trim FLAT/ANTI for hygiene; but if best |r|<noise, re-weighting won't create edge — the strategy needs a new predictive input, not tuning.",
     }
     for i, fl in enumerate(flags, 1):
-        hint = next((v for k, v in routes.items() if k in fl.lower()), "-> /trade-autopsy last-loss")
+        hint = next((v for k, v in routes.items() if k in fl.lower()), "-> inspect the latest losing trade's recorded lifecycle")
         print(f"  {i}. {fl}\n       {hint}")
 
 

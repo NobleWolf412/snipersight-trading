@@ -27,6 +27,8 @@ export interface ScanConfig {
 }
 
 export interface BotConfig {
+  selectionMode?: 'fixed' | 'adaptive';
+  allowedModes?: SniperMode[];
   exchange: string;
   pair: string;
   modes: {
@@ -114,14 +116,14 @@ const defaultBotConfig: BotConfig = {
 };
 
 // Static scanner modes (fallback if backend unavailable)
-// Synced with backend/shared/config/scanner_modes.py MODES dict as of 2025-12-04
+// family-policy-v2 defaults; backend metadata remains authoritative.
 // NOTE: recon+ghost merged into stealth mode
 const fallbackModes: ScannerMode[] = [
   {
     name: 'overwatch',
     description: 'SWING TRADES (Days-Weeks) • High-conviction setups only • Weekly/Daily structure alignment • Best for: Patient traders wanting A+ quality with 2:1+ R:R minimum',
     timeframes: ['1w', '1d', '4h', '1h', '15m', '5m'],
-    min_confluence_score: 72,
+    min_confluence_score: 75,
     profile: 'macro_surveillance',
     critical_timeframes: ['1w', '1d'],
     primary_planning_timeframe: '4h',
@@ -135,7 +137,7 @@ const fallbackModes: ScannerMode[] = [
     name: 'strike',
     description: 'INTRADAY TRADES (Hours) • Aggressive momentum plays • More signals, faster entries • Best for: Active traders comfortable with quick decision-making and 1.2:1+ R:R',
     timeframes: ['4h', '1h', '15m', '5m'],
-    min_confluence_score: 62,
+    min_confluence_score: 65,
     profile: 'intraday_aggressive',
     critical_timeframes: ['15m'],
     primary_planning_timeframe: '15m',
@@ -148,7 +150,7 @@ const fallbackModes: ScannerMode[] = [
     name: 'surgical',
     description: 'SCALP/INTRADAY (Minutes-Hours) • Precision entries with tight stops • Fewer but cleaner setups • Best for: Experienced traders wanting controlled risk with 1.5:1+ R:R',
     timeframes: ['1h', '15m', '5m'],
-    min_confluence_score: 65,
+    min_confluence_score: 70,
     profile: 'precision',
     critical_timeframes: ['15m'],
     primary_planning_timeframe: '15m',

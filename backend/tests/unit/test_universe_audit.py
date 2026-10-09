@@ -4,9 +4,8 @@ Tests for backend.diagnostics.universe_audit.
 Confirms the audit:
   - Reports HEALTHY for a normal selection.
   - Surfaces selected ∩ dropped overlap as a failure.
-  - Flags qualified=0/fetched>0 as a failure.
-  - Flags non_perp > 90% under leverage as a failure.
-  - Flags stable_base > 50% as a failure.
+  - Reports valid empty selections and provisional rates as notes.
+  - Flags duplicate symbols and candidate count mismatches as failures.
   - Flags unknown reasons as out-of-vocabulary.
   - Reports stale snapshots as a note (not a failure).
   - Reports has_snapshot=False cleanly when nothing has run.
@@ -57,6 +56,17 @@ def test_healthy_normal_selection():
     assert report.drops_by_reason == {"stable_base": 1, "limit_exhausted": 1}
 
 
+@pytest.mark.parametrize("selected,dropped,fetched,expected", [
+    (["BTC/USDT"], [], 2, "count mismatch"),
+    (["BTC/USDT", "BTC/USDT"], [], 2, "duplicate"),
+    ([], [{"symbol": "BTC/USDT", "reason": "non_perp"}] * 2, 2, "duplicate"),
+])
+def test_universe_audit_rejects_malformed_partition(selected, dropped, fetched, expected):
+    report = audit_universe(_snap(selected, dropped, fetched=fetched), history=[])
+    assert not report.healthy
+    assert any(expected in failure for failure in report.failures)
+
+
 def test_failure_overlap_between_selected_and_dropped():
     snap = _snap(
         selected=["BTC/USDT", "ETH/USDT"],
@@ -67,7 +77,7 @@ def test_failure_overlap_between_selected_and_dropped():
     assert any("overlap" in f for f in report.failures)
 
 
-def test_failure_qualified_zero_with_fetched_positive():
+def test_valid_empty_selection_with_fetched_positive():
     snap = _snap(
         selected=[],
         dropped=[
@@ -77,8 +87,8 @@ def test_failure_qualified_zero_with_fetched_positive():
         fetched=2,
     )
     report = audit_universe(snap, now_ts=1_700_000_005.0)
-    assert not report.healthy
-    assert any("qualified=0" in f for f in report.failures)
+    assert report.healthy
+    assert any("qualified=0" in n for n in report.notes)
 
 
 def test_high_non_perp_rate_surfaces_as_note_not_failure():
@@ -169,13 +179,13 @@ def test_cycle_trend_flags_fetched_collapse_as_failure():
     # 5 cycles at fetched ~30
     for i in range(5):
         history.append(_snap(
-            ["BTC/USDT"] * 30,
+            [f"X{i}/USDT" for i in range(30)],
             [],
             ts=1_000.0 + i * 60.0,
             fetched=30,
         ))
     # latest cycle: fetched plummets to 5
-    history.append(_snap(["BTC/USDT"] * 5, [], ts=1_300.0, fetched=5))
+    history.append(_snap([f"X{i}/USDT" for i in range(5)], [], ts=1_300.0, fetched=5))
     report = audit_universe(
         snapshot=history[-1], history=history, now_ts=1_305.0,
     )
@@ -185,8 +195,8 @@ def test_cycle_trend_flags_fetched_collapse_as_failure():
 
 def test_cycle_trend_no_collapse_when_history_too_short():
     """Need >= 6 cycles before drift detection runs."""
-    history = [_snap(["BTC/USDT"] * 30, [], ts=1_000.0, fetched=30)]
-    history.append(_snap(["BTC/USDT"] * 5, [], ts=1_060.0, fetched=5))
+    history = [_snap([f"X{i}/USDT" for i in range(30)], [], ts=1_000.0, fetched=30)]
+    history.append(_snap([f"X{i}/USDT" for i in range(5)], [], ts=1_060.0, fetched=5))
     report = audit_universe(
         snapshot=history[-1], history=history, now_ts=1_065.0,
     )

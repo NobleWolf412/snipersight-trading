@@ -1,196 +1,91 @@
 # SniperSight
 
-**Institutional-grade crypto scanner + paper trader + autonomous bot for Smart Money Concepts strategy execution.**
-
-Confluence over conviction. Precision over volume. Truth over narrative.
-
----
-
-## What this repo is
-
-A working FastAPI backend + React HUD frontend that scans crypto markets across multiple timeframes, applies SMC (Smart Money Concepts) detection, scores confluence per-mode, and runs paper-traded + (gated) live trades through a four-mode scanner system.
-
-Not a blueprint. The scanner is built and runs.
+SniperSight combines a React trading dashboard with a Python/FastAPI scanner,
+Smart Money Concepts analysis, trade planning, paper trading and live execution
+components. Their presence does not establish production readiness or profitability.
 
 ## Working on the code
 
-Start with the [current architecture index](docs/ARCHITECTURE_INDEX.md) and its
-evidence/coverage links. Identify the affected contracts and upstream/downstream
-owners, read the current implementation, reproduce assumptions, and run the
-relevant isolated checks. Update the map and ledger when behavior changes.
-The index is navigation, not a substitute for source inspection; older architecture
-and operating notes may describe superseded behavior.
+Start with [the architecture index](docs/ARCHITECTURE_INDEX.md), its current
+findings and coverage ledger, then inspect the implementation. Scanner requests,
+paper sessions and live sessions have separate configuration and state owners.
 
-## Stack
+[AGENTS.md](AGENTS.md) contains contributor instructions.
+[The verification checklist](.claude/AUDIT_RUBRIC.md) describes evidence expected
+for a change. [PRODUCT.md](PRODUCT.md) and [DESIGN.md](DESIGN.md) describe product
+and visual intent; current behavior is established by code and verification.
 
-- **Backend** — Python 3.10+, FastAPI, uvicorn (port 8000), ccxt for exchange connectivity
-- **Frontend** — React 19, TypeScript, custom HUD CSS (no Tailwind — ejected in Phase 7), Vite (port 5000)
-- **Data** — Phemex (production), Bybit, OKX, Bitget adapters
-- **Storage** — SQLite (`backend/cache/telemetry.db`), JSONL (`backend/cache/trade_journal.jsonl`, `signals.jsonl`)
-- **Testing** — pytest (backend), Playwright (visual snapshots)
+The October 2026 review is an offline assessment with bounded repairs. Its
+[checkpoints](docs/audits/SYSTEM_DISCOVERY_2026-10-07.md) state what was tested and
+what remains unverified. ML implementation and training are outside that work.
 
-## Scanner modes
+## Development startup
 
-Four modes, all on one orchestrator pipeline (configurations, not separate processes):
+Use the dependency declarations in [package.json](package.json),
+[requirements.txt](requirements.txt) and [pyproject.toml](pyproject.toml).
+The existing local Python environment is `backend/venv`; inspect those declarations
+when recreating an environment rather than assuming the local install is portable.
 
-| Mode | Profile | Min Score | Critical TFs | Planning TF |
-|------|---------|-----------|--------------|-------------|
-| OVERWATCH | `macro_surveillance` | 72.0 | 1w, 1d | 4h |
-| STRIKE | `intraday_aggressive` | 68.0 | 15m | 15m |
-| SURGICAL | `precision` | 70.0 | 15m | 15m |
-| STEALTH | `stealth_balanced` | 70.0 | 4h, 1h | 1h |
+With dependencies installed and the intended Python environment active:
 
-Bot production mode is STEALTH. The scanner mode picker is for strategy inspection; it does not write to bot state.
-
-## Pipeline (single context object)
-
-`SniperContext` ([backend/engine/context.py](backend/engine/context.py)) passes through every stage and gets progressively populated:
-
-1. Data ingestion → `multi_tf_data`
-2. Indicators → `multi_tf_indicators`
-3. SMC detection → `smc_snapshot`
-4. Macro context → `macro_context`
-5. Confluence scoring → `confluence_breakdown`
-6. Trade planning → `plan`
-7. Risk validation → `risk_plan`
-
-Entry point: `Orchestrator.scan(symbol, profile)` in [backend/engine/orchestrator.py](backend/engine/orchestrator.py).
-
-## Smart-Money Concepts (what's detected)
-
-- **Order Blocks (OB)** — institutional accumulation/distribution zones
-- **Fair Value Gaps (FVG)** — liquidity imbalances
-- **Break of Structure (BOS)** — trend continuation (preserves temporal ordering, not just level-cross)
-- **Change of Character (CHoCH)** — potential reversals
-- **Liquidity Sweeps** — stop-hunts before institutional moves
-- **Wyckoff cycle logic** — accumulation/distribution phase detection
-- **WCL failure** — feeds active short bias
-
-Bullish/bearish detection is symmetric — same logic, same gates, same penalties.
-
-## Confluence scoring
-
-Mode-aware weighted sum with synergy bonuses, conflict penalties, and hard-failing pre-scoring gates (structural anchor, BTC impulse, regime, conflict density). HTF composite collapses correlated HTF inputs into one score. Per-mode minimum thresholds (table above). Frontend can override upward but never downward.
-
-Pre-scoring gates run before scoring; gate failure skips scoring entirely. Soft penalties cannot compensate for a failed gate.
-
-## Regime gating
-
-Enforced, not advisory. Each mode has a `RegimePolicy` in [backend/analysis/regime_policies.py](backend/analysis/regime_policies.py) with `min_regime_score`, `allow_in_risk_off`, position-size adjustments, and confluence adjustments per regime label. Regime detector uses percentage-based ATR, not absolute.
-
-## Workflow + audit discipline
-
-Operating instructions for AI-assisted development live in **[CLAUDE.md](CLAUDE.md)**:
-- §10 Standing fixes (do not regress)
-- §16 Audit discipline — 14-point rubric enforced by autonomous subagent on every commit
-- §17 Task router — declare task type + skills + agent upfront
-- §18 Pre-flight discipline — Plan agent for features, diagnostic-in-same-diff for bug fixes, symmetry-guard auto-invoke for §10 surface edits
-- §19 Decisions log at `backend/diagnostics/decisions/`
-- §20 Backend integrity — contract snapshots at `backend/diagnostics/contracts/`, pipeline_smoke at `backend/diagnostics/pipeline_smoke.py`
-
-Calibration history lives in [`backend/diagnostics/decisions/`](backend/diagnostics/decisions/). HUD rebuild Phase 0–7 archived to [`backend/diagnostics/phase_archive/`](backend/diagnostics/phase_archive/).
-
-## Repository layout (actual)
-
-```
-snipersight-trading/
-├── CLAUDE.md                              # operating instructions (authoritative)
-├── DESIGN.md                              # HUD visual system
-├── PRODUCT.md                             # product framing
-├── backend/
-│   ├── api_server.py                      # FastAPI app entry
-│   ├── engine/
-│   │   ├── orchestrator.py                # pipeline controller (scan entry point)
-│   │   └── context.py                     # SniperContext dataclass
-│   ├── strategy/
-│   │   ├── confluence/scorer.py           # scoring + pre-scoring gates
-│   │   ├── planner/                       # entry zones, stops, targets
-│   │   └── smc/                           # OB / FVG / BOS / sweeps / cycles
-│   ├── analysis/
-│   │   ├── regime_detector.py             # % ATR regime classifier
-│   │   └── regime_policies.py             # per-mode regime gating
-│   ├── bot/
-│   │   ├── paper_trading_service.py       # paper trading orchestration
-│   │   ├── executor/                      # paper + live executors, position manager
-│   │   └── telemetry/                     # event emission + SQLite storage
-│   ├── services/                          # confluence / smc / indicator / scanner service layer
-│   ├── shared/config/
-│   │   └── scanner_modes.py               # the four modes + RELATIVITY_MAP
-│   ├── data/adapters/                     # Phemex / Bybit / OKX / Bitget / Binance
-│   ├── routers/                           # FastAPI routers (data, scanner, observability, htf)
-│   ├── diagnostics/
-│   │   ├── capture_contracts.py           # §20 contract snapshot driver
-│   │   ├── pipeline_smoke.py              # §20 structural smoke
-│   │   ├── contracts/                     # frozen API/telemetry/pipeline/DB baselines
-│   │   ├── decisions/                     # §19 calibration learnings
-│   │   ├── phase_archive/                 # completed phases
-│   │   └── audit_halts/                   # §16 3-round-fail halts
-│   └── tests/                             # pytest suites
-├── src/                                   # React HUD frontend
-│   ├── pages/                             # one page per route
-│   ├── components/hud/                    # HUD primitives (Chip, PageHead, Reticle, etc.)
-│   ├── services/                          # API client + scan history
-│   ├── hooks/                             # React hooks
-│   └── types/api.ts                       # generated from openapi.json
-├── tests/visual/                          # Playwright snapshot framework
-├── .claude/                               # Claude Code config
-│   ├── agents/                            # subagent definitions
-│   ├── skills/                            # invokable skills
-│   ├── hooks/                             # PreToolUse + PostToolUse enforcement
-│   └── settings.json
-└── scripts/                               # ops + codegen helpers
-```
-
-## Quick start
-
-Backend:
-```
-python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Frontend:
-```
-npm install
-npm run dev -- --host 0.0.0.0 --port 5000
-```
-
-Combined (if `concurrently` installed):
-```
+```powershell
 npm run dev:all
 ```
 
-Windows convenience launcher: `C:\start-sniper.bat`.
+The package scripts start the API at **8001** and frontend at **5000**.
+[Vite](vite.config.ts) proxies API requests to the configured backend; alternate
+launchers and environment overrides can change this. API startup loads environment
+and initializes services, so it is not an offline verification command.
 
-## Common operations
+For the Windows desktop launcher, run `scripts/start_windows.ps1` or the installed
+**SniperSight** desktop shortcut. It starts the repository Python environment and
+installed Vite in the background, opens the dashboard, and reuses healthy running
+services. Logs are under `%LOCALAPPDATA%\SniperSight\logs`. This launcher binds
+both services to localhost and does not enable automatic code reload. Phone access
+uses the separately configured private Tailscale Serve HTTPS address; the PC must
+remain awake. Starting the dashboard does not start a trading bot. See the
+[local access verification](docs/audits/LOCAL_ACCESS_2026-10-08.json) for this host.
 
-```bash
-# Contract integrity (§20 Rubric 14)
-python -m backend.diagnostics.capture_contracts diff
-python -m backend.diagnostics.pipeline_smoke verify
+## Decision system
 
-# Type sync (frontend ↔ backend, see §20)
-npm run gen:types
+Modes are configurations of the shared engine. Read
+[scanner_modes.py](backend/shared/config/scanner_modes.py) for defaults and the
+[index's configuration table](docs/ARCHITECTURE_INDEX.md#decision-contracts-and-configuration-precedence)
+for request/session overrides. A mode default is not necessarily the effective
+score or risk threshold.
 
-# Visual snapshots (Playwright)
-npm run snapshots:capture
-npm run snapshots:report
-npm run snapshots:approve <route> <state>
+The main path joins market selection, candle ingestion, features and market
+context, gates and directional scoring, decision policy, planning and risk.
+Paper/live services add admission, execution and position management. The index
+links the actual owners, contracts and known differences; no duplicate static
+module tree is maintained here.
 
-# Backend tests
-pytest
+## Offline verification
 
-# TypeScript
-npx tsc --noEmit
+From this Windows checkout:
+
+```powershell
+.\backend\venv\Scripts\python.exe -B backend/diagnostics/offline_verify.py backend
+.\backend\venv\Scripts\python.exe -B backend/diagnostics/offline_verify.py contracts
+.\backend\venv\Scripts\python.exe -B backend/diagnostics/offline_verify.py smoke
+.\node_modules\.bin\tsc.cmd --noEmit
 ```
 
-## Hard boundaries (CLAUDE.md §15)
+The guarded backend suite is selected, not the whole repository. It isolates
+test stores and denies external transport and child processes. Use `-k` for a
+focused backend selection and inspect the runner/manifest when adding coverage.
+Frontend test configuration and coverage limits are documented in the index.
 
-- No live trading code paths touched without explicit approval
-- No `min_confluence_score` or pre-scoring gate threshold changes without baseline data + documented reason
-- No silent reformats, no scope creep
-- No mock data swapped where real data is integrated
-- Bot mode source is `botConfig.sniperMode`, never `ScannerContext.selectedMode`
+Contract snapshots supplement caller/consumer inspection. Do not regenerate them
+simply to hide drift. Successful offline tests do not certify exchange connectivity,
+all modes/policies, operating-system worker isolation or live settlement.
 
-## License
+## Records and security
 
-Internal. Operator: Matt (maccardi4431@gmail.com). Repo: `NobleWolf412/snipersight-trading`.
+Preserve real journals, telemetry, audit checkpoints and dated decisions.
+Dated proposals and archives are historical evidence, not current implementation
+instructions. The current index records unresolved ownership and data issues.
+
+Do not assume local endpoints or a connected wallet provide authentication.
+The removed security templates did not demonstrate JWT/RBAC/encryption in the
+current app; wallet account selection alone is not proof of identity.

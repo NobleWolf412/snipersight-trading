@@ -55,6 +55,8 @@ Six-concern table (CLAUDE.md §16 Rubric 1):
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import threading
 import uuid
 from collections import deque
@@ -519,12 +521,40 @@ class ReplayEngine:
                 session.last_touched = datetime.now(timezone.utc)
             return session
 
+    @contextmanager
+    def _owned_session(self, session_id: str):
+        session = self.get_session(session_id)
+        if session is None:
+            raise KeyError(f"Session {session_id} not found or expired")
+        # Never wait for navigation while holding the registry lock.
+        with session.navigation_lock:
+            with self._lock:
+                if self._sessions.get(session_id) is not session:
+                    raise KeyError(f"Session {session_id} not found or expired")
+            try:
+                yield session
+            finally:
+                with self._lock:
+                    session.last_touched = datetime.now(timezone.utc)
+
+    def session_status(self, session_id: str) -> Dict[str, Any]:
+        """Detached status captured under the same ownership as navigation."""
+        with self._owned_session(session_id) as session:
+            return {
+                "session_id": session.session_id, "symbol": session.symbol,
+                "mode": session.mode_name, "current_index": session.step_index,
+                "total_bars": session.total_bars, "tf_step": session.tf_step,
+            }
+
     def end_session(self, session_id: str) -> bool:
-        with self._lock:
-            removed = self._sessions.pop(session_id, None)
-        if removed:
-            logger.info("Replay session ended: id=%s", session_id)
-        return removed is not None
+        try:
+            with self._owned_session(session_id) as session:
+                with self._lock:
+                    self._sessions.pop(session_id)
+                logger.info("Replay session ended: id={}", session_id)
+                return True
+        except KeyError:
+            return False
 
     # ------------------------------------------------------------------
     # Per-bar stepping
@@ -535,11 +565,7 @@ class ReplayEngine:
         StepResult for the new position. Negative `n` goes back; within the
         ring buffer the cached result is returned, otherwise the engine
         recomputes from window_start to the target index."""
-        session = self.get_session(session_id)
-        if session is None:
-            raise KeyError(f"Session {session_id} not found or expired")
-
-        with session.navigation_lock:
+        with self._owned_session(session_id) as session:
             target = session.step_index + n
             # Clamp target into valid range. Index 0 = first bar; -1 means "not started"
             if target < 0:
@@ -551,10 +577,7 @@ class ReplayEngine:
 
     def goto(self, session_id: str, index: int) -> StepResult:
         """Jump to absolute index (used by timeline-scrub and jump-to-signal)."""
-        session = self.get_session(session_id)
-        if session is None:
-            raise KeyError(f"Session {session_id} not found or expired")
-        with session.navigation_lock:
+        with self._owned_session(session_id) as session:
             if index < 0 or index >= session.total_bars:
                 raise IndexError(
                     f"Index {index} out of range [0, {session.total_bars - 1}] for session {session_id}"
@@ -568,11 +591,7 @@ class ReplayEngine:
         (plan is not None). Returns (StepResult, bars_advanced). If no
         signal fires within the lookahead, returns (None, bars_advanced)
         with the session positioned at the final scanned bar."""
-        session = self.get_session(session_id)
-        if session is None:
-            raise KeyError(f"Session {session_id} not found or expired")
-
-        with session.navigation_lock:
+        with self._owned_session(session_id) as session:
             bars_advanced = 0
             # Start from the bar after the current position
             start = session.step_index + 1
@@ -781,10 +800,20 @@ class ReplayEngine:
         now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=SESSION_IDLE_TTL_SECONDS)
         stale = [sid for sid, s in self._sessions.items() if s.last_touched < cutoff]
+        removed = 0
         for sid in stale:
-            self._sessions.pop(sid, None)
-            logger.info("Replay GC: dropped idle session %s", sid)
-        return len(stale)
+            session = self._sessions[sid]
+            if not session.navigation_lock.acquire(blocking=False):
+                continue
+            try:
+                # Navigation completion can refresh this timestamp before ownership.
+                if session.last_touched < cutoff:
+                    self._sessions.pop(sid)
+                    removed += 1
+                    logger.info("Replay GC: dropped idle session {}", sid)
+            finally:
+                session.navigation_lock.release()
+        return removed
 
 
 # Singleton accessor — router configures it at startup with the live adapter

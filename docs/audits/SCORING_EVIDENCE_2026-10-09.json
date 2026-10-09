@@ -1,0 +1,3627 @@
+{
+  "date": "2026-10-09",
+  "base_commit": "ace4bc3d9923d31f252ef9710b5f425ee26ba79d",
+  "scope": "Technical-analysis evidence duplication; divergence scale, acceptance and downstream risk review. ML excluded.",
+  "score_model_version": "evidence-dedup-v1",
+  "score_calibration": "heuristic_uncalibrated",
+  "decision": "backend/diagnostics/decisions/2026-10-09__evidence-deduplication.md",
+  "baseline": "Exact pre-task working-tree copies, not HEAD; earlier unrelated edits preserved.",
+  "backup": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-evidence-base-24e02152-3a09-4a34-b01b-c54d52a3e38e",
+  "scoped_diff": "C:\\Users\\macca\\AppData\\Local\\Temp\\snipersight-evidence-base-24e02152-3a09-4a34-b01b-c54d52a3e38e\\scoped-final.diff",
+  "paired_controlled_fixtures": [
+    {
+      "case": [
+        "overwatch",
+        "bullish",
+        false
+      ],
+      "before": {
+        "case": [
+          "overwatch",
+          "bullish",
+          false
+        ],
+        "score": 25.24470731707317,
+        "gate": 72.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.09146341463414634
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06707317073170732
+          ],
+          "Market Structure": [
+            0.0,
+            0.06707317073170732
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.06707317073170732
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0
+          ],
+          "Structural Minimum": [
+            0.0,
+            0.09146341463414634
+          ],
+          "Momentum": [
+            75.0,
+            0.024390243902439025
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04573170731707317
+          ],
+          "Volume": [
+            40.0,
+            0.030487804878048783
+          ],
+          "Volatility": [
+            60.0,
+            0.024390243902439025
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.036585365853658534
+          ],
+          "Close Momentum": [
+            40.0,
+            0.018292682926829267
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.024390243902439025
+          ],
+          "MACD Veto": [
+            100.0,
+            0.024390243902439025
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.036585365853658534
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.036585365853658534
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.036585365853658534
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.054878048780487805
+          ],
+          "OB Precision": [
+            0.0,
+            0.06097560975609757
+          ],
+          "HTF Composite": [
+            37.5,
+            0.09146341463414634
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.04573170731707317
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.024390243902439025
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "overwatch",
+          "bullish",
+          false
+        ],
+        "score": 23.375825,
+        "gate": 72.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.09374999999999999
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06874999999999999
+          ],
+          "Market Structure": [
+            0.0,
+            0.06874999999999999
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.06874999999999999
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0
+          ],
+          "Structural Minimum": [
+            0.0,
+            0.09374999999999999
+          ],
+          "Momentum": [
+            75.0,
+            0.024999999999999998
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04687499999999999
+          ],
+          "Volume": [
+            40.0,
+            0.03125
+          ],
+          "Volatility": [
+            60.0,
+            0.024999999999999998
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0375
+          ],
+          "Close Momentum": [
+            40.0,
+            0.01875
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.024999999999999998
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.0375
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.0375
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.0375
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.056249999999999994
+          ],
+          "OB Precision": [
+            0.0,
+            0.0625
+          ],
+          "HTF Composite": [
+            37.5,
+            0.09374999999999999
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.04687499999999999
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.024999999999999998
+          ]
+        }
+      },
+      "score_delta": -1.8688823170731723
+    },
+    {
+      "case": [
+        "strike",
+        "bullish",
+        false
+      ],
+      "before": {
+        "case": [
+          "strike",
+          "bullish",
+          false
+        ],
+        "score": 27.762519083969465,
+        "gate": 68.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.08396946564885496
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.061068702290076333
+          ],
+          "Market Structure": [
+            0.0,
+            0.1068702290076336
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.045801526717557245
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.030534351145038167
+          ],
+          "Momentum": [
+            75.0,
+            0.05725190839694656
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.06870229007633587
+          ],
+          "Volume": [
+            40.0,
+            0.03816793893129771
+          ],
+          "Volatility": [
+            60.0,
+            0.03816793893129771
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.045801526717557245
+          ],
+          "Close Momentum": [
+            40.0,
+            0.030534351145038167
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.0267175572519084
+          ],
+          "MACD Veto": [
+            100.0,
+            0.030534351145038167
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.030534351145038167
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.022900763358778622
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.0267175572519084
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.03816793893129771
+          ],
+          "OB Precision": [
+            0.0,
+            0.06870229007633587
+          ],
+          "HTF Composite": [
+            37.5,
+            0.05725190839694656
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.045801526717557245
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.045801526717557245
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "strike",
+          "bullish",
+          false
+        ],
+        "score": 25.487322834645667,
+        "gate": 68.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.08661417322834646
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06299212598425197
+          ],
+          "Market Structure": [
+            0.0,
+            0.11023622047244096
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.047244094488188976
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.031496062992125984
+          ],
+          "Momentum": [
+            75.0,
+            0.05905511811023622
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.07086614173228346
+          ],
+          "Volume": [
+            40.0,
+            0.03937007874015748
+          ],
+          "Volatility": [
+            60.0,
+            0.03937007874015748
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.047244094488188976
+          ],
+          "Close Momentum": [
+            40.0,
+            0.031496062992125984
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.02755905511811024
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.031496062992125984
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.023622047244094488
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.02755905511811024
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.03937007874015748
+          ],
+          "OB Precision": [
+            0.0,
+            0.07086614173228346
+          ],
+          "HTF Composite": [
+            37.5,
+            0.05905511811023622
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.047244094488188976
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.047244094488188976
+          ]
+        }
+      },
+      "score_delta": -2.2751962493237983
+    },
+    {
+      "case": [
+        "surgical",
+        "bullish",
+        false
+      ],
+      "before": {
+        "case": [
+          "surgical",
+          "bullish",
+          false
+        ],
+        "score": 24.766008230452673,
+        "gate": 70.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.0905349794238683
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06584362139917695
+          ],
+          "Market Structure": [
+            0.0,
+            0.11522633744855967
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.06172839506172839
+          ],
+          "Momentum": [
+            75.0,
+            0.04938271604938271
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Volume": [
+            40.0,
+            0.03292181069958847
+          ],
+          "Volatility": [
+            60.0,
+            0.04938271604938271
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0411522633744856
+          ],
+          "Close Momentum": [
+            40.0,
+            0.037037037037037035
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.024691358024691357
+          ],
+          "MACD Veto": [
+            100.0,
+            0.03292181069958847
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.0205761316872428
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.012345679012345678
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.037037037037037035
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.0205761316872428
+          ],
+          "OB Precision": [
+            0.0,
+            0.0905349794238683
+          ],
+          "HTF Composite": [
+            37.5,
+            0.03292181069958847
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.06172839506172839
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "surgical",
+          "bullish",
+          false
+        ],
+        "score": 22.204851063829786,
+        "gate": 70.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.09361702127659574
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06808510638297872
+          ],
+          "Market Structure": [
+            0.0,
+            0.11914893617021277
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.0425531914893617
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.06382978723404255
+          ],
+          "Momentum": [
+            75.0,
+            0.05106382978723404
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.0425531914893617
+          ],
+          "Volume": [
+            40.0,
+            0.03404255319148936
+          ],
+          "Volatility": [
+            60.0,
+            0.05106382978723404
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0425531914893617
+          ],
+          "Close Momentum": [
+            40.0,
+            0.03829787234042553
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.02553191489361702
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.02127659574468085
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.01276595744680851
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.03829787234042553
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.02127659574468085
+          ],
+          "OB Precision": [
+            0.0,
+            0.09361702127659574
+          ],
+          "HTF Composite": [
+            37.5,
+            0.03404255319148936
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.0425531914893617
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.06382978723404255
+          ]
+        }
+      },
+      "score_delta": -2.5611571666228876
+    },
+    {
+      "case": [
+        "stealth",
+        "bullish",
+        false
+      ],
+      "before": {
+        "case": [
+          "stealth",
+          "bullish",
+          false
+        ],
+        "score": 25.27275720164609,
+        "gate": 70.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.07407407407407407
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Market Structure": [
+            0.0,
+            0.0823045267489712
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.04938271604938271
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.03292181069958847
+          ],
+          "Structural Minimum": [
+            0.0,
+            0.12345679012345678
+          ],
+          "Momentum": [
+            75.0,
+            0.0411522633744856
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Volume": [
+            40.0,
+            0.0411522633744856
+          ],
+          "Volatility": [
+            60.0,
+            0.0205761316872428
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0411522633744856
+          ],
+          "Close Momentum": [
+            40.0,
+            0.0205761316872428
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.0205761316872428
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0205761316872428
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.02880658436213992
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.024691358024691357
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.03292181069958847
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.0411522633744856
+          ],
+          "OB Precision": [
+            0.0,
+            0.05761316872427984
+          ],
+          "HTF Composite": [
+            37.5,
+            0.0905349794238683
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.03292181069958847
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "stealth",
+          "bullish",
+          false
+        ],
+        "score": 23.702857142857145,
+        "gate": 70.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.07563025210084033
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.04201680672268908
+          ],
+          "Market Structure": [
+            0.0,
+            0.08403361344537816
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.05042016806722689
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.033613445378151266
+          ],
+          "Structural Minimum": [
+            0.0,
+            0.12605042016806722
+          ],
+          "Momentum": [
+            75.0,
+            0.04201680672268908
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04201680672268908
+          ],
+          "Volume": [
+            40.0,
+            0.04201680672268908
+          ],
+          "Volatility": [
+            60.0,
+            0.02100840336134454
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.04201680672268908
+          ],
+          "Close Momentum": [
+            40.0,
+            0.02100840336134454
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.02100840336134454
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.029411764705882356
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.025210084033613446
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.033613445378151266
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.04201680672268908
+          ],
+          "OB Precision": [
+            0.0,
+            0.05882352941176471
+          ],
+          "HTF Composite": [
+            37.5,
+            0.09243697478991597
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.04201680672268908
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.033613445378151266
+          ]
+        }
+      },
+      "score_delta": -1.5699000587889458
+    },
+    {
+      "case": [
+        "overwatch",
+        "bearish",
+        false
+      ],
+      "before": {
+        "case": [
+          "overwatch",
+          "bearish",
+          false
+        ],
+        "score": 25.24470731707317,
+        "gate": 72.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.09146341463414634
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06707317073170732
+          ],
+          "Market Structure": [
+            0.0,
+            0.06707317073170732
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.06707317073170732
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0
+          ],
+          "Structural Minimum": [
+            0.0,
+            0.09146341463414634
+          ],
+          "Momentum": [
+            75.0,
+            0.024390243902439025
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04573170731707317
+          ],
+          "Volume": [
+            40.0,
+            0.030487804878048783
+          ],
+          "Volatility": [
+            60.0,
+            0.024390243902439025
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.036585365853658534
+          ],
+          "Close Momentum": [
+            40.0,
+            0.018292682926829267
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.024390243902439025
+          ],
+          "MACD Veto": [
+            100.0,
+            0.024390243902439025
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.036585365853658534
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.036585365853658534
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.036585365853658534
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.054878048780487805
+          ],
+          "OB Precision": [
+            0.0,
+            0.06097560975609757
+          ],
+          "HTF Composite": [
+            37.5,
+            0.09146341463414634
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.04573170731707317
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.024390243902439025
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "overwatch",
+          "bearish",
+          false
+        ],
+        "score": 23.375825,
+        "gate": 72.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.09374999999999999
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06874999999999999
+          ],
+          "Market Structure": [
+            0.0,
+            0.06874999999999999
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.06874999999999999
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0
+          ],
+          "Structural Minimum": [
+            0.0,
+            0.09374999999999999
+          ],
+          "Momentum": [
+            75.0,
+            0.024999999999999998
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04687499999999999
+          ],
+          "Volume": [
+            40.0,
+            0.03125
+          ],
+          "Volatility": [
+            60.0,
+            0.024999999999999998
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0375
+          ],
+          "Close Momentum": [
+            40.0,
+            0.01875
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.024999999999999998
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.0375
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.0375
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.0375
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.056249999999999994
+          ],
+          "OB Precision": [
+            0.0,
+            0.0625
+          ],
+          "HTF Composite": [
+            37.5,
+            0.09374999999999999
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.04687499999999999
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.024999999999999998
+          ]
+        }
+      },
+      "score_delta": -1.8688823170731723
+    },
+    {
+      "case": [
+        "strike",
+        "bearish",
+        false
+      ],
+      "before": {
+        "case": [
+          "strike",
+          "bearish",
+          false
+        ],
+        "score": 27.762519083969465,
+        "gate": 68.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.08396946564885496
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.061068702290076333
+          ],
+          "Market Structure": [
+            0.0,
+            0.1068702290076336
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.045801526717557245
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.030534351145038167
+          ],
+          "Momentum": [
+            75.0,
+            0.05725190839694656
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.06870229007633587
+          ],
+          "Volume": [
+            40.0,
+            0.03816793893129771
+          ],
+          "Volatility": [
+            60.0,
+            0.03816793893129771
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.045801526717557245
+          ],
+          "Close Momentum": [
+            40.0,
+            0.030534351145038167
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.0267175572519084
+          ],
+          "MACD Veto": [
+            100.0,
+            0.030534351145038167
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.030534351145038167
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.022900763358778622
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.0267175572519084
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.03816793893129771
+          ],
+          "OB Precision": [
+            0.0,
+            0.06870229007633587
+          ],
+          "HTF Composite": [
+            37.5,
+            0.05725190839694656
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.045801526717557245
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.045801526717557245
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "strike",
+          "bearish",
+          false
+        ],
+        "score": 25.487322834645667,
+        "gate": 68.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.08661417322834646
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06299212598425197
+          ],
+          "Market Structure": [
+            0.0,
+            0.11023622047244096
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.047244094488188976
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.031496062992125984
+          ],
+          "Momentum": [
+            75.0,
+            0.05905511811023622
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.07086614173228346
+          ],
+          "Volume": [
+            40.0,
+            0.03937007874015748
+          ],
+          "Volatility": [
+            60.0,
+            0.03937007874015748
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.047244094488188976
+          ],
+          "Close Momentum": [
+            40.0,
+            0.031496062992125984
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.02755905511811024
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.031496062992125984
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.023622047244094488
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.02755905511811024
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.03937007874015748
+          ],
+          "OB Precision": [
+            0.0,
+            0.07086614173228346
+          ],
+          "HTF Composite": [
+            37.5,
+            0.05905511811023622
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.047244094488188976
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.047244094488188976
+          ]
+        }
+      },
+      "score_delta": -2.2751962493237983
+    },
+    {
+      "case": [
+        "surgical",
+        "bearish",
+        false
+      ],
+      "before": {
+        "case": [
+          "surgical",
+          "bearish",
+          false
+        ],
+        "score": 24.766008230452673,
+        "gate": 70.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.0905349794238683
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06584362139917695
+          ],
+          "Market Structure": [
+            0.0,
+            0.11522633744855967
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.06172839506172839
+          ],
+          "Momentum": [
+            75.0,
+            0.04938271604938271
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Volume": [
+            40.0,
+            0.03292181069958847
+          ],
+          "Volatility": [
+            60.0,
+            0.04938271604938271
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0411522633744856
+          ],
+          "Close Momentum": [
+            40.0,
+            0.037037037037037035
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.024691358024691357
+          ],
+          "MACD Veto": [
+            100.0,
+            0.03292181069958847
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.0205761316872428
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.012345679012345678
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.037037037037037035
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.0205761316872428
+          ],
+          "OB Precision": [
+            0.0,
+            0.0905349794238683
+          ],
+          "HTF Composite": [
+            37.5,
+            0.03292181069958847
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.06172839506172839
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "surgical",
+          "bearish",
+          false
+        ],
+        "score": 22.204851063829786,
+        "gate": 70.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.09361702127659574
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.06808510638297872
+          ],
+          "Market Structure": [
+            0.0,
+            0.11914893617021277
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.0425531914893617
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.06382978723404255
+          ],
+          "Momentum": [
+            75.0,
+            0.05106382978723404
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.0425531914893617
+          ],
+          "Volume": [
+            40.0,
+            0.03404255319148936
+          ],
+          "Volatility": [
+            60.0,
+            0.05106382978723404
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0425531914893617
+          ],
+          "Close Momentum": [
+            40.0,
+            0.03829787234042553
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.02553191489361702
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.02127659574468085
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.01276595744680851
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.03829787234042553
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.02127659574468085
+          ],
+          "OB Precision": [
+            0.0,
+            0.09361702127659574
+          ],
+          "HTF Composite": [
+            37.5,
+            0.03404255319148936
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.0425531914893617
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.06382978723404255
+          ]
+        }
+      },
+      "score_delta": -2.5611571666228876
+    },
+    {
+      "case": [
+        "stealth",
+        "bearish",
+        false
+      ],
+      "before": {
+        "case": [
+          "stealth",
+          "bearish",
+          false
+        ],
+        "score": 25.27275720164609,
+        "gate": 70.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.07407407407407407
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Market Structure": [
+            0.0,
+            0.0823045267489712
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.04938271604938271
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.03292181069958847
+          ],
+          "Structural Minimum": [
+            0.0,
+            0.12345679012345678
+          ],
+          "Momentum": [
+            75.0,
+            0.0411522633744856
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Volume": [
+            40.0,
+            0.0411522633744856
+          ],
+          "Volatility": [
+            60.0,
+            0.0205761316872428
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0411522633744856
+          ],
+          "Close Momentum": [
+            40.0,
+            0.0205761316872428
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.0205761316872428
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0205761316872428
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.02880658436213992
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.024691358024691357
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.03292181069958847
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.0411522633744856
+          ],
+          "OB Precision": [
+            0.0,
+            0.05761316872427984
+          ],
+          "HTF Composite": [
+            37.5,
+            0.0905349794238683
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.0411522633744856
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.03292181069958847
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "stealth",
+          "bearish",
+          false
+        ],
+        "score": 23.702857142857145,
+        "gate": 70.0,
+        "tier": "C",
+        "pass": false,
+        "factors": {
+          "Order Block": [
+            0.0,
+            0.07563025210084033
+          ],
+          "Fair Value Gap": [
+            0.0,
+            0.04201680672268908
+          ],
+          "Market Structure": [
+            0.0,
+            0.08403361344537816
+          ],
+          "Liquidity Sweep": [
+            0.0,
+            0.05042016806722689
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.033613445378151266
+          ],
+          "Structural Minimum": [
+            0.0,
+            0.12605042016806722
+          ],
+          "Momentum": [
+            75.0,
+            0.04201680672268908
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04201680672268908
+          ],
+          "Volume": [
+            40.0,
+            0.04201680672268908
+          ],
+          "Volatility": [
+            60.0,
+            0.02100840336134454
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.04201680672268908
+          ],
+          "Close Momentum": [
+            40.0,
+            0.02100840336134454
+          ],
+          "Multi-Candle Confirmation": [
+            0.0,
+            0.02100840336134454
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.029411764705882356
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.025210084033613446
+          ],
+          "Premium/Discount Zone": [
+            0.0,
+            0.033613445378151266
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.04201680672268908
+          ],
+          "OB Precision": [
+            0.0,
+            0.05882352941176471
+          ],
+          "HTF Composite": [
+            37.5,
+            0.09243697478991597
+          ],
+          "Institutional Sequence": [
+            0.0,
+            0.04201680672268908
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.033613445378151266
+          ]
+        }
+      },
+      "score_delta": -1.5699000587889458
+    },
+    {
+      "case": [
+        "overwatch",
+        "bullish",
+        true
+      ],
+      "before": {
+        "case": [
+          "overwatch",
+          "bullish",
+          true
+        ],
+        "score": 87.56752941176471,
+        "gate": 72.0,
+        "tier": "APEX",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.09803921568627451
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.0718954248366013
+          ],
+          "Market Structure": [
+            100.0,
+            0.0718954248366013
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.0718954248366013
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0
+          ],
+          "Momentum": [
+            75.0,
+            0.026143790849673203
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.049019607843137254
+          ],
+          "Volume": [
+            90.0,
+            0.032679738562091505
+          ],
+          "Volatility": [
+            60.0,
+            0.026143790849673203
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0392156862745098
+          ],
+          "Close Momentum": [
+            40.0,
+            0.0196078431372549
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.026143790849673203
+          ],
+          "MACD Veto": [
+            100.0,
+            0.026143790849673203
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.0392156862745098
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.026143790849673203
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.0392156862745098
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.0392156862745098
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.058823529411764705
+          ],
+          "OB Precision": [
+            15.0,
+            0.06535947712418301
+          ],
+          "HTF Composite": [
+            97.0,
+            0.09803921568627451
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.049019607843137254
+          ],
+          "Liquidity Draw": [
+            15.0,
+            0.026143790849673203
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "overwatch",
+          "bullish",
+          true
+        ],
+        "score": 82.70222818791946,
+        "gate": 72.0,
+        "tier": "APEX",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.10067114093959731
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.0738255033557047
+          ],
+          "Market Structure": [
+            100.0,
+            0.0738255033557047
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.0738255033557047
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0
+          ],
+          "Momentum": [
+            75.0,
+            0.026845637583892617
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.050335570469798654
+          ],
+          "Volume": [
+            75.0,
+            0.03355704697986577
+          ],
+          "Volatility": [
+            60.0,
+            0.026845637583892617
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.040268456375838924
+          ],
+          "Close Momentum": [
+            40.0,
+            0.020134228187919462
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.026845637583892617
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.040268456375838924
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.026845637583892617
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.040268456375838924
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.040268456375838924
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.060402684563758385
+          ],
+          "OB Precision": [
+            15.0,
+            0.06711409395973154
+          ],
+          "HTF Composite": [
+            97.0,
+            0.10067114093959731
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.050335570469798654
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.026845637583892617
+          ]
+        }
+      },
+      "score_delta": -4.86530122384525
+    },
+    {
+      "case": [
+        "strike",
+        "bullish",
+        true
+      ],
+      "before": {
+        "case": [
+          "strike",
+          "bullish",
+          true
+        ],
+        "score": 81.79430711610487,
+        "gate": 68.0,
+        "tier": "A",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08239700374531836
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.0599250936329588
+          ],
+          "Market Structure": [
+            100.0,
+            0.10486891385767791
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.0449438202247191
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0299625468164794
+          ],
+          "Momentum": [
+            75.0,
+            0.056179775280898875
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.06741573033707865
+          ],
+          "Volume": [
+            90.0,
+            0.03745318352059925
+          ],
+          "Volatility": [
+            60.0,
+            0.03745318352059925
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0449438202247191
+          ],
+          "Close Momentum": [
+            40.0,
+            0.0299625468164794
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.026217228464419477
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0299625468164794
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.0299625468164794
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.018726591760299626
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.02247191011235955
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.026217228464419477
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.03745318352059925
+          ],
+          "OB Precision": [
+            15.0,
+            0.06741573033707865
+          ],
+          "HTF Composite": [
+            97.0,
+            0.056179775280898875
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.0449438202247191
+          ],
+          "Liquidity Draw": [
+            15.0,
+            0.0449438202247191
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "strike",
+          "bullish",
+          true
+        ],
+        "score": 76.29837837837839,
+        "gate": 68.0,
+        "tier": "A",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08494208494208495
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.06177606177606178
+          ],
+          "Market Structure": [
+            100.0,
+            0.10810810810810813
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.04633204633204633
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.03088803088803089
+          ],
+          "Momentum": [
+            75.0,
+            0.05791505791505792
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.0694980694980695
+          ],
+          "Volume": [
+            75.0,
+            0.038610038610038616
+          ],
+          "Volatility": [
+            60.0,
+            0.038610038610038616
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.04633204633204633
+          ],
+          "Close Momentum": [
+            40.0,
+            0.03088803088803089
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.027027027027027032
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.03088803088803089
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.019305019305019308
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.023166023166023165
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.027027027027027032
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.038610038610038616
+          ],
+          "OB Precision": [
+            15.0,
+            0.0694980694980695
+          ],
+          "HTF Composite": [
+            97.0,
+            0.05791505791505792
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.04633204633204633
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.04633204633204633
+          ]
+        }
+      },
+      "score_delta": -5.495928737726487
+    },
+    {
+      "case": [
+        "surgical",
+        "bullish",
+        true
+      ],
+      "before": {
+        "case": [
+          "surgical",
+          "bullish",
+          true
+        ],
+        "score": 79.72184738955823,
+        "gate": 70.0,
+        "tier": "A",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08835341365461846
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.0642570281124498
+          ],
+          "Market Structure": [
+            100.0,
+            0.11244979919678715
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.040160642570281124
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.06024096385542168
+          ],
+          "Momentum": [
+            75.0,
+            0.048192771084337345
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.040160642570281124
+          ],
+          "Volume": [
+            90.0,
+            0.0321285140562249
+          ],
+          "Volatility": [
+            60.0,
+            0.048192771084337345
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.040160642570281124
+          ],
+          "Close Momentum": [
+            40.0,
+            0.03614457831325301
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.024096385542168672
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0321285140562249
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.020080321285140562
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.024096385542168672
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.012048192771084336
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.03614457831325301
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.020080321285140562
+          ],
+          "OB Precision": [
+            15.0,
+            0.08835341365461846
+          ],
+          "HTF Composite": [
+            97.0,
+            0.0321285140562249
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.040160642570281124
+          ],
+          "Liquidity Draw": [
+            15.0,
+            0.06024096385542168
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "surgical",
+          "bullish",
+          true
+        ],
+        "score": 73.93834024896265,
+        "gate": 70.0,
+        "tier": "B",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.0912863070539419
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.06639004149377593
+          ],
+          "Market Structure": [
+            100.0,
+            0.11618257261410789
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.04149377593360996
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.06224066390041493
+          ],
+          "Momentum": [
+            75.0,
+            0.04979253112033195
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04149377593360996
+          ],
+          "Volume": [
+            75.0,
+            0.03319502074688797
+          ],
+          "Volatility": [
+            60.0,
+            0.04979253112033195
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.04149377593360996
+          ],
+          "Close Momentum": [
+            40.0,
+            0.03734439834024896
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.024896265560165973
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.02074688796680498
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.024896265560165973
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.012448132780082987
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.03734439834024896
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.02074688796680498
+          ],
+          "OB Precision": [
+            15.0,
+            0.0912863070539419
+          ],
+          "HTF Composite": [
+            97.0,
+            0.03319502074688797
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.04149377593360996
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.06224066390041493
+          ]
+        }
+      },
+      "score_delta": -5.783507140595589
+    },
+    {
+      "case": [
+        "stealth",
+        "bullish",
+        true
+      ],
+      "before": {
+        "case": [
+          "stealth",
+          "bullish",
+          true
+        ],
+        "score": 85.23614678899084,
+        "gate": 70.0,
+        "tier": "APEX",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08256880733944953
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.045871559633027525
+          ],
+          "Market Structure": [
+            100.0,
+            0.09174311926605505
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.055045871559633024
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.03669724770642201
+          ],
+          "Momentum": [
+            75.0,
+            0.045871559633027525
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.045871559633027525
+          ],
+          "Volume": [
+            90.0,
+            0.045871559633027525
+          ],
+          "Volatility": [
+            60.0,
+            0.022935779816513763
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.045871559633027525
+          ],
+          "Close Momentum": [
+            40.0,
+            0.022935779816513763
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.022935779816513763
+          ],
+          "MACD Veto": [
+            100.0,
+            0.022935779816513763
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.03211009174311927
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.022935779816513763
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.027522935779816512
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.03669724770642201
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.045871559633027525
+          ],
+          "OB Precision": [
+            15.0,
+            0.06422018348623854
+          ],
+          "HTF Composite": [
+            97.0,
+            0.10091743119266054
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.045871559633027525
+          ],
+          "Liquidity Draw": [
+            15.0,
+            0.03669724770642201
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "stealth",
+          "bullish",
+          true
+        ],
+        "score": 80.02478873239437,
+        "gate": 70.0,
+        "tier": "APEX",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08450704225352113
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.04694835680751174
+          ],
+          "Market Structure": [
+            100.0,
+            0.09389671361502348
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.056338028169014086
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.03755868544600939
+          ],
+          "Momentum": [
+            75.0,
+            0.04694835680751174
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04694835680751174
+          ],
+          "Volume": [
+            75.0,
+            0.04694835680751174
+          ],
+          "Volatility": [
+            60.0,
+            0.02347417840375587
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.04694835680751174
+          ],
+          "Close Momentum": [
+            40.0,
+            0.02347417840375587
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.02347417840375587
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.03286384976525822
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.02347417840375587
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.028169014084507043
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.03755868544600939
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.04694835680751174
+          ],
+          "OB Precision": [
+            15.0,
+            0.06572769953051644
+          ],
+          "HTF Composite": [
+            97.0,
+            0.10328638497652583
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.04694835680751174
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.03755868544600939
+          ]
+        }
+      },
+      "score_delta": -5.211358056596467
+    },
+    {
+      "case": [
+        "overwatch",
+        "bearish",
+        true
+      ],
+      "before": {
+        "case": [
+          "overwatch",
+          "bearish",
+          true
+        ],
+        "score": 87.56752941176471,
+        "gate": 72.0,
+        "tier": "APEX",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.09803921568627451
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.0718954248366013
+          ],
+          "Market Structure": [
+            100.0,
+            0.0718954248366013
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.0718954248366013
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0
+          ],
+          "Momentum": [
+            75.0,
+            0.026143790849673203
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.049019607843137254
+          ],
+          "Volume": [
+            90.0,
+            0.032679738562091505
+          ],
+          "Volatility": [
+            60.0,
+            0.026143790849673203
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0392156862745098
+          ],
+          "Close Momentum": [
+            40.0,
+            0.0196078431372549
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.026143790849673203
+          ],
+          "MACD Veto": [
+            100.0,
+            0.026143790849673203
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.0392156862745098
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.026143790849673203
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.0392156862745098
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.0392156862745098
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.058823529411764705
+          ],
+          "OB Precision": [
+            15.0,
+            0.06535947712418301
+          ],
+          "HTF Composite": [
+            97.0,
+            0.09803921568627451
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.049019607843137254
+          ],
+          "Liquidity Draw": [
+            15.0,
+            0.026143790849673203
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "overwatch",
+          "bearish",
+          true
+        ],
+        "score": 82.70222818791946,
+        "gate": 72.0,
+        "tier": "APEX",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.10067114093959731
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.0738255033557047
+          ],
+          "Market Structure": [
+            100.0,
+            0.0738255033557047
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.0738255033557047
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0
+          ],
+          "Momentum": [
+            75.0,
+            0.026845637583892617
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.050335570469798654
+          ],
+          "Volume": [
+            75.0,
+            0.03355704697986577
+          ],
+          "Volatility": [
+            60.0,
+            0.026845637583892617
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.040268456375838924
+          ],
+          "Close Momentum": [
+            40.0,
+            0.020134228187919462
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.026845637583892617
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.040268456375838924
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.026845637583892617
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.040268456375838924
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.040268456375838924
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.060402684563758385
+          ],
+          "OB Precision": [
+            15.0,
+            0.06711409395973154
+          ],
+          "HTF Composite": [
+            97.0,
+            0.10067114093959731
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.050335570469798654
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.026845637583892617
+          ]
+        }
+      },
+      "score_delta": -4.86530122384525
+    },
+    {
+      "case": [
+        "strike",
+        "bearish",
+        true
+      ],
+      "before": {
+        "case": [
+          "strike",
+          "bearish",
+          true
+        ],
+        "score": 81.79430711610487,
+        "gate": 68.0,
+        "tier": "A",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08239700374531836
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.0599250936329588
+          ],
+          "Market Structure": [
+            100.0,
+            0.10486891385767791
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.0449438202247191
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.0299625468164794
+          ],
+          "Momentum": [
+            75.0,
+            0.056179775280898875
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.06741573033707865
+          ],
+          "Volume": [
+            90.0,
+            0.03745318352059925
+          ],
+          "Volatility": [
+            60.0,
+            0.03745318352059925
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.0449438202247191
+          ],
+          "Close Momentum": [
+            40.0,
+            0.0299625468164794
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.026217228464419477
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0299625468164794
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.0299625468164794
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.018726591760299626
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.02247191011235955
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.026217228464419477
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.03745318352059925
+          ],
+          "OB Precision": [
+            15.0,
+            0.06741573033707865
+          ],
+          "HTF Composite": [
+            97.0,
+            0.056179775280898875
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.0449438202247191
+          ],
+          "Liquidity Draw": [
+            15.0,
+            0.0449438202247191
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "strike",
+          "bearish",
+          true
+        ],
+        "score": 76.29837837837839,
+        "gate": 68.0,
+        "tier": "A",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08494208494208495
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.06177606177606178
+          ],
+          "Market Structure": [
+            100.0,
+            0.10810810810810813
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.04633204633204633
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.03088803088803089
+          ],
+          "Momentum": [
+            75.0,
+            0.05791505791505792
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.0694980694980695
+          ],
+          "Volume": [
+            75.0,
+            0.038610038610038616
+          ],
+          "Volatility": [
+            60.0,
+            0.038610038610038616
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.04633204633204633
+          ],
+          "Close Momentum": [
+            40.0,
+            0.03088803088803089
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.027027027027027032
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.03088803088803089
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.019305019305019308
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.023166023166023165
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.027027027027027032
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.038610038610038616
+          ],
+          "OB Precision": [
+            15.0,
+            0.0694980694980695
+          ],
+          "HTF Composite": [
+            97.0,
+            0.05791505791505792
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.04633204633204633
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.04633204633204633
+          ]
+        }
+      },
+      "score_delta": -5.495928737726487
+    },
+    {
+      "case": [
+        "surgical",
+        "bearish",
+        true
+      ],
+      "before": {
+        "case": [
+          "surgical",
+          "bearish",
+          true
+        ],
+        "score": 79.72184738955823,
+        "gate": 70.0,
+        "tier": "A",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08835341365461846
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.0642570281124498
+          ],
+          "Market Structure": [
+            100.0,
+            0.11244979919678715
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.040160642570281124
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.06024096385542168
+          ],
+          "Momentum": [
+            75.0,
+            0.048192771084337345
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.040160642570281124
+          ],
+          "Volume": [
+            90.0,
+            0.0321285140562249
+          ],
+          "Volatility": [
+            60.0,
+            0.048192771084337345
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.040160642570281124
+          ],
+          "Close Momentum": [
+            40.0,
+            0.03614457831325301
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.024096385542168672
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0321285140562249
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.020080321285140562
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.024096385542168672
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.012048192771084336
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.03614457831325301
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.020080321285140562
+          ],
+          "OB Precision": [
+            15.0,
+            0.08835341365461846
+          ],
+          "HTF Composite": [
+            97.0,
+            0.0321285140562249
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.040160642570281124
+          ],
+          "Liquidity Draw": [
+            15.0,
+            0.06024096385542168
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "surgical",
+          "bearish",
+          true
+        ],
+        "score": 73.93834024896265,
+        "gate": 70.0,
+        "tier": "B",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.0912863070539419
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.06639004149377593
+          ],
+          "Market Structure": [
+            100.0,
+            0.11618257261410789
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.04149377593360996
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.06224066390041493
+          ],
+          "Momentum": [
+            75.0,
+            0.04979253112033195
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04149377593360996
+          ],
+          "Volume": [
+            75.0,
+            0.03319502074688797
+          ],
+          "Volatility": [
+            60.0,
+            0.04979253112033195
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.04149377593360996
+          ],
+          "Close Momentum": [
+            40.0,
+            0.03734439834024896
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.024896265560165973
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.02074688796680498
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.024896265560165973
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.012448132780082987
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.03734439834024896
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.02074688796680498
+          ],
+          "OB Precision": [
+            15.0,
+            0.0912863070539419
+          ],
+          "HTF Composite": [
+            97.0,
+            0.03319502074688797
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.04149377593360996
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.06224066390041493
+          ]
+        }
+      },
+      "score_delta": -5.783507140595589
+    },
+    {
+      "case": [
+        "stealth",
+        "bearish",
+        true
+      ],
+      "before": {
+        "case": [
+          "stealth",
+          "bearish",
+          true
+        ],
+        "score": 85.23614678899084,
+        "gate": 70.0,
+        "tier": "APEX",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08256880733944953
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.045871559633027525
+          ],
+          "Market Structure": [
+            100.0,
+            0.09174311926605505
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.055045871559633024
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.03669724770642201
+          ],
+          "Momentum": [
+            75.0,
+            0.045871559633027525
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.045871559633027525
+          ],
+          "Volume": [
+            90.0,
+            0.045871559633027525
+          ],
+          "Volatility": [
+            60.0,
+            0.022935779816513763
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.045871559633027525
+          ],
+          "Close Momentum": [
+            40.0,
+            0.022935779816513763
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.022935779816513763
+          ],
+          "MACD Veto": [
+            100.0,
+            0.022935779816513763
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.03211009174311927
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.022935779816513763
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.027522935779816512
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.03669724770642201
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.045871559633027525
+          ],
+          "OB Precision": [
+            15.0,
+            0.06422018348623854
+          ],
+          "HTF Composite": [
+            97.0,
+            0.10091743119266054
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.045871559633027525
+          ],
+          "Liquidity Draw": [
+            15.0,
+            0.03669724770642201
+          ]
+        }
+      },
+      "after": {
+        "case": [
+          "stealth",
+          "bearish",
+          true
+        ],
+        "score": 80.02478873239437,
+        "gate": 70.0,
+        "tier": "APEX",
+        "pass": true,
+        "factors": {
+          "Order Block": [
+            100.0,
+            0.08450704225352113
+          ],
+          "Fair Value Gap": [
+            85.0,
+            0.04694835680751174
+          ],
+          "Market Structure": [
+            100.0,
+            0.09389671361502348
+          ],
+          "Liquidity Sweep": [
+            85.0,
+            0.056338028169014086
+          ],
+          "Kill Zone Timing": [
+            35.0,
+            0.03755868544600939
+          ],
+          "Momentum": [
+            75.0,
+            0.04694835680751174
+          ],
+          "Price-Indicator Divergence": [
+            0.0,
+            0.04694835680751174
+          ],
+          "Volume": [
+            75.0,
+            0.04694835680751174
+          ],
+          "Volatility": [
+            60.0,
+            0.02347417840375587
+          ],
+          "MTF Indicator Alignment": [
+            100.0,
+            0.04694835680751174
+          ],
+          "Close Momentum": [
+            40.0,
+            0.02347417840375587
+          ],
+          "Multi-Candle Confirmation": [
+            100.0,
+            0.02347417840375587
+          ],
+          "MACD Veto": [
+            100.0,
+            0.0
+          ],
+          "BTC Impulse Gate": [
+            100.0,
+            0.03286384976525822
+          ],
+          "Fibonacci Proximity": [
+            100.0,
+            0.02347417840375587
+          ],
+          "Weekly StochRSI Bonus": [
+            83.3,
+            0.028169014084507043
+          ],
+          "Premium/Discount Zone": [
+            100.0,
+            0.03755868544600939
+          ],
+          "Regime Alignment": [
+            68.648,
+            0.04694835680751174
+          ],
+          "OB Precision": [
+            15.0,
+            0.06572769953051644
+          ],
+          "HTF Composite": [
+            97.0,
+            0.10328638497652583
+          ],
+          "Institutional Sequence": [
+            100.0,
+            0.04694835680751174
+          ],
+          "Liquidity Draw": [
+            0.0,
+            0.03755868544600939
+          ]
+        }
+      },
+      "score_delta": -5.211358056596467
+    }
+  ],
+  "comparison_limits": "16 controlled factor-input cases across four modes and both directions; no actual divergence or cycle in this cohort, no representative admission/profit calibration.",
+  "raw_candle_preset_admission": [
+    {
+      "direction": "LONG",
+      "seed": 2,
+      "impulse": 0.012,
+      "hour": 15,
+      "preset": "balanced",
+      "gate": 65.0,
+      "floor": 55.0,
+      "score": 62.54524982359326,
+      "accepted": 0,
+      "reasons": [
+        "low_confluence"
+      ]
+    },
+    {
+      "direction": "LONG",
+      "seed": 2,
+      "impulse": 0.012,
+      "hour": 15,
+      "preset": "aggressive",
+      "gate": 58.0,
+      "floor": 48.0,
+      "score": 62.54524982359326,
+      "accepted": 1,
+      "reasons": [
+        null
+      ]
+    },
+    {
+      "direction": "SHORT",
+      "seed": 2,
+      "impulse": 0.01,
+      "hour": 15,
+      "preset": "balanced",
+      "gate": 65.0,
+      "floor": 55.0,
+      "score": 65.4122033256099,
+      "accepted": 1,
+      "reasons": [
+        null
+      ]
+    },
+    {
+      "direction": "SHORT",
+      "seed": 2,
+      "impulse": 0.01,
+      "hour": 15,
+      "preset": "aggressive",
+      "gate": 58.0,
+      "floor": 48.0,
+      "score": 65.4122033256099,
+      "accepted": 1,
+      "reasons": [
+        null
+      ]
+    }
+  ],
+  "fixture_migration": "Original balanced LONG rejection retained; unchanged candles execute settlement and downstream planner/risk fault injection under the existing aggressive preset. Balanced SHORT admission also retained. No gate weakened in production.",
+  "unchanged_bot_presets": {
+    "conservative": {
+      "gate": 72.0,
+      "floor": 62.0
+    },
+    "balanced": {
+      "gate": 65.0,
+      "floor": 55.0
+    },
+    "aggressive": {
+      "gate": 58.0,
+      "floor": 48.0
+    }
+  },
+  "divergence_scale": {
+    "formula": "min(100, strongest retained report per price-pivot pair summed * 100 / 55)",
+    "rsi_regular_max": 100,
+    "macd_regular_max": 76.36363636363637,
+    "factor_60_strength_boundary": {
+      "rsi_regular": 45,
+      "macd_regular": 70
+    },
+    "consumer_boundaries": "counter-HTF >=60, STRIKE >60, coverage50, strong70 retained provisionally",
+    "interpretation": "One factor quality scale; this can increase a lone divergence score while removing duplicate reports, so the change is not purely subtractive."
+  },
+  "verification": {
+    "full_selected_backend": {
+      "passed": 2180,
+      "deselected": 0,
+      "warnings": 208,
+      "seconds": 296.91,
+      "exit_code": 0,
+      "log": "%TEMP%/snipersight-evidence-full-final.txt",
+      "log_sha256": "698c5ac8e85762293769f64bef4dfce3c6b4a91c96e879d5f84b7bb3f233ec2b",
+      "seven_guard_denial_checks": "passed",
+      "blocked_operations": [
+        "['os.mkdir outside fixture directory', 'subprocess.Popen']\r"
+      ]
+    },
+    "joined_core_rejections_score_contracts": {
+      "passed": 75,
+      "deselected": 2105,
+      "warnings": 46,
+      "seconds": 241.61,
+      "exit_code": 0,
+      "log": "%TEMP%/snipersight-evidence-joined-final.txt",
+      "log_sha256": "759b94ad66a03e892024b14b2a2993f00049407fa124d57e4daeb671038ef5bf",
+      "seven_guard_denial_checks": "passed",
+      "blocked_operations": [
+        "['subprocess.Popen']\r"
+      ]
+    },
+    "commands": [
+      ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py backend",
+      ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py backend -k \"core_workflow or scan_rejection_evidence or scoring_confidence_contract\"",
+      ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py contracts",
+      ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py smoke"
+    ],
+    "manifest_files": 108,
+    "manifest_limit": "Selected offline manifest only. Serial/pickled workers do not establish process isolation; no API imports/startup or external trading.",
+    "independent_focused": [
+      {
+        "reviewer": "api_ownership_design",
+        "passed": 71,
+        "scope": "evidence_accounting before final eight sequence service cases"
+      },
+      {
+        "reviewer": "api_ownership_design",
+        "passed": 8,
+        "scope": "new direct LONG/SHORT counter-HTF sequence chronology cases"
+      }
+    ],
+    "contracts": {
+      "exit_code": 1,
+      "api": "clean",
+      "telemetry": "clean",
+      "pipeline": "clean",
+      "db": "Two intentional signal writer implementation fingerprints; additive version/calibration/gate provenance, earlier live UNKNOWN fix also retained. Baselines unchanged.",
+      "writer_hashes": {
+        "live": [
+          "5bf01611b95df8de4c1b405e0d1a1c21ab9ee3ff1dcc372dab36299e504d2f09",
+          "ea4f13f33f9d3987b87a00455d03c95d80eb8668008c6553500ce672807a4708"
+        ],
+        "paper": [
+          "8f7dce5469c1a087c86536dab049d7463b38e60c38fd60cec0632f625b5ca22c",
+          "db9a7b71e69a03c91dbe24095fea27dac63a64f9a86cdd602b2a45f11af3c59a"
+        ]
+      },
+      "evidence": "Fresh guarded execution by independent api_backend_integrity reviewer; exact report retained in task."
+    },
+    "smoke": {
+      "exit_code": 0,
+      "clean_groups": 8,
+      "evidence": "Fresh guarded independent execution by api_backend_integrity reviewer."
+    },
+    "frontend": "No frontend changes in this batch; no new frontend test claim."
+  },
+  "independent_reviews": [
+    {
+      "reviewer": "api_ownership_design",
+      "result": "No remaining scoped math defect. Added direct counter-HTF chronology coverage; raw JSONL provenance and divergence attainability gaps resolved."
+    },
+    {
+      "reviewer": "universe_design_review",
+      "result": "Gate/config/sizing/provenance scope cleared; plain legacy exception handling repaired. Accepted fixture migration provided original balanced LONG rejection remains tested."
+    },
+    {
+      "reviewer": "api_backend_integrity",
+      "result": "No remaining blocking compatibility finding in traced producers, scorer/service, planner, bots and evidence consumers. Four protected hashes match."
+    }
+  ],
+  "checklist": {
+    "scope_and_intent": "Duplicate observation credit corrected; weights/preset constants retained; divergence scale migration explicit.",
+    "fundamentals": "Current producers, event identity/time, effective configs and consumers traced; primary technical indicator definitions distinguished from independence claims.",
+    "contracts_and_ownership": "API/telemetry/pipeline inventories unchanged. Private helpers and JSONL provenance explicitly recorded. Roll back scorer, service and shared comparison consumers together using scoped patch, not entire dirty files.",
+    "behavior": "Mirrored duplicate invariance, actual-pivot detector/service confirmation, chronology, gate boundaries, risk budgets and candle-to-paper settlement.",
+    "accounting": "Risk/settlement assertions preserved; unknown source version stays unknown; actual journal/DB untouched.",
+    "isolation": "Guarded selected suite/contracts/smoke; no baseline replacement or external exchange.",
+    "trading_assumptions": "No optimal threshold or profitability claim. Presets provisional; accepted/rejected versioned representative observations needed.",
+    "completion": "Scoped diff and source hashes saved, independent review, map and additive checkpoint updated."
+  },
+  "remaining_limits": [
+    "Optional emitted-factor denominators and related momentum/HTF/structure inputs remain; no global statistical decorrelation claim.",
+    "MACD veto soft-pass, HTF sweep and OB/FVG interactions, count-based tier conditions and other absolute score cutoffs remain heuristic policies.",
+    "Sequence predicate proves sweep-before-shift; OB is co-present, not chronologically certified.",
+    "Paper soft floor and thesis policy differ from live hard-gate behavior; those product contracts remain.",
+    "Historical journal lacks revision/input/config/execution provenance for defensible calibration. Completed trades and old diagnostic aggregators do not automatically split score versions.",
+    "Default balanced LONG tape now rejects; controlled/seeded fixtures do not measure realistic default trade frequency.",
+    "No live/testnet orders, app restart, deployment, commit or push; no whole-system or process-spawning certification."
+  ],
+  "protected_files": [
+    {
+      "path": "backend/cache/trade_journal.jsonl",
+      "sha256": "5a0365897575bb8b8c336a7459d77fbd78cf71e099581f37608ccdab913b629a",
+      "unchanged": true
+    },
+    {
+      "path": "backend/cache/telemetry.db",
+      "sha256": "342935783cb0d768613f3df45d72c24be3479378c07ebf01d195e865772e69e8",
+      "unchanged": true
+    },
+    {
+      "path": "backend/diagnostics/contracts/db_contracts.json",
+      "sha256": "1aec5ee4cfb429d84f7dca38b76ca9dd90a8b8c68698b93bd511125a9e9f1c3e",
+      "unchanged": true
+    },
+    {
+      "path": "backend/diagnostics/capture_contracts.py",
+      "sha256": "4e729d8179faac45c87c17abbed70d15eceedf4bac23340f698a771821bd1e46",
+      "unchanged": true
+    }
+  ],
+  "source_hashes": {
+    "backend/strategy/confluence/scorer.py": {
+      "after_sha256": "3fb18990d3ee713836d80cb03b60d5b7b283243e9f3c8fc47e1c4a440d9783a6",
+      "before_sha256": "58368bb1bd3e918c890f35723109ff6dd8d74d5f8fc75cbfa8beedc63955fba5"
+    },
+    "backend/strategy/confluence/liquidity_map_scorer.py": {
+      "after_sha256": "6f157639ad9bcdc4d4dd885dd8a52fa3d6014aa13edf4304a79e1acf960873ba",
+      "before_sha256": "04125866ed7f374339cf096ba1a04f4e6030fef55dfbef2e6acdc712287e034a"
+    },
+    "backend/services/confluence_service.py": {
+      "after_sha256": "097d9ac699a065c995671961d0bb9e2b8a5d893c1280bce227feaff423a94066",
+      "before_sha256": "08af4abf45d331329fc5a1cc1d62beaf6fd605a5ff723b018b00f40861f3498a"
+    },
+    "backend/shared/config/sensitivity.py": {
+      "after_sha256": "e69a75ae069ba3687dc1fd70d473500fd5febd48ce50eaf643a53a5517c7e543",
+      "before_sha256": "1c3efb8f683c7ff80cf8024eb2cee155b3d7bca11feb9dc2d18dfdb9143135f6"
+    },
+    "backend/shared/models/scoring.py": {
+      "after_sha256": "6b2feec8cb5fef3711982889ae1f187e5ffcc84e53fc96aca9449c8ca508d5fe",
+      "before_sha256": "21b2e335ee1859baaa6b8745d78ac7ca9bd73821f83c4fe105e18ccb22c850bc"
+    },
+    "backend/engine/orchestrator.py": {
+      "after_sha256": "d8b4da483b934a46d632930bb3133f6fa11ff433b937b8cf2cbeb2f23bff6b95",
+      "before_sha256": "3a769f5168196ac05229e8bc155e90d7134a911720b36b738cdaa21122f23c77"
+    },
+    "backend/bot/paper_trading_service.py": {
+      "after_sha256": "c7baed54b750ffc97638466130f4e0321087a20bb552f5f689c9f8188fa61027",
+      "before_sha256": "2e947aedb71824860daad25b5606f2e8d6b611363d8a7cb4ae39bdcd7ffa4ddb"
+    },
+    "backend/bot/live_trading_service.py": {
+      "after_sha256": "3e0ba6e3d0786e19ca2423397c466dedc48ff5cda994ce5af672b7bd771e2910",
+      "before_sha256": "c68f4f6a60edd131064b5ad5b45e35ec5664e9a5f459f4abf9ecb90f1a686e23"
+    },
+    "backend/tests/unit/test_evidence_accounting.py": {
+      "after_sha256": "447cc660e0f4abafc74c0831ab152afaf424978627aa56c9c447d574c5a6ab8d",
+      "before_sha256": null
+    },
+    "backend/tests/unit/test_scoring_confidence_contract.py": {
+      "after_sha256": "8d71d8cce7402adfdd6da60bebac908be53d090940f92a64e8e65992ea65a3e5",
+      "before_sha256": "68af39a0659428ae44ee73dbcfa659f662c5ac8caddd94a0a8519816118f6c16"
+    },
+    "backend/tests/unit/test_live_reconciliation.py": {
+      "after_sha256": "f29c39fb59da8b74daabe1f2b328b862bacbbf3259a71c7754d04cb91b3efd01",
+      "before_sha256": "faee56e5a6d50d8495d5d2fea3701eea68f294b714bc50063ec15076ec10e273"
+    },
+    "backend/tests/integration/test_core_workflow.py": {
+      "after_sha256": "e05cb69562f1e75370479ddb05c1488d4631477672415fda0950e5a91f3d6d93",
+      "before_sha256": "85aab9557ef1a561e3fc91150617284620c1460295bda43d58aa9faea184396d"
+    },
+    "backend/tests/integration/test_scoring_direction_handoff.py": {
+      "after_sha256": "7868b99479cd6084926a9efa2518975081e933c4e66f5603612a9c82800e1e89",
+      "before_sha256": "c371cbaf1611095e9205767972f61872a166180601a19262373520f73d523ee2"
+    },
+    "backend/tests/integration/test_scan_rejection_evidence.py": {
+      "after_sha256": "cdc0b042060e3ec5adf913ed1f5d6dec5ec408503bad3965b67eb704d07bbb2b",
+      "before_sha256": "0395cca8b97000806a70b81ca05490bb0bd19a89f4be45e1dc733da74aebb4fc"
+    },
+    "backend/diagnostics/offline_checks.json": {
+      "after_sha256": "cf37f6aada8209c857cdca1b1f79d383c2fc0d68c2810691b02760622ac1df9d",
+      "before_sha256": "86caf4dc93674f50fb41466965dcae7053cbedd1fd130f1acdfe798fa77f29db"
+    },
+    "backend/shared/config/scanner_modes.py": {
+      "after_sha256": "e663fb322e62426bf235a4893f9a50ed9638d771653e8b13c546c0f08c599d5a",
+      "before_sha256": null
+    },
+    "docs/ARCHITECTURE_INDEX.md": {
+      "after_sha256": "68e5d835044b16e560f0d0a24e6268e26dca18bd7ef690b2cda87611f456c2f0",
+      "before_sha256": "e0b9be488cf3d3c338b001ca7de24be468bbbd5b41df6e282f0fb1e2e4c12adc"
+    },
+    "backend/diagnostics/decisions/2026-10-09__evidence-deduplication.md": {
+      "after_sha256": "36edac086d6dd205367f1e05d866645240d593d2e05d1003482bbabbf09c9870",
+      "before_sha256": null
+    }
+  }
+}
