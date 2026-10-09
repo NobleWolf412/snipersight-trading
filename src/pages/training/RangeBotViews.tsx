@@ -1,0 +1,888 @@
+import { Toggle } from '@/components/hud/Toggle';
+export { Toggle } from '@/components/hud/Toggle';
+import { paperSessionNeedsAttention } from '@/services/paperTradingService';
+import { accountingColor, accountingLabel, executionReportNotice, formatAccountMoney } from '../../services/accounting';
+/**
+ * RangeBot — full paper-trading equivalent of the live bot
+ *
+ * Operator intent: "a page just like bot but for paper trading — this is
+ * a simulated version of the bot. Including bot setup, but like for paper trading."
+ *
+ * Tabbed shell: #setup / #status — mirrors the live bot's /bot/setup + /bot/status
+ * split, but in one page under /training/range.
+ *
+ * Setup tab:
+ *   - Paper-specific config: initial_balance slider (not real money)
+ *   - Same execution sliders as BotSetup: risk%, leverage, max positions,
+ *     duration, scan interval, confluence threshold
+ *   - Execution toggles: trailing stop, breakeven
+ *   - Universe scope: majors/altcoins + size
+ *   - Paper-specific: slippage_bps, fee_rate (simulated fill realism)
+ *   - ARM button — starts paper bot + switches to #status tab
+ *   - No preflight check, no kill-switch acknowledgment (simulated capital)
+ *
+ * Status tab:
+ *   - PAPER MODE banner (always visible)
+ *   - CycleHeartbeat strip
+ *   - Command Center (glowing dot, uptime, STOP/RESET buttons, metric grid, config pills)
+ *   - Equity Curve + Statistics (2-column)
+ *   - Open Positions (6-column, direction-symmetric)
+ *   - Activity Log (recent_activity — paper bot logs signals, fills, exits)
+ *   - Exit Reasons + By-Trade-Type breakdown (2-column)
+ *
+ * §15 boundary:
+ *   - ALL API calls go through paperTradingService (hits /api/paper-trading/*).
+ *   - No shared code with liveTradingService; structurally incapable of
+ *     dispatching live orders.
+ *   - sniper_mode sourced from botConfig.sniperMode (read-only consumer).
+ *
+ * Direction-agnostic: LONG/SHORT positions rendered by identical code paths.
+ * Chip color differs; logic is fully symmetric per CLAUDE.md §10 #3.
+ *
+ * StrictMode-safe: cancelled flag + setTimeout recursion.
+ * Snapshot-ready: body[data-snapshot-ready="true"] after first poll.
+ */
+import { Chip, PositionDetailModal, SectionHead, type DetailSelection } from '@/components/hud';
+import { type CompletedPaperTrade, type PaperPosition, type PaperTradingStatus } from '@/services/paperTradingService';
+import { type JournalAggregate } from '@/services/tradeJournalService';
+import { useCallback, useMemo, useState } from 'react';
+// ─── Constants ─────────────────────────────────────────────────────────
+const FAST_POLL_MS = 2000;
+const SLOW_POLL_MS = 10000;
+// ─── Formatters ────────────────────────────────────────────────────────
+export function fmtDuration(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds < 0)
+        return '—';
+    if (seconds < 60)
+        return `${Math.round(seconds)}s`;
+    if (seconds < 3600) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}m ${s}s`;
+    }
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${m}m`;
+}
+export function fmtCurrency(v: number | null | undefined, decimals = 2): string {
+    return formatAccountMoney(v, decimals);
+}
+export function fmtPct(v: number | null | undefined, sign = false): string {
+    if (v == null || !Number.isFinite(v))
+        return '—';
+    const prefix = sign && v > 0 ? '+' : '';
+    return `${prefix}${v.toFixed(2)}%`;
+}
+// ─── PAPER MODE Banner ─────────────────────────────────────────────────
+export function PaperModeBanner() {
+    return (<div role="banner" aria-label="paper mode disclosure" style={{
+            background: 'var(--amber-bg)',
+            border: '1px solid var(--amber-border)',
+            borderRadius: 10,
+            padding: '12px 16px',
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+        }}>
+      <span className="mono" style={{ fontSize: 13, color: 'var(--amber)', fontWeight: 800, letterSpacing: 2 }}>
+        ◉ PAPER MODE
+      </span>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        simulated capital · no real funds · same scanner + engine as live bot
+      </span>
+    </div>);
+}
+// ─── Shared setup primitives ───────────────────────────────────────────
+export function Slider({ label, value, min, max, step, onChange, suffix, color, hint, }: {
+    label: string;
+    value: number;
+    min: number;
+    max: number;
+    step: number;
+    onChange: (v: number) => void;
+    suffix?: string;
+    color?: string;
+    hint?: string;
+}) {
+    return (<div style={{
+            padding: '12px 14px',
+            border: '1px solid var(--border-soft)',
+            borderRadius: 6,
+            background: 'rgba(0,0,0,.3)',
+        }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.16em', textTransform: 'uppercase' }}>
+          {label}
+        </span>
+        <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: color || 'var(--accent)' }}>
+          {value}{suffix || ''}
+        </span>
+      </div>
+      <input type="range" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => onChange(+e.target.value)} style={{ width: '100%' }}/>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+        <span className="mono" style={{ fontSize: 8, color: 'var(--fg-4)' }}>{min}{suffix || ''}</span>
+        <span className="mono" style={{ fontSize: 8, color: 'var(--fg-4)' }}>{max}{suffix || ''}</span>
+      </div>
+      {hint && (<div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 6 }}>
+          {hint}
+        </div>)}
+    </div>);
+}
+
+export function SectionPanel({ num, title, desc, children, }: {
+    num: string;
+    title: string;
+    desc?: string;
+    children: React.ReactNode;
+}) {
+    return (<section className="panel" style={{ marginBottom: 14 }}>
+      <div style={{
+            padding: '14px 18px',
+            borderBottom: '1px solid var(--border-soft)',
+            background: 'rgba(0,0,0,.4)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+        }}>
+        <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 32,
+            height: 32,
+            border: '1px solid var(--accent)',
+            color: 'var(--accent)',
+            fontFamily: 'JetBrains Mono,monospace',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '.08em',
+            borderRadius: 3,
+            boxShadow: '0 0 8px rgba(34,211,238,.2)',
+        }}>
+          {num}
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: 'Share Tech Mono,monospace', fontSize: 15, letterSpacing: '.08em', color: 'var(--fg)', textTransform: 'uppercase' }}>
+            {title}
+          </div>
+          {desc && (<div className="mono" style={{ fontSize: 10, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 2 }}>
+              {desc}
+            </div>)}
+        </div>
+      </div>
+      <div style={{ padding: '14px 18px' }}>{children}</div>
+    </section>);
+}
+// ─── Metric Tile ───────────────────────────────────────────────────────
+export function MetricTile({ label, value, sub, accent, }: {
+    label: string;
+    value: string;
+    sub?: string;
+    accent?: 'green' | 'red' | 'amber' | 'blue' | 'cyan';
+}) {
+    const valueColor = accent === 'green' ? 'var(--green)'
+        : accent === 'red' ? 'var(--red)'
+            : accent === 'amber' ? 'var(--amber)'
+                : accent === 'blue' ? 'var(--blue)'
+                    : accent === 'cyan' ? '#22d3ee'
+                        : 'var(--fg-1)';
+    return (<div style={{ padding: '12px 14px', border: '1px solid var(--border-soft)', borderRadius: 10, background: 'rgba(0,0,0,.35)' }}>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase', marginBottom: 8 }}>
+        {label}
+      </div>
+      <div className="mono" style={{ fontSize: 22, fontWeight: 800, color: valueColor, letterSpacing: '-0.01em', lineHeight: 1, marginBottom: sub ? 4 : 0 }}>
+        {value}
+      </div>
+      {sub && <div className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{sub}</div>}
+    </div>);
+}
+// ─── Equity Sparkline ──────────────────────────────────────────────────
+export function EquitySparkline({ trades, initialBalance }: {
+    trades: CompletedPaperTrade[];
+    initialBalance: number;
+}) {
+    const points = useMemo(() => {
+        if (!trades || trades.length === 0)
+            return [];
+        const sorted = [...trades].reverse();
+        let equity = initialBalance;
+        const pts = [{ x: 0, y: equity }];
+        sorted.forEach((t, i) => {
+            equity += t.pnl;
+            pts.push({ x: i + 1, y: equity });
+        });
+        return pts;
+    }, [trades, initialBalance]);
+    if (points.length < 2) {
+        return (<div className="mono" style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase' }}>
+        — awaiting trades —
+      </div>);
+    }
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+    const rangeY = maxY - minY || 1;
+    const w = 280;
+    const h = 56;
+    const pad = 2;
+    const pathD = points.map((p, i) => {
+        const x = pad + (p.x / (points.length - 1)) * (w - 2 * pad);
+        const y = h - pad - ((p.y - minY) / rangeY) * (h - 2 * pad);
+        return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }).join(' ');
+    const lastPt = points[points.length - 1];
+    const isUp = lastPt.y >= initialBalance;
+    const strokeColor = isUp ? '#34d399' : '#f87171';
+    const fillGradId = 'rb-eq-grad';
+    const lastPtX = pad + (lastPt.x / (points.length - 1)) * (w - 2 * pad);
+    const lastPtY = h - pad - ((lastPt.y - minY) / rangeY) * (h - 2 * pad);
+    const areaD = `${pathD} L ${lastPtX.toFixed(1)} ${h} L ${pad.toFixed(1)} ${h} Z`;
+    return (<svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 64 }}>
+      <defs>
+        <linearGradient id={fillGradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.18"/>
+          <stop offset="100%" stopColor={strokeColor} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={areaD} fill={`url(#${fillGradId})`}/>
+      <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={lastPtX} cy={lastPtY} r="3" fill={strokeColor}/>
+    </svg>);
+}
+// ─── Position Row (direction-symmetric) ───────────────────────────────
+// Direction-agnostic: LONG/SHORT handled by identical code path.
+// Chip kind (green vs red) and PnL color differ by direction, but the
+// underlying render logic is fully symmetric — no `if LONG` branches.
+// No __long/__short snapshot pair is needed; both directions are exercised
+// in the `range_bot_running` fixture which contains one LONG + one SHORT
+// position. This mirrors the UniversePanel exception pattern documented
+// in tests/visual/states.ts L262-266 — direction-agnostic per CLAUDE.md §10 #3.
+export function PositionRow({ pos, onClick }: {
+    pos: PaperPosition;
+    onClick?: () => void;
+}) {
+    const isLong = pos.direction === 'LONG';
+    const isProfit = pos.unrealized_pnl >= 0;
+    return (<div role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} onClick={onClick} onKeyDown={onClick
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onClick();
+                }
+            }
+            : undefined} aria-label={onClick ? `Open detail for ${pos.symbol}` : undefined} style={{
+            display: 'grid',
+            gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr',
+            gap: 10,
+            padding: '10px 12px',
+            borderTop: '1px solid var(--border-soft)',
+            alignItems: 'center',
+            cursor: onClick ? 'pointer' : 'default',
+            transition: 'background-color .12s ease',
+        }} onMouseEnter={onClick
+            ? (e) => {
+                (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(255,255,255,.03)';
+            }
+            : undefined} onMouseLeave={onClick
+            ? (e) => {
+                (e.currentTarget as HTMLDivElement).style.backgroundColor = '';
+            }
+            : undefined}>
+      <span className="mono" style={{ fontWeight: 700 }}>{pos.symbol}</span>
+      <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        entry {pos.entry_price < 1 ? pos.entry_price.toFixed(4) : pos.entry_price.toFixed(2)}
+      </span>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        mark {pos.current_price < 1 ? pos.current_price.toFixed(4) : pos.current_price.toFixed(2)}
+      </span>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        sl {pos.stop_loss < 1 ? pos.stop_loss.toFixed(4) : pos.stop_loss.toFixed(2)}
+      </span>
+      <span className="mono" style={{ fontWeight: 700, color: isProfit ? 'var(--green)' : 'var(--red)', textAlign: 'right' }}>
+        {fmtCurrency(pos.unrealized_pnl)} ({fmtPct(pos.unrealized_pnl_pct, true)})
+      </span>
+    </div>);
+}
+// ─── Exit Badge ─────────────────────────────────────────────────────────
+export const EXIT_BADGE_MAP: Record<string, {
+    label: string;
+    kind: 'green' | 'red' | 'cyan' | 'amber';
+}> = {
+    // Real backend strings (position_manager.py / paper_trading_service.py)
+    target: { label: 'TARGET HIT', kind: 'green' },
+    stop_loss: { label: 'HARD SL', kind: 'red' },
+    stagnation: { label: 'STAGNATION', kind: 'amber' },
+    max_hours_open: { label: 'TIMEOUT', kind: 'amber' },
+    manual: { label: 'MANUAL', kind: 'cyan' },
+    emergency: { label: 'EMERGENCY', kind: 'red' },
+    // Fixture aliases for snapshot tests
+    target_hit: { label: 'TARGET HIT', kind: 'green' },
+    trailing_stop: { label: 'TRAILING', kind: 'cyan' },
+    timeout: { label: 'TIMEOUT', kind: 'amber' },
+};
+export function ExitBadge({ reason }: {
+    reason: string;
+}) {
+    const m = EXIT_BADGE_MAP[reason];
+    return m
+        ? <Chip kind={m.kind}>{m.label}</Chip>
+        : <Chip>{reason.replace(/_/g, ' ').toUpperCase()}</Chip>;
+}
+// ─── MAE / MFE Meters ────────────────────────────────────────────────────
+// max_favorable = MFE (positive % — how far price moved in your favour)
+// max_adverse   = MAE (negative % — how far it moved against you)
+// Scale: 10 % = full bar; values beyond pin at 100 %.
+export function MaeMfeBar({ mfe, mae }: {
+    mfe: number;
+    mae: number;
+}) {
+    const scale = 10;
+    const mfePct = Math.min(100, (Math.abs(mfe) / scale) * 100);
+    const maePct = Math.min(100, (Math.abs(mae) / scale) * 100);
+    return (<div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', width: 30, textAlign: 'right', letterSpacing: '.08em' }}>MFE</span>
+        <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,.35)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ width: `${mfePct}%`, height: '100%', background: 'var(--green)', borderRadius: 2 }}/>
+        </div>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--green)', width: 44, textAlign: 'right' }}>+{mfe.toFixed(2)}%</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', width: 30, textAlign: 'right', letterSpacing: '.08em' }}>MAE</span>
+        <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,.35)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ width: `${maePct}%`, height: '100%', background: 'var(--red)', borderRadius: 2 }}/>
+        </div>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--red)', width: 44, textAlign: 'right' }}>{mae.toFixed(2)}%</span>
+      </div>
+    </div>);
+}
+// ─── Trade History Row (expandable autopsy) ──────────────────────────────
+export function TradeHistoryRow({ trade }: {
+    trade: CompletedPaperTrade;
+}) {
+    const [open, setOpen] = useState(false);
+    const isLong = trade.direction === 'LONG';
+    const isWin = trade.pnl >= 0;
+    const durMin = trade.entry_time && trade.exit_time
+        ? Math.round((new Date(trade.exit_time).getTime() - new Date(trade.entry_time).getTime()) / 60000)
+        : null;
+    const fmtP = (p: number) => p < 1 ? p.toFixed(4) : p.toFixed(2);
+    return (<div style={{ borderBottom: '1px solid var(--border-soft)', background: open ? 'rgba(0,0,0,.15)' : 'transparent', transition: 'background .15s' }}>
+      {/* Collapsed summary row */}
+      <div onClick={() => setOpen((s) => !s)} style={{ display: 'grid', gridTemplateColumns: '90px 64px 1fr 1fr auto', gap: 10, padding: '10px 12px', cursor: 'pointer', alignItems: 'center' }} title="Click to expand autopsy">
+        <span className="mono" style={{ fontWeight: 700 }}>{trade.symbol}</span>
+        <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)' }}>
+            {fmtP(trade.entry_price)}<span style={{ color: 'var(--fg-4)' }}> → </span>{fmtP(trade.exit_price)}
+          </span>
+          {trade.trade_type && (<span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em' }}>{trade.trade_type.toUpperCase()}</span>)}
+        </div>
+        <span className="mono" style={{ fontWeight: 700, color: isWin ? 'var(--green)' : 'var(--red)' }}>
+          {isWin ? '+' : ''}{fmtCurrency(trade.pnl)} ({fmtPct(trade.pnl_pct, true)})
+        </span>
+        <ExitBadge reason={trade.exit_reason}/>
+      </div>
+
+      {/* Expanded autopsy panel */}
+      {open && (<div style={{ padding: '12px 14px 14px', borderTop: '1px solid var(--border-soft)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 8, textTransform: 'uppercase' }}>
+              excursion analysis
+            </div>
+            <MaeMfeBar mfe={trade.max_favorable} mae={trade.max_adverse}/>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+                { label: 'CONFIDENCE', val: trade.confidence_score != null ? `${trade.confidence_score.toFixed(1)}` : '—' },
+                { label: 'DURATION', val: durMin != null ? `${durMin}m` : '—' },
+                { label: 'TARGETS', val: trade.targets_hit?.length > 0 ? trade.targets_hit.map((t) => `T${t}`).join(', ') : 'none' },
+                { label: 'ENTERED', val: trade.entry_time ? new Date(trade.entry_time).toUTCString().slice(17, 22) + 'Z' : '—' },
+            ].map(({ label, val }) => (<div key={label}>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 3 }}>{label}</div>
+                <div className="mono" style={{ fontSize: 12, color: 'var(--fg-1)' }}>{val}</div>
+              </div>))}
+          </div>
+        </div>)}
+    </div>);
+}
+// ─── Activity row ──────────────────────────────────────────────────────
+export type ActivityEntry = {
+    timestamp: string;
+    event_type: string;
+    data: any;
+};
+export function ActivityRow({ entry, idx }: {
+    entry: ActivityEntry;
+    idx: number;
+}) {
+    const isExec = entry.event_type === 'trade_opened' || entry.event_type === 'signal_executed';
+    const isExit = entry.event_type === 'trade_closed' || entry.event_type === 'position_closed';
+    const isErr = entry.event_type === 'error';
+    const color = isExec ? 'var(--green)' : isExit ? 'var(--amber)' : isErr ? 'var(--red)' : 'var(--fg-4)';
+    const symbol = entry.data?.symbol ?? entry.data?.pair ?? '';
+    const detail = entry.data?.reason ?? entry.data?.setup_type ?? entry.data?.exit_reason ?? entry.data?.message ?? entry.event_type.replace(/_/g, ' ');
+    return (<div key={`act-${idx}`} className="mono" style={{ display: 'grid', gridTemplateColumns: '90px 1fr 100px', gap: 8, padding: '6px 8px', fontSize: 11, borderBottom: '1px solid var(--border-soft)' }}>
+      <span style={{ fontWeight: 700 }}>{symbol || '—'}</span>
+      <span style={{ color: 'var(--fg-3)' }}>{detail}</span>
+      <span style={{ textAlign: 'right', color }}>{entry.event_type.replace(/_/g, ' ')}</span>
+    </div>);
+}
+// ─── Setup Tab ─────────────────────────────────────────────────────────
+export interface PaperConfig {
+    initial_balance: number;
+    risk_per_trade: number;
+    max_positions: number;
+    leverage: number;
+    duration_hours: number;
+    scan_interval_minutes: number;
+    min_confluence: number;
+    trailing_stop: boolean;
+    trailing_activation: number;
+    breakeven_after_target: number;
+    majors: boolean;
+    altcoins: boolean;
+    meme_mode: boolean;
+    universe_size: number;
+    slippage_bps: number;
+    fee_rate: number;
+    execution_mode: 'snap_taker' | 'rest_maker';
+    macro_overlay_enabled: boolean;
+    liquidity_mode: 'fixed' | 'account_aware';
+    participation_rate: number;
+    hard_min_volume_usdt: number;
+    depth_aware_admission: boolean;
+    min_order_risk_guard: boolean;
+    liquidation_safety_guard: boolean;
+}
+export const DEFAULT_SETUP: PaperConfig = {
+    initial_balance: 10000,
+    risk_per_trade: 2.0,
+    max_positions: 3,
+    leverage: 1,
+    duration_hours: 24,
+    scan_interval_minutes: 2,
+    min_confluence: 65,
+    trailing_stop: true,
+    trailing_activation: 1.0, // R-multiple (lowered 1.5->1.0 2026-06-29 — 1.5R rarely armed; trades peak 0.7-1.2R)
+    breakeven_after_target: 1,
+    majors: true,
+    altcoins: true, // ON — more symbols => more retrace setups => more data (liquidity floor still filters illiquid)
+    meme_mode: false,
+    universe_size: 20,
+    slippage_bps: 5,
+    fee_rate: 0.1, // testnet/live-path only; the normal paper path uses real Phemex maker/taker (see §6 note)
+    // CORRECT defaults for the heart-change strategy (2026-06-28):
+    // - rest_maker: rest the limit AT the order block, fill on the pullback — that retrace IS the SMC
+    //   edge — at Phemex maker fees (0.01%). snap_taker fills at market: it abandons the OB entry AND
+    //   pays taker (0.06%), where this strategy is net-negative. rest_maker is the only correct test mode.
+    // - macro overlay OFF: it biases direction off BTC.D/stable.D, which fights the structure-led thesis
+    //   that now owns direction; ON injects a competing signal.
+    execution_mode: 'rest_maker',
+    macro_overlay_enabled: false,
+    // Account-aware admission defaults to OFF (fixed $5M floor = byte-identical legacy). Toggle on to
+    // scale the universe to your balance×leverage + live order-book depth (see §08).
+    liquidity_mode: 'fixed',
+    participation_rate: 0.005,
+    hard_min_volume_usdt: 500000,
+    depth_aware_admission: true,
+    min_order_risk_guard: true,
+    liquidation_safety_guard: true,
+};
+export function SetupTab({ sniperMode, onArm, working, armErr, decisionMode, cfg, setCfg, }: {
+    sniperMode: string;
+    onArm: (cfg: PaperConfig) => void;
+    working: boolean;
+    armErr: string | null;
+    decisionMode?: string;
+    cfg: PaperConfig;
+    setCfg: React.Dispatch<React.SetStateAction<PaperConfig>>;
+}) {
+    // Heart-change: in thesis mode the structure thesis decides direction and the confluence score
+    // is DEMOTED (no longer a go/no-go gate). Reflect that so the setup controls don't mislead.
+    const thesis = decisionMode === 'thesis';
+    const set = useCallback(<K extends keyof PaperConfig>(key: K, val: PaperConfig[K]) => {
+        setCfg((prev) => ({ ...prev, [key]: val }));
+    }, []);
+    return (<div>
+      {/* Header strip: detection mode + paper-mode reminder */}
+      <div style={{
+            background: 'rgba(0,0,0,.4)',
+            border: '1px solid rgba(34,211,238,.2)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+            flexWrap: 'wrap',
+        }}>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.14em' }}>
+          ◉ BOT MODE · <span style={{ color: '#22d3ee' }}>{sniperMode.toUpperCase()}</span> · strategy selected above · paper execution settings below
+        </span>
+        {thesis && <Chip kind="green">DECISION · THESIS (structure-led)</Chip>}
+        <Chip kind="cyan">PAPER ONLY — NO REAL FUNDS</Chip>
+      </div>
+
+      {armErr && (<div style={{ margin: '0 0 14px', padding: '10px 14px', border: '1px solid var(--red)', borderRadius: 8, background: 'rgba(239,68,68,.08)', color: 'var(--red)', fontSize: 12 }}>
+          ⚠ {armErr}
+        </div>)}
+
+      {/* § 1 — Capital */}
+      <p className="mono">Paper capital: {cfg.initial_balance.toLocaleString()} USD · risk: {cfg.risk_per_trade}% · leverage: {cfg.leverage}× · {cfg.max_positions} positions maximum.</p>
+      {/* ARM button */}
+      <div style={{ paddingBottom: 20 }}>
+        <button type="button" className="btn btn-cyan" onClick={() => onArm(cfg)} disabled={working} style={{ width: '100%', fontSize: 13, letterSpacing: '.2em', padding: '14px 0', fontWeight: 700 }}>
+          {working ? '↻ ARMING PAPER BOT…' : '▶ ARM PAPER BOT'}
+        </button>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', textAlign: 'center', marginTop: 8, letterSpacing: '.14em' }}>
+          PAPER MODE — SIMULATED CAPITAL ONLY — NO REAL ORDERS SENT
+        </div>
+      </div>
+      <details className="paper-setup-fields"><summary>Edit paper execution settings</summary>
+      <SectionPanel num="01" title="Simulated Capital" desc="initial balance for the paper session — not real money">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <Slider label="Initial Balance" value={cfg.initial_balance} min={1000} max={100000} step={1000} onChange={(v) => set('initial_balance', v)} suffix=" USD" color="#22d3ee" hint="starting equity for the paper session"/>
+          <Slider label="Risk per Trade" value={cfg.risk_per_trade} min={0.5} max={10} step={0.5} onChange={(v) => set('risk_per_trade', v)} suffix="%" hint="% of current balance risked per position"/>
+        </div>
+      </SectionPanel>
+
+      {/* § 2 — Execution */}
+      <SectionPanel num="02" title="Execution" desc="position sizing, duration, leverage">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <Slider label="Max Concurrent Positions" value={cfg.max_positions} min={1} max={10} step={1} onChange={(v) => set('max_positions', v)} hint="positions open simultaneously"/>
+          <Slider label="Leverage" value={cfg.leverage} min={1} max={20} step={1} onChange={(v) => set('leverage', v)} suffix="×" hint="applied to each simulated position"/>
+          <Slider label="Session Duration" value={cfg.duration_hours} min={0} max={168} step={1} onChange={(v) => set('duration_hours', v)} suffix="h" hint="auto-stop after this many hours · 0 = run until manually stopped (best for long capture — no restart)"/>
+          <Slider label="Scan Interval" value={cfg.scan_interval_minutes} min={1} max={30} step={1} onChange={(v) => set('scan_interval_minutes', v)} suffix="m" hint="minutes between scanner sweeps"/>
+        </div>
+      </SectionPanel>
+
+      {/* § 3 — Confluence */}
+      <SectionPanel num="03" title="Confluence Gate" desc="Minimum score for entry. The selected mode’s qualification threshold always applies.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
+          <Slider label="Min Confluence Score" value={cfg.min_confluence} min={50} max={95} step={1} onChange={(v) => set('min_confluence', v)} hint="Can tighten the selected mode’s threshold; cannot lower it"/>
+        </div>
+        {thesis && (<div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginTop: 8 }}>
+            Direction comes from confirmed market structure. Required evidence and the score threshold still gate entries.
+          </div>)}
+      </SectionPanel>
+
+      {/* § 4 — Position management toggles */}
+      <SectionPanel num="04" title="Position Management" desc="trailing stop + breakeven — applied to all simulated trades">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+          <Toggle label="Trailing Stop" value={cfg.trailing_stop} onChange={(v) => set('trailing_stop', v)} hint="trail stop once price moves in favour"/>
+          <Toggle label="Breakeven on TP1" value={cfg.breakeven_after_target >= 1} onChange={(v) => set('breakeven_after_target', v ? 1 : 0)} hint="move stop to entry after first target hit"/>
+        </div>
+        {cfg.trailing_stop && (<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            <Slider label="Trailing Activation" value={cfg.trailing_activation} min={1} max={5} step={0.5} onChange={(v) => set('trailing_activation', v)} suffix="R" hint="profit in R (multiples of stop distance) before trailing arms — NOT a percent"/>
+          </div>)}
+      </SectionPanel>
+
+      {/* § 5 — Universe */}
+      <SectionPanel num="05" title="Universe Scope" desc="which pairs the paper bot is allowed to trade">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+          <Toggle label="Majors (BTC/ETH/SOL…)" value={cfg.majors} onChange={(v) => set('majors', v)} hint="high-liquidity large-caps"/>
+          <Toggle label="Altcoins" value={cfg.altcoins} onChange={(v) => set('altcoins', v)} hint="mid-cap altcoins — wider spreads"/>
+          <Toggle label="Meme Mode" value={cfg.meme_mode} onChange={(v) => set('meme_mode', v)} hint="high-volatility meme coins — highest risk"/>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
+          <Slider label="Universe Size" value={cfg.universe_size} min={5} max={100} step={5} onChange={(v) => set('universe_size', v)} hint="max symbols the scanner evaluates per sweep"/>
+        </div>
+      </SectionPanel>
+
+      {/* § 6 — Simulated fill realism */}
+      <SectionPanel num="06" title="Simulated Fill Realism" desc="slippage + fee model applied to all paper trades">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <Slider label="Slippage" value={cfg.slippage_bps} min={0} max={50} step={1} onChange={(v) => set('slippage_bps', v)} suffix=" bps" hint="basis points per fill — models market impact"/>
+          <Slider label="Legacy / Testnet Fee" value={cfg.fee_rate} min={0} max={0.5} step={0.05} onChange={(v) => set('fee_rate', v)} suffix="%" hint="testnet/live path only — NOT used by the normal paper sim"/>
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 8 }}>
+          paper fills use REAL Phemex fees automatically — <span style={{ color: cfg.execution_mode === 'rest_maker' ? '#22d3ee' : 'var(--fg-3)' }}>maker 0.01% (rest/maker)</span> · <span style={{ color: cfg.execution_mode === 'snap_taker' ? '#f5a623' : 'var(--fg-3)' }}>taker 0.06% (snap/taker)</span> — picked by execution mode below. The slider above only applies to testnet/live.
+        </div>
+      </SectionPanel>
+
+      {/* § 7 — Signal & execution mode */}
+      <SectionPanel num="07" title="Signal & Execution Mode" desc="how orders fill + whether the macro/dominance overlay biases direction">
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 6 }}>
+          ORDER EXECUTION
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          {([['rest_maker', 'REST / MAKER ★'], ['snap_taker', 'SNAP / TAKER']] as const).map(([m, lbl]) => (<button key={m} type="button" className={`btn ${cfg.execution_mode === m ? 'btn-cyan' : ''}`} onClick={() => set('execution_mode', m)} style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0', opacity: m === 'snap_taker' ? 0.7 : 1 }}>
+              {lbl}
+            </button>))}
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: cfg.execution_mode === 'snap_taker' ? 6 : 14 }}>
+          rest/maker (recommended) = rest the limit AT the order block, fill on the pullback — that retrace IS the SMC edge — at maker fees (0.01%) · snap/taker = fill at market now at taker fees (0.06%) · (paper-only — ignored under testnet)
+        </div>
+        {cfg.execution_mode === 'snap_taker' && (<div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginBottom: 14 }}>
+            ⚠ SNAP/TAKER fills at market — it abandons the order-block retrace entry (the SMC edge) and pays taker fees, where this strategy is net-negative. REST/MAKER is the correct mode. Sparse fills in chop = the market offering no clean retrace, not a setting to change.
+          </div>)}
+        <div style={{ opacity: thesis ? 0.4 : 1 }}>
+          <Toggle label="Macro / Dominance Overlay" value={cfg.macro_overlay_enabled} onChange={(v) => set('macro_overlay_enabled', v)} hint="BTC.D / stable.D / alt.D bias on direction · OFF = pure technicals"/>
+        </div>
+        {thesis && (<div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginTop: 6 }}>
+            The structure thesis owns direction. Macro context can affect qualification and remains visible in the score.
+          </div>)}
+      </SectionPanel>
+
+      {/* § 8 — Account-aware admission */}
+      <SectionPanel num="08" title="Account-Aware Admission" desc="scale the tradeable universe to YOUR balance × leverage + live order-book depth">
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          {([['fixed', 'FIXED · $5M FLOOR'], ['account_aware', 'ACCOUNT-AWARE ★']] as const).map(([m, lbl]) => (<button key={m} type="button" className={`btn ${cfg.liquidity_mode === m ? 'btn-cyan' : ''}`} onClick={() => set('liquidity_mode', m)} style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0' }}>
+              {lbl}
+            </button>))}
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: 14 }}>
+          fixed = legacy single $5M 24h-volume floor (same for every account) · account-aware = floor scales to your footprint (balance × leverage), then live order-book depth/spread + min-order + liquidation gates admit only what your size can trade safely
+        </div>
+        {cfg.liquidity_mode === 'account_aware' && (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+              <Slider label="Participation Cap" value={cfg.participation_rate * 100} min={0.1} max={2} step={0.1} onChange={(v) => set('participation_rate', v / 100)} suffix="%" hint="your position stays under this % of 24h volume"/>
+              <Slider label="Hard Min Volume" value={cfg.hard_min_volume_usdt / 1000} min={100} max={5000} step={100} onChange={(v) => set('hard_min_volume_usdt', v * 1000)} suffix="k USD" hint="absolute floor — never trade a deader market than this"/>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+              <Toggle label="Depth Gate" value={cfg.depth_aware_admission} onChange={(v) => set('depth_aware_admission', v)} hint="live order-book spread/depth (volume ≠ depth)"/>
+              <Toggle label="Min-Order Guard" value={cfg.min_order_risk_guard} onChange={(v) => set('min_order_risk_guard', v)} hint="skip pairs whose min order over-risks budget"/>
+              <Toggle label="Liquidation Guard" value={cfg.liquidation_safety_guard} onChange={(v) => set('liquidation_safety_guard', v)} hint="leverage-safe stops (inert at 1×)"/>
+            </div>
+            <div className="mono" style={{ fontSize: 9, color: '#22d3ee', letterSpacing: '.1em' }}>
+              ◉ at ${cfg.initial_balance.toLocaleString()} × {cfg.leverage}× → volume floor ≈ ${Math.max(cfg.hard_min_volume_usdt, (cfg.initial_balance * cfg.leverage) / (cfg.participation_rate || 0.005)).toLocaleString(undefined, { maximumFractionDigits: 0 })} (then live depth/spread admits the final set)
+            </div>
+          </>)}
+      </SectionPanel>
+
+
+      </details>
+    </div>);
+}
+// ─── Status Tab ────────────────────────────────────────────────────────
+export function StatusTab({ status, trades, tradesErr, connErr, actionErr, loading, working, onStop, onReset, lifetime, lifetimeErr, }: {
+    status: PaperTradingStatus | null;
+    trades: CompletedPaperTrade[];
+    tradesErr: string | null;
+    connErr: string | null;
+    actionErr: string | null;
+    loading: boolean;
+    working: boolean;
+    lifetime: JournalAggregate | null;
+    lifetimeErr: string | null;
+    onStop: () => void;
+    onReset: () => void;
+}) {
+    const isRunning = status?.status === 'running';
+    const cfg = status?.config;
+    const balance = status?.balance;
+    const initialBalance = balance?.initial;
+    const positions = status?.positions ?? [];
+    const stats = status?.statistics;
+    const activity = status?.recent_activity ?? [];
+    const [detailSelection, setDetailSelection] = useState<DetailSelection | null>(null);
+    return (<div>
+      {connErr && (<div style={{ margin: '0 0 14px', padding: '12px 14px', border: '1px solid var(--amber)', borderRadius: 10, background: 'rgba(234,179,8,.08)', color: 'var(--amber)', fontSize: 12 }}>
+          ⚠ {connErr}
+        </div>)}
+      {status?.recovery_required && <p role="alert">{status.recovery_reason} Use Retry shutdown.</p>}
+      {actionErr && (<div style={{ margin: '0 0 14px', padding: '12px 14px', border: '1px solid var(--red)', borderRadius: 10, background: 'rgba(239,68,68,.08)', color: 'var(--red)', fontSize: 12 }}>
+          ⚠ {actionErr}
+        </div>)}
+
+      {loading && !status && (<div className="panel" style={{ margin: '0 0 14px', padding: 32, textAlign: 'center', color: 'var(--fg-3)' }}>
+          <span className="mono" style={{ letterSpacing: '.2em' }}>ESTABLISHING UPLINK…</span>
+        </div>)}
+
+      <div style={{ display: 'grid', gap: 14 }}>
+        {/* Command Center */}
+        <section className="panel panel-accent" style={{ padding: 18, borderColor: isRunning ? 'var(--amber-border)' : 'rgba(251,191,36,.15)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              <div style={{ width: 12, height: 12, borderRadius: '50%', background: isRunning ? 'var(--amber)' : 'var(--fg-3)', boxShadow: isRunning ? '0 0 14px rgba(255,194,102,.8)' : 'none', flexShrink: 0 }}/>
+              <div>
+                <div className="mono" style={{ fontSize: 16, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--fg-1)' }}>
+                  Ghost Range Engine
+                </div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--fg-4)', letterSpacing: '.16em', marginTop: 4, textTransform: 'uppercase' }}>
+                  uptime {fmtDuration(status?.uptime_seconds ?? 0)}
+                  {status?.session_id && <> · session {status.session_id.slice(0, 8)}</>}
+                </div>
+                {/* Cumulative P/L — cross-session, sourced from the
+            journal aggregate. Matches the strip on /bot/status so
+            the bot and training surfaces show the same lifetime
+            number. Distinct from balance.pnl (this session,
+            realized + unrealized) and stats.total_pnl (this
+            session, realized only). */}
+                <div className="mono" title="Realized cumulative profit/loss across every closed trade in the journal — survives bot restarts and pre-dates this session." style={{
+            fontSize: 10,
+            color: 'var(--fg-4)',
+            letterSpacing: '.16em',
+            marginTop: 4,
+            textTransform: 'uppercase',
+        }}>
+                  Cumulative P/L (all sessions){' '}
+                  <strong style={{
+            color: lifetime
+                ? lifetime.total_pnl > 0
+                    ? 'var(--green)'
+                    : lifetime.total_pnl < 0
+                        ? 'var(--red)'
+                        : 'var(--fg-2)'
+                : 'var(--fg-3)',
+            fontWeight: 800,
+        }}>
+                    {lifetime
+            ? fmtCurrency(lifetime.total_pnl)
+            : lifetimeErr
+                ? '—'
+                : '…'}
+                  </strong>
+                  {lifetime && (<>
+                      {' · '}
+                      <span style={{ color: 'var(--fg-3)' }}>
+                        {lifetime.total_trades} trades · WR{' '}
+                        {lifetime.win_rate.toFixed(0)}%
+                      </span>
+                    </>)}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {paperSessionNeedsAttention(status) ? (<button type="button" className="btn btn-red" onClick={onStop} disabled={working} style={{ fontSize: 11 }}>
+                  {working ? '↻ STOPPING' : isRunning ? '■ STOP' : 'RETRY SHUTDOWN'}
+                </button>) : (<span className="mono" style={{ fontSize: 11, color: 'var(--fg-4)', alignSelf: 'center', letterSpacing: '.1em' }}>
+                  {status?.status?.toUpperCase() ?? 'IDLE'}
+                </span>)}
+              <button type="button" className="btn" onClick={onReset} disabled={working || !status || status.reset_allowed === false || paperSessionNeedsAttention(status)} title={isRunning ? 'stop the bot before resetting' : 'clear history + reset balance'} style={{ fontSize: 11, opacity: isRunning ? 0.4 : 1 }}>
+                ↺ RESET
+              </button>
+            </div>
+          </div>
+
+          <div className="panel" style={{ padding: 14, marginBottom: 14 }}>
+            <strong>{cfg?.selection_mode === 'adaptive' ? 'ADAPTIVE' : 'FIXED'} · {status?.active_mode?.toUpperCase() ?? cfg?.sniper_mode?.toUpperCase() ?? '—'}</strong>
+            {status?.mode_recommendation && <p>{status.mode_recommendation.status !== 'available' ? 'Waiting: ' : ''}{status.mode_recommendation.reason}</p>}
+            {positions.map(position => <div key={position.position_id} style={{ fontSize: 12 }}>
+              {position.symbol}: {position.strategy?.mode?.toUpperCase() ?? 'Original mode unavailable'} · original trade plan
+            </div>)}
+          </div>
+          {/* Metric grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 14 }}>
+            <MetricTile label="Uptime" value={fmtDuration(status?.uptime_seconds ?? 0)} sub="session running"/>
+            <MetricTile label="Next Scan" value={isRunning && status?.next_scan_in_seconds != null ? fmtDuration(Math.round(status.next_scan_in_seconds)) : '—'} sub="until next sweep" accent={isRunning ? 'amber' : undefined}/>
+            <MetricTile label="Min Score" value={cfg?.min_confluence != null ? `≥${cfg.min_confluence}` : 'AUTO'} sub="confluence threshold"/>
+            <MetricTile label="Scans Done" value={String(stats?.scans_completed ?? 0)} sub={`${stats?.signals_generated ?? 0} signals`} accent="cyan"/>
+          </div>
+
+          {/* Config pills */}
+          {cfg && (<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+              {cfg.sniper_mode && <Chip>{cfg.sniper_mode.toUpperCase()}</Chip>}
+              {cfg.duration_hours != null && <Chip>{cfg.duration_hours}H</Chip>}
+              {cfg.max_positions != null && <Chip>{cfg.max_positions} SLOTS</Chip>}
+              {cfg.risk_per_trade != null && <Chip>{cfg.risk_per_trade}% RISK</Chip>}
+              {cfg.leverage != null && cfg.leverage !== 1 && <Chip>{cfg.leverage}× LEVERAGE</Chip>}
+              {cfg.initial_balance != null && <Chip>${cfg.initial_balance.toLocaleString()} SIM</Chip>}
+            </div>)}
+        </section>
+
+        {/* Equity Curve + Statistics */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <section className="panel" style={{ padding: 14 }}>
+            <SectionHead title="Equity Curve" right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{trades.length} trades</span>}/>
+            {tradesErr && <div style={{ color: 'var(--amber)', fontSize: 10, marginBottom: 6 }}>⚠ {tradesErr}</div>}
+            <div className="mono" style={{ color: 'var(--fg-3)', fontSize: 11 }}>
+                {accountingLabel(status?.accounting)}
+                {status?.outcome_basis === 'executions_excluding_funding_and_transfers' && (<div>Trade results include execution fees; funding and transfers are excluded.</div>)}
+                {executionReportNotice(status?.execution_reporting, status?.execution_history) && (<div role="status" style={{ color: 'var(--amber)' }}>
+                    {executionReportNotice(status?.execution_reporting, status?.execution_history)}
+                  </div>)}
+                {status?.accounting?.basis === 'exchange_mark' && <div>Account change includes funding and transfers.{status?.outcome_basis !== 'executions_excluding_funding_and_transfers' && ' Trade outcomes are estimates.'}</div>}
+              </div>
+              {status?.accounting?.basis !== 'exchange_mark' && initialBalance != null && <EquitySparkline trades={trades} initialBalance={initialBalance}/>}
+            <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--fg-4)', marginTop: 8, textTransform: 'uppercase', letterSpacing: '.14em' }}>
+              <span>start {fmtCurrency(initialBalance)}</span>
+              <span>now {fmtCurrency(balance?.equity)}</span>
+              <span style={{ color: accountingColor(balance?.pnl) }}>
+                {fmtCurrency(balance?.pnl)} ({fmtPct(balance?.pnl_pct, true)})
+              </span>
+            </div>
+          </section>
+
+          <section className="panel" style={{ padding: 14 }}>
+            <SectionHead title="Statistics"/>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              <MetricTile label="Total PnL" value={fmtCurrency(stats?.total_pnl ?? 0)} sub={stats?.total_pnl_pct != null ? `${fmtPct(stats.total_pnl_pct, true)} realised` : 'realised'} accent={(stats?.total_pnl ?? 0) > 0 ? 'green' : (stats?.total_pnl ?? 0) < 0 ? 'red' : undefined}/>
+              <MetricTile label="Trades" value={String(stats?.total_trades ?? 0)} sub={`${stats?.winning_trades ?? 0}W / ${stats?.losing_trades ?? 0}L`}/>
+              <MetricTile label="Win Rate" value={stats?.win_rate != null ? `${stats.win_rate.toFixed(0)}%` : '—'} sub="of closed" accent={stats && stats.win_rate >= 50 ? 'green' : undefined}/>
+              <MetricTile label="Avg R:R" value={stats?.avg_rr != null ? `${stats.avg_rr.toFixed(2)}R` : '—'} sub="realised"/>
+              <MetricTile label="Best" value={fmtCurrency(stats?.best_trade ?? 0)} accent="green"/>
+              <MetricTile label="Worst" value={fmtCurrency(stats?.worst_trade ?? 0)} accent="red"/>
+              <MetricTile label="Max DD" value={stats?.max_drawdown != null ? fmtPct(stats.max_drawdown) : '—'} accent="amber"/>
+            </div>
+          </section>
+        </div>
+
+        {/* Open Positions */}
+        <section className="panel" style={{ padding: 14 }}>
+          <SectionHead title="Open Positions" right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{positions.length} active</span>}/>
+          {positions.length === 0 ? (<div className="mono" style={{ padding: 18, textAlign: 'center', fontSize: 11, color: 'var(--fg-4)', letterSpacing: '.16em', textTransform: 'uppercase' }}>
+              — no open positions —
+            </div>) : (<div>
+              <div className="mono" style={{ display: 'grid', gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr', gap: 10, padding: '8px 12px', fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase' }}>
+                <span>Symbol</span><span>Side</span><span>Entry</span><span>Mark</span><span>Stop</span><span style={{ textAlign: 'right' }}>uPnL</span>
+              </div>
+              {positions.map((p) => (<PositionRow key={p.position_id} pos={p} onClick={() => setDetailSelection({ kind: 'position', data: p })}/>))}
+            </div>)}
+        </section>
+
+        {/* Activity Log */}
+        <section className="panel" style={{ padding: 14 }}>
+          <SectionHead title="Activity Log" right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{activity.length} entries</span>}/>
+          {activity.length === 0 ? (<div className="mono" style={{ padding: 18, textAlign: 'center', fontSize: 11, color: 'var(--fg-4)', letterSpacing: '.16em', textTransform: 'uppercase' }}>
+              — activity log empty — arm the paper bot to start —
+            </div>) : (<div style={{ display: 'grid', gap: 0 }}>
+              {activity.slice(0, 15).map((entry, i) => <ActivityRow key={`act-${i}`} entry={entry} idx={i}/>)}
+            </div>)}
+        </section>
+
+        {/* Exit Reasons + By-Trade-Type */}
+        {stats && stats.total_trades > 0 && (<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <section className="panel" style={{ padding: 14 }}>
+              <SectionHead title="Exit Reasons"/>
+              {stats.exit_reasons && Object.keys(stats.exit_reasons).length > 0 ? (<div style={{ display: 'grid', gap: 6, paddingTop: 8 }}>
+                  {Object.entries(stats.exit_reasons).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (<div key={reason} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--border-soft)' }}>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>{reason.replace(/_/g, ' ')}</span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-4)' }}>{count}</span>
+                    </div>))}
+                </div>) : (<div className="mono" style={{ fontSize: 11, color: 'var(--fg-4)', padding: '12px 0' }}>— no exits yet —</div>)}
+            </section>
+
+            <section className="panel" style={{ padding: 14 }}>
+              <SectionHead title="By Trade Type"/>
+              {stats.by_trade_type && Object.keys(stats.by_trade_type).length > 0 ? (<div style={{ display: 'grid', gap: 8, paddingTop: 8 }}>
+                  {Object.entries(stats.by_trade_type).map(([type, data]) => (<div key={type} style={{ padding: '8px 10px', border: '1px solid var(--border-soft)', borderRadius: 8, background: 'rgba(0,0,0,.2)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span className="mono" style={{ fontSize: 11, fontWeight: 700 }}>{type.toUpperCase()}</span>
+                        <span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{data.trades} trades</span>
+                      </div>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', display: 'flex', gap: 10 }}>
+                        <span>WR {data.win_rate.toFixed(0)}%</span>
+                        <span style={{ color: data.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtCurrency(data.total_pnl)}</span>
+                      </div>
+                    </div>))}
+                </div>) : (<div className="mono" style={{ fontSize: 11, color: 'var(--fg-4)', padding: '12px 0' }}>— no type breakdown yet —</div>)}
+            </section>
+          </div>)}
+
+        {/* Trade History — per-trade rows with exit badge + expandable autopsy */}
+        {trades.length > 0 && (<section className="panel" style={{ padding: 14 }}>
+            <SectionHead title="Trade History" right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{trades.length} closed</span>}/>
+            <div className="mono" style={{ display: 'grid', gridTemplateColumns: '90px 64px 1fr 1fr auto', gap: 10, padding: '6px 12px 8px', fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)' }}>
+              <span>Symbol</span><span>Side</span><span>Entry → Exit</span><span>PnL</span><span>Exit</span>
+            </div>
+            {trades.map((t) => <TradeHistoryRow key={t.trade_id} trade={t}/>)}
+          </section>)}
+      </div>
+
+      <PositionDetailModal selection={detailSelection} onClose={() => setDetailSelection(null)} currentRegime={null}/>
+    </div>);
+}
+// ─── Main component ────────────────────────────────────────────────────
