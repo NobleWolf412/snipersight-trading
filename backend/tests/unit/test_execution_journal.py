@@ -219,7 +219,12 @@ def test_terminal_recovery_requires_flat_checkpoint_before_clean_restart(tmp_pat
     second.close()
 
 
-def test_restart_recovery_preserves_protection_and_observes_foreign_exposure(tmp_path):
+def test_restart_recovery_preserves_protection_and_observes_foreign_exposure(tmp_path, monkeypatch):
+    from backend.bot import live_trading_service
+    from backend.bot.trade_journal import TradeJournalService
+    # Shutdown report recovery opens the trade journal; keep it in the fixture store.
+    journal = TradeJournalService(tmp_path / "trades.jsonl")
+    monkeypatch.setattr(live_trading_service, "get_trade_journal", lambda: journal)
     path = tmp_path / "execution.sqlite3"
     first = create(path)
     order = first.place_stop_order("A", "SELL", 10, 99)
@@ -229,6 +234,7 @@ def test_restart_recovery_preserves_protection_and_observes_foreign_exposure(tmp
     restored._adapter.fetch_order_by_client_id.side_effect = None
     restored._adapter.fetch_order_by_client_id.return_value = {
         "id": "remote", "clientOrderId": order.order_id, "status": "open", "filled": 0}
+    restored._adapter.fetch_order.return_value = {"id": "remote", "status": "open", "filled": 0}
     restored._adapter.fetch_positions.return_value = [{"symbol": "A", "contracts": 10, "side": "long", "entryPrice": 100}]
     svc.adapter.fetch_account_snapshot.return_value = snapshot(positions=[{"symbol": "A", "contracts": 10}], orders=[{"id": "remote", "symbol": "A"}])
     async def run():
@@ -236,6 +242,7 @@ def test_restart_recovery_preserves_protection_and_observes_foreign_exposure(tmp
             status = await svc.stop()
             assert status["lifecycle"]["phase"] == "recovering"
             assert status["lifecycle"]["unmanaged_symbols"] == ["A"]
+            assert restored.get_order(order.order_id).status == OrderStatus.OPEN
             restored._adapter.cancel_order.assert_not_called()
             restored._adapter.create_order.assert_not_called()
         finally:
