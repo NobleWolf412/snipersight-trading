@@ -34,7 +34,6 @@ FooterStatus,
 PageHead,
 Reticle,
 SectionHead,
-TradeHistoryDetailModal,
 fmtMoney,
 } from '@/components/hud';
 import {
@@ -42,9 +41,11 @@ tradeJournalService,
 type JournalAggregate,
 type JournalTrade
 } from '@/services/tradeJournalService';
+import { PlayInspector } from '@/components/hud/PlayInspector';
+import { closedPlay, EXIT_REASON_LABELS } from '@/services/playInspector';
 import { useEffect,useMemo,useRef,useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { EXIT_REASON_LABELS,EquityCurve,GroupBreakdown,PnLCalendar,StatTile,fmt,fmtDate,type GroupRow } from './TradeJournalViews';
+import { EquityCurve,GroupBreakdown,PnLCalendar,StatTile,fmt,fmtDate,type GroupRow } from './TradeJournalViews';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -615,15 +616,8 @@ export function TradeJournal() {
 
       <FooterStatus />
 
-      {/* Closed-trade post-mortem chart. Renders when a Trade Log row is
-          clicked. Shows the trade's symbol on a TF inferred from
-          trade_type with entry/exit price lines + entry/exit candle
-          markers so the operator can see why the trade went the way it
-          went. */}
-      <TradeHistoryDetailModal
-        trade={selectedTrade}
-        onClose={() => setSelectedTrade(null)}
-      />
+      {/* Closed-trade post-mortem in the Play Inspector: entry/exit lines and candle markers. */}
+      {selectedTrade && <PlayInspector play={closedPlay(selectedTrade)} onClose={() => setSelectedTrade(null)} />}
     </div>
   );
 }

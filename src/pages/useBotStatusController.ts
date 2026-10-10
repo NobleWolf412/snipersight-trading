@@ -1,6 +1,6 @@
 import { paperTradingService } from '@/services/paperTradingService';
 /** Monitor one selected session owner. Commands remain owner-specific. */
-import { type DetailSelection } from '@/components/hud';
+import type { BotPlaySelection } from '@/services/playInspector';
 import { liveTradingService, type CompletedLiveTrade } from '@/services/liveTradingService';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -51,7 +51,7 @@ export function useBotStatusController() {
     const [diagnoseOpenedAtMs, setDiagnoseOpenedAtMs] = useState<number>(() => Date.now());
     // Position / pending-order detail modal. Click any row in Active
     // Positions to open. Modal carries the chart + metadata.
-    const [detailSelection, setDetailSelection] = useState<DetailSelection | null>(null);
+    const [detailSelection, setDetailSelection] = useState<BotPlaySelection | null>(null);
     const fetchFailCount = useRef(0);
     const fastPollRef = useRef(false);
     const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

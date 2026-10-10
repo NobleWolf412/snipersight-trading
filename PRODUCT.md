@@ -148,7 +148,7 @@ Status: **implemented** = working end to end; **partial** = works with known gap
 | `/scanner` | Choose a mode, run a scan, review setups and rejections | Implemented; at-a-glance rejection grouping planned |
 | `/bot` | Route to the current session owner | Implemented |
 | `/bot/setup` | Review risk and start a live session | Implemented; explicit LIVE preflight. Testnet is supported by the service, not selectable on this screen |
-| `/bot/status` | Monitor and control the running session | Implemented; Play Inspector and plan editing planned |
+| `/bot/status` | Monitor and control the running session | Implemented; Play Inspector on positions and pending entries; plan editing planned |
 | `/training/range` | Configure and run a paper session | Implemented |
 | `/journal` | Review completed execution records; filter and export | Implemented; override comparison planned |
 | `/intel` | Market context: regime, mode advice, sessions, funding | Implemented; some fields can be unavailable |
@@ -157,7 +157,7 @@ Status: **implemented** = working end to end; **partial** = works with known gap
 | `/training/drills` | Experimental model tools | Partial; research only |
 | `/training/lessons` | Lesson library | Implemented; nine lazy chapters with browser read/resume progress. Historical teaching examples are labeled |
 | `/settings` | Browser preferences (deliberately quiet) | Implemented |
-| Play Inspector (modal) | Chart modal for any position, order or planned entry | Planned. `ScannerSetupModal` is the starting point |
+| Play Inspector (modal) | Chart modal for any setup, position, pending entry or closed trade | Partial: read-only on scanner, bot status, paper range and journal. Editing, cancel/close actions and replay planned |
 | Ranks and achievements | Operator rank and earned insignia | Planned, deferred |
 
 Redirects: `/scan`, `/results`, `/scanner/setup`, `/scanner/status` → `/scanner`; `/market`, `/htf` → `/intel`. Unknown routes show recovery links.

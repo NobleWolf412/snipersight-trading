@@ -35,7 +35,35 @@ export interface LiveTradingConfigRequest {
   safety_acknowledgment?: string;
 }
 
+/** Strategy provenance recorded on a plan and inherited by its position. */
+export interface PlayStrategy { mode?: string; version?: string; selection_mode?: string; strategy_gate?: number }
+
+/** Unfilled entry from status.pending_orders. Plan fields come from the backend's pending_plan_view. */
+export interface PendingEntryOrder {
+  order_id: string;
+  symbol: string;
+  direction: string;
+  limit_price: number;
+  quantity: number;
+  status: string;
+  filled_qty?: number;
+  average_fill_price?: number | null;
+  awaiting_adoption?: boolean;
+  current_price?: number | null;
+  entry_near?: number | null;
+  entry_far?: number | null;
+  /** undefined: not reported by this backend; null: reported as missing. */
+  stop_loss?: number | null;
+  targets?: number[];
+  timeframe?: string | null;
+  trade_type?: string | null;
+  confluence?: number | null;
+  rationale?: string | null;
+  strategy?: PlayStrategy;
+}
+
 export interface LivePosition {
+  strategy?: PlayStrategy;
   position_id: string;
   symbol: string;
   direction: 'LONG' | 'SHORT';
@@ -184,7 +212,7 @@ export interface LiveTradingStatus {
     }>;
   };
   recent_activity: { timestamp: string; event_type: string; data: any }[];
-  pending_orders: { order_id: string; symbol: string; direction: string; limit_price: number; quantity: number; status: string }[];
+  pending_orders: PendingEntryOrder[];
   signal_log?: import('@/utils/api').SignalLogEntry[];
 }
 

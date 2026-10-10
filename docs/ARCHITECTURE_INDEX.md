@@ -26,6 +26,8 @@ branch, exchange protocol or historical trade is correct. Open findings live in
 - Monthly `1M` candle normalization, the full indicator warm-up/NaN matrix and detector confirmation-time semantics are unresolved.
 - `applyTweaks` (dynamic `--accent`) is exported but not called; the accent is fixed green. Live state is shown by the red page title and explicit chips.
 - No live session has been exercised end to end in the current review. Testnet is supported by the service but not selectable on `/bot/setup`.
+- Open positions do not report their plan timeframe (chart infers it from the cascade tier), and journal records do not carry the original stop/targets.
+- Plan editing from the Play Inspector is not implemented; there is no backend endpoint to modify a pending plan or an open position's stop/targets.
 - ML code exists with a conditional legacy paper hook; it is deferred until trading logic is proven, so its activation is unverified.
 
 ## UI ownership
@@ -34,7 +36,7 @@ branch, exchange protocol or historical trade is correct. Open findings live in
 |---|---|---|
 | Scan lifecycle | [scanRunService](../src/services/scanRunService.ts), [ScannerContext](../src/context/ScannerContext.tsx), [ScanController](../src/components/hud/ScanController.tsx) | Persists identity, acknowledgment and stop intent across routes/reload. Recommendations are applied manually and check expiry. |
 | Scanner setup UI | [ScannerModePicker](../src/components/hud/ScannerModePicker.tsx), [ScannerInputs](../src/components/hud/ScannerInputs.tsx), [scannerSignals](../src/pages/scannerSignals.ts) | Recommendation panel leads; requirements visible in every mode card at every width; help in native dialogs. |
-| Setup chart | [ScannerSetupModal](../src/components/ScannerSetupModal.tsx), [scannerSetup](../src/services/scannerSetup.ts) | Real candles with saved entry bounds, stop and all targets, LONG and SHORT. Changing chart TF never recalculates a saved plan. |
+| Play Inspector | [PlayInspector](../src/components/hud/PlayInspector.tsx), [playInspector](../src/services/playInspector.ts), backend [pending_plan_view](../backend/bot/plan_view.py) | One chart modal for scanner setups, open positions, pending entries (bot status, paper range) and closed journal trades. Display-only projection; changing chart TF never recalculates a plan. `playMetrics` is the single source of R:R/risk/reward. Bot selections are ids resolved against each poll, so the modal stays live. Unknown direction, prices and score stay unknown. |
 | Bot status | [useBotStatusController](../src/pages/useBotStatusController.ts), [botStatusViewModel](../src/pages/botStatusViewModel.ts), [BotPositions](../src/pages/BotPositions.tsx) | Controller owns polls, generation fences and commands; views are pure presentation. |
 | Replay | [replaySessionController](../src/services/replaySessionController.ts) | Serializes cursor moves; generation-fences replacement and cleanup. |
 | Feeds | [FreshFeed](../src/services/freshFeed.ts), [FundingTable](../src/components/FundingTable.tsx) | Per-feed display expiry and retry; per-field availability. |

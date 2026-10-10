@@ -27,6 +27,7 @@ from decimal import Decimal, ROUND_FLOOR
 
 from backend.strategy.smc.sessions import get_current_kill_zone
 from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus, OrderType
+from backend.bot.plan_view import pending_plan_view
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
 from backend.bot.executor.execution_outcomes import ExecutionReceipt
 from backend.bot.executor.execution_fee_recovery import ExecutionFeeRecovery
@@ -1327,15 +1328,8 @@ class PaperTradingService:
                         "average_fill_price": order.average_fill_price,
                         "awaiting_adoption": bool(order.filled_quantity > 0),
                         "status": order.status.value,
-                        "confluence": plan.confidence_score,
-                        "trade_type": getattr(plan, "trade_type", "intraday"),
-                        "current_price": self._price_cache.get(order.symbol, 0.0),
-                        "stop_loss": float(plan.stop_loss.level) if plan.stop_loss else 0.0,
-                        # Emit None (not 0.0) on missing TP — see _get_active_positions
-                        # for the full rationale (geometry guard / payload symmetry).
-                        "tp1": float(plan.targets[0].level) if plan.targets else None,
-                        "tp2": float(plan.targets[1].level) if len(plan.targets) > 1 else None,
-                        "tp_final": float(plan.targets[-1].level) if plan.targets else None,
+                        "current_price": self._price_cache.get(order.symbol),
+                        **pending_plan_view(plan),
                     })
 
         # Signal processing log (every signal with full details)

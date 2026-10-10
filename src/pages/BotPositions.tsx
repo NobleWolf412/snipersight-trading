@@ -1,9 +1,10 @@
-import { SectionHead, type DetailSelection } from '@/components/hud';
+import { SectionHead } from '@/components/hud';
+import type { BotPlaySelection } from '@/services/playInspector';
 import { OPEN_POS_COLS, PENDING_ORDER_COLS, PendingOrderRow, PositionRow } from './BotStatusViews';
 import type { buildBotStatusViewModel } from './botStatusViewModel';
 type Model = ReturnType<typeof buildBotStatusViewModel>;
 export function BotPositions({ positions, pendingOrders, onSelect }: Pick<Model, 'positions' | 'pendingOrders'> & {
-    onSelect: (selection: DetailSelection) => void;
+    onSelect: (selection: BotPlaySelection) => void;
 }) {
     return (<>          {/* ── Active Positions (filled + pending limit orders) ──── */}
           <section className="panel" style={{ padding: 14 }}>
@@ -51,7 +52,7 @@ export function BotPositions({ positions, pendingOrders, onSelect }: Pick<Model,
                   <span style={{ textAlign: 'right' }}>uPnL</span>
                   <span style={{ textAlign: 'right' }}>R</span>
                 </div>
-                {positions.map((p) => (<PositionRow key={p.position_id} position={p} onClick={() => onSelect({ kind: 'position', data: p })}/>))}
+                {positions.map((p) => (<PositionRow key={p.position_id} position={p} onClick={() => onSelect({ kind: 'position', id: p.position_id })}/>))}
               </div>)}
 
             {/* Pending subsection */}
@@ -91,7 +92,7 @@ export function BotPositions({ positions, pendingOrders, onSelect }: Pick<Model,
                   <span>Qty</span>
                   <span style={{ textAlign: 'right' }}>Status</span>
                 </div>
-                {pendingOrders.map((o) => (<PendingOrderRow key={o.order_id} order={o} onClick={() => onSelect({ kind: 'pending', data: o })}/>))}
+                {pendingOrders.map((o) => (<PendingOrderRow key={o.order_id} order={o} onClick={() => onSelect({ kind: 'pending', id: o.order_id })}/>))}
               </div>)}
           </section>
 

@@ -112,7 +112,8 @@
     "backend/tests/unit/test_regime_dedup.py",
     "backend/tests/unit/test_plan_metadata_atr.py",
     "backend/tests/unit/test_planner_atr_altstop.py",
-    "backend/tests/unit/test_entry_regime_snapshot.py"
+    "backend/tests/unit/test_entry_regime_snapshot.py",
+    "backend/tests/unit/test_plan_view.py"
   ],
   "source_fixtures": [
     "backend/bot/executor/live_executor.py",

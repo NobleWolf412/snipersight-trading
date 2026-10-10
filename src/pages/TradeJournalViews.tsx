@@ -10,13 +10,6 @@ export function fmtDate(iso: string | null) {
     const d = new Date(iso);
     return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
-export const EXIT_REASON_LABELS: Record<string, string> = {
-    target: 'TARGET',
-    stop_loss: 'STOP',
-    stagnation: 'STALE',
-    manual: 'MANUAL',
-    max_hours: 'TIMEOUT',
-};
 // ─── StatTile ─────────────────────────────────────────────────────────────
 export function StatTile({ label, value, sub, color, big, }: {
     label: string;

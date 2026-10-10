@@ -1,5 +1,5 @@
 import type { ScanHistoryEntry } from '@/services/scanHistoryService';
-import { buildSetupChartPlan, type SetupChartPlan } from '@/services/scannerSetup';
+import { setupPlay, type Play } from '@/services/playInspector';
 import { readDirection, readScore, validScore } from '@/utils/scoreEvidence';
 // Categories contain only producer evidence; unavailable is selectable.
 export const SETUPS = ['OB+FVG', 'BOS', 'CHoCH', 'LIQ-SWEEP', 'OB-RETEST', 'FVG-FILL', 'BREAKER', 'SMC', 'UNKNOWN'] as const;
@@ -34,7 +34,7 @@ export interface CardSignal {
     age: number;
     rationale?: string;
     raw?: unknown;
-    chartPlan: SetupChartPlan;
+    play: Play;
     // tradeType: backend-emitted scale classification (SWING/INTRADAY/SCALP).
     // Sourced from the scan-history result's `classification` (already produced
     // by convertSignalToScanResult), with `trade_type` and `setup_type` accepted
@@ -117,7 +117,7 @@ export function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
             rr,
             age: Math.max(0, Math.floor((Date.now() - Date.parse(r.timestamp || latest.timestamp)) / 60000)),
             rationale: r.rationale, raw: r,
-            chartPlan: buildSetupChartPlan(r, latest),
+            play: setupPlay(r, latest, { score, threshold: scoreGate, tradeType }),
             tradeType,
             synergyBonus,
             conflictPenalty,

@@ -42,7 +42,9 @@ import { accountingColor, accountingLabel, executionReportNotice, formatAccountM
  * StrictMode-safe: cancelled flag + setTimeout recursion.
  * Snapshot-ready: body[data-snapshot-ready="true"] after first poll.
  */
-import { Chip, PositionDetailModal, SectionHead, type DetailSelection } from '@/components/hud';
+import { Chip, SectionHead } from '@/components/hud';
+import { PlayInspector } from '@/components/hud/PlayInspector';
+import { selectBotPlay, type BotPlaySelection } from '@/services/playInspector';
 import { type CompletedPaperTrade, type PaperPosition, type PaperTradingStatus } from '@/services/paperTradingService';
 import { type JournalAggregate } from '@/services/tradeJournalService';
 import { useCallback, useMemo, useState } from 'react';
@@ -679,7 +681,8 @@ export function StatusTab({ status, trades, tradesErr, connErr, actionErr, loadi
     const positions = status?.positions ?? [];
     const stats = status?.statistics;
     const activity = status?.recent_activity ?? [];
-    const [detailSelection, setDetailSelection] = useState<DetailSelection | null>(null);
+    const [detailSelection, setDetailSelection] = useState<BotPlaySelection | null>(null);
+    const detailPlay = selectBotPlay(detailSelection, positions, status?.pending_orders ?? [], cfg?.use_testnet ? 'TESTNET' : 'PAPER');
     return (<div>
       {connErr && (<div style={{ margin: '0 0 14px', padding: '12px 14px', border: '1px solid var(--amber)', borderRadius: 10, background: 'rgba(234,179,8,.08)', color: 'var(--amber)', fontSize: 12 }}>
           ⚠ {connErr}
@@ -831,7 +834,7 @@ export function StatusTab({ status, trades, tradesErr, connErr, actionErr, loadi
               <div className="mono" style={{ display: 'grid', gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr', gap: 10, padding: '8px 12px', fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase' }}>
                 <span>Symbol</span><span>Side</span><span>Entry</span><span>Mark</span><span>Stop</span><span style={{ textAlign: 'right' }}>uPnL</span>
               </div>
-              {positions.map((p) => (<PositionRow key={p.position_id} pos={p} onClick={() => setDetailSelection({ kind: 'position', data: p })}/>))}
+              {positions.map((p) => (<PositionRow key={p.position_id} pos={p} onClick={() => setDetailSelection({ kind: 'position', id: p.position_id })}/>))}
             </div>)}
         </section>
 
@@ -884,7 +887,7 @@ export function StatusTab({ status, trades, tradesErr, connErr, actionErr, loadi
           </section>)}
       </div>
 
-      <PositionDetailModal selection={detailSelection} onClose={() => setDetailSelection(null)} currentRegime={null}/>
+      {detailPlay && <PlayInspector play={detailPlay} onClose={() => setDetailSelection(null)}/>}
     </div>);
 }
 // ─── Main component ────────────────────────────────────────────────────

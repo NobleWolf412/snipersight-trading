@@ -13,12 +13,13 @@ GauntletBreakdown,
 MacroBand,
 PageHead,
 PipelineTracer,
-PositionDetailModal,
 Reticle,
 SectionHead,
 UniversePanel
 } from '@/components/hud';
+import { PlayInspector } from '@/components/hud/PlayInspector';
 import { liveShutdownMessage } from '@/services/liveTradingService';
+import { selectBotPlay } from '@/services/playInspector';
 
 
 import { EquitySparkline,fmtCurrency,fmtDuration,fmtPct,MetricTile,ModePill,StatusPill,type SessionStatusValue } from './BotStatusViews';
@@ -26,6 +27,8 @@ import { EquitySparkline,fmtCurrency,fmtDuration,fmtPct,MetricTile,ModePill,Stat
 export function BotStatus() {
   const { navigate, scannerModes, selectedMode, session, status, trades, loading, stopping, resetting, killing, showKillConfirm, setShowKillConfirm, error, analyzing, analyzeOutput, analyzeError, connectionError, tradesError, lifetime, lifetimeError, tracerSignalId, setTracerSignalId, diagnoseOpen, setDiagnoseOpen, diagnoseOpenedAtMs, setDiagnoseOpenedAtMs, detailSelection, setDetailSelection, cancelKillRef, now, handleStop, handleKillSwitch, handleReset, handleAnalyze } = useBotStatusController();
   const { lifecycle, isStarting, isRunning, isKilled, liveServiceSelected, needsRecovery, tradingMode, isLive, isPaper, canKillSwitch, canAnalyzeSession, stats, balance, initialBalance, positions, pendingOrders, signalLog, regime, liveStatus, cfg, subtitleText, headAccent } = buildBotStatusViewModel(session);
+  const playAccount = isLive ? 'LIVE' : isPaper ? (cfg && 'use_testnet' in cfg && cfg.use_testnet ? 'TESTNET' : 'PAPER') : undefined;
+  const detailPlay = selectBotPlay(detailSelection, positions, pendingOrders, playAccount, regime?.composite);
 
   return (
     <div className="page-shell" id="main-content">
@@ -763,15 +766,8 @@ export function BotStatus() {
         nowSec={diagnoseOpenedAtMs / 1000}
       />
 
-      {/* Active-trade detail modal. Renders the click-through chart +
-          metadata for either a filled position or a pending limit. Pass
-          the current regime composite as additional context when live;
-          paper sessions don't expose regime in status. */}
-      <PositionDetailModal
-        selection={detailSelection}
-        onClose={() => setDetailSelection(null)}
-        currentRegime={regime?.composite ?? null}
-      />
+      {/* Play Inspector resolves the selection against each poll, so it stays live. */}
+      {detailPlay && <PlayInspector play={detailPlay} onClose={() => setDetailSelection(null)} />}
     </div>
   );
 }

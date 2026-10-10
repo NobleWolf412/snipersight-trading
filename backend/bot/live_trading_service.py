@@ -21,6 +21,7 @@ import math
 import uuid
 import time
 
+from backend.bot.plan_view import pending_plan_view
 from backend.bot.executor.live_executor import LiveExecutor
 from backend.bot.executor.execution_outcomes import ExecutionReceipt
 from backend.bot.executor.execution_fee_recovery import ExecutionFeeRecovery
@@ -797,6 +798,8 @@ class LiveTradingService:
                         "average_fill_price": order.average_fill_price,
                         "awaiting_adoption": bool(order.filled_quantity > 0),
                         "status": order.status.value,
+                        "current_price": self._price_cache.get(order.symbol),
+                        **pending_plan_view(plan),
                     })
         # Analysis/log fields may contain NumPy scalars; publish a detached JSON-safe view.
         return _sanitize_for_json(result)

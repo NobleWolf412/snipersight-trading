@@ -15,12 +15,12 @@ SectionHead
 } from '@/components/hud';
 import { useScanner } from '@/context/ScannerContext';
 import { scanHistoryService } from '@/services/scanHistoryService';
-import { formatSetupPrice } from '@/services/scannerSetup';
+import { formatPrice } from '@/services/playInspector';
 import { admissionLabel,formatScore,passesAdmission } from '@/utils/scoreEvidence';
 import { Suspense,lazy,useCallback,useEffect,useMemo,useState } from 'react';
 import './Scanner.css';
 
-const ScannerSetupModal = lazy(() => import('@/components/ScannerSetupModal').then(module => ({ default: module.ScannerSetupModal })));
+const PlayInspector = lazy(() => import('@/components/hud/PlayInspector').then(module => ({ default: module.PlayInspector })));
 
 import { REGIMES,SETUPS,TFS,buildCardSignals,type CardSignal,type Direction,type Regime,type Setup,type Tf } from './scannerSignals';
 export { buildCardSignals } from './scannerSignals';
@@ -164,19 +164,19 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
         <div className="metric-tile">
           <div className="metric-label">Entry</div>
           <div className="metric-value" style={{ fontSize: 12 }}>
-            {Number.isFinite(sig.entry) ? formatSetupPrice(sig.entry) : '—'}
+            {Number.isFinite(sig.entry) ? formatPrice(sig.entry) : '—'}
           </div>
         </div>
         <div className="metric-tile">
           <div className="metric-label">Stop</div>
           <div className="metric-value" style={{ fontSize: 12, color: 'var(--red-2)' }}>
-            {Number.isFinite(sig.sl) ? formatSetupPrice(sig.sl) : '—'}
+            {Number.isFinite(sig.sl) ? formatPrice(sig.sl) : '—'}
           </div>
         </div>
         <div className="metric-tile">
           <div className="metric-label">TP1</div>
           <div className="metric-value" style={{ fontSize: 12, color: 'var(--green-soft)' }}>
-            {Number.isFinite(sig.tp1) ? formatSetupPrice(sig.tp1) : '—'}
+            {Number.isFinite(sig.tp1) ? formatPrice(sig.tp1) : '—'}
           </div>
         </div>
         <div className="metric-tile">
@@ -222,8 +222,7 @@ export function SignalCard({ sig }: { sig: CardSignal }) {
         </button>
       </div>
       {chartOpen && <Suspense fallback={<p role="status">Opening setup chart…</p>}>
-        <ScannerSetupModal plan={sig.chartPlan} symbol={sig.sym} direction={sig.dir}
-          rationale={sig.rationale} onClose={() => setChartOpen(false)} />
+        <PlayInspector play={sig.play} onClose={() => setChartOpen(false)} />
       </Suspense>}
     </div>
   );

@@ -284,8 +284,8 @@ The system is **flat at rest, glowing on state.** No drop shadows on cards or pa
 - **Nav links:** JetBrains Mono 11px weight 600, uppercase, letter-spacing 0.16em, `var(--fg-3)` at rest. Active link picks up `var(--accent)` text, accent-tinted border and background. Hover lifts to `var(--fg)` with a faint white overlay.
 - **Mobile:** ≤700px collapses the nav into a slide-in drawer keyed to the right edge, backdrop-blur darkened. Hamburger appears in the topbar; the nav and status cluster move into the drawer. A running bot session should stay visible from the collapsed topbar.
 
-### Play Inspector (signature component, planned)
-- One chart modal used for open positions, pending orders, bot-planned entries, scanner setups (read/plan), journal entries (read-only) and replay. Build from `ScannerSetupModal`; don't fork it per screen.
+### Play Inspector (signature component)
+- One chart modal, `src/components/hud/PlayInspector.tsx`, used for scanner setups, open positions, pending entries and journal trades (replay planned). Extend it; don't fork it per screen. Read-only today; the edit state below is the target.
 - **Layout:** chart dominant (≥60% of the modal on desktop, full-width and most of the height on phones). A compact header strip shows symbol, side chip, mode chip, PAPER/LIVE chip and the order state. Below or beside it: risk, size, R:R, unrealized/estimated P&L and distance-to-stop/targets as metric tiles. Then the "why" (score vs threshold, top families, anchor structure). Then actions.
 - **Chart lines:** entry (or zone band), stop (red), targets (green, numbered), current price. Lines are draggable when editing is allowed; values tick live and R:R/P&L recompute as the line moves.
 - **Edit state:** a visible MODIFIED chip, the original plan as a faint ghost line, and a risk meter that turns red and blocks save on a breach. Save and revert are explicit; LIVE adds a confirm step.

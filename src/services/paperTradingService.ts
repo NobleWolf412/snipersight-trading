@@ -19,6 +19,7 @@ import type { AccountBalance,AccountingStatus,ExecutionHistoryStatus,ExecutionOu
  */
 
 import { API_BASE as BASE } from './apiBase';
+import type { PendingEntryOrder, PlayStrategy } from './liveTradingService';
 
 export interface PaperTradingConfigRequest {
   selection_mode?: 'fixed' | 'adaptive';
@@ -59,7 +60,7 @@ export interface PaperTradingConfigRequest {
 }
 
 export interface PaperPosition {
-  strategy?: { mode?: string; version?: string; selection_mode?: string };
+  strategy?: PlayStrategy;
   position_id: string;
   symbol: string;
   direction: 'LONG' | 'SHORT';
@@ -166,7 +167,7 @@ export interface PaperTradingStatus {
     }>;
   };
   recent_activity: { timestamp: string; event_type: string; data: any }[];
-  pending_orders: { order_id: string; symbol: string; direction: string; limit_price: number; quantity: number; status: string }[];
+  pending_orders: PendingEntryOrder[];
 }
 
 class PaperTradingService {

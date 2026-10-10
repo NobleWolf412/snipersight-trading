@@ -34,12 +34,6 @@ export { ScanController } from './ScanController';
 export { RejectionPanel } from './RejectionPanel';
 export { CycleAuditStrip } from './CycleAuditStrip';
 export {
-  PositionDetailModal,
-  type DetailSelection,
-  type PendingOrderShape,
-} from './PositionDetailModal';
-export { TradeHistoryDetailModal } from './TradeHistoryDetailModal';
-export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,
   type Tweaks,

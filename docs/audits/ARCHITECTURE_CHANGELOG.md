@@ -154,3 +154,16 @@ This append supersedes the foundation's quiet appearance description. [HUD style
 ## Scanner setup presentation correction, 2026-10-10
 
 This append supersedes the compact phone selector in the preceding appearance checkpoint. [ScannerModePicker](../../src/components/hud/ScannerModePicker.tsx) renders a leading recommendation panel, visible requirements in every mode card at every width and optional native help dialogs. The existing recommendation hook remains the freshness owner; applying advice stays manual and checks expiry. [ScannerInputs](../../src/components/hud/ScannerInputs.tsx) renders its existing fields and busy-disable behavior directly. [Scanner](../../src/pages/Scanner.tsx) supplies the existing scan controller through a presentation slot, uses a native dialog for existing result filters and guards incomplete mode metadata in its header. ScanController, ScannerContext, scanRunService and receipt/filter owners are unchanged; no mode policy, session or backend changes. [Evidence](SCANNER_SETUP_2026-10-10.json) records compiler,180 unit tests, frontend build and bounded independent review; score remains315.
+
+## Play Inspector, 2026-10-10
+
+`PlayInspector` replaces `ScannerSetupModal`, `PositionDetailModal` and
+`TradeHistoryDetailModal`, and `src/services/playInspector.ts` replaces
+`scannerSetup.ts`; the old files were deleted. Paper and live status now
+publish the same pending-plan view (`backend/bot/plan_view.py`): live pending
+entries gained stop, targets, timeframe, score and strategy; paper's missing
+stop and current price changed from `0.0` to `null`. Saved-setup direction now
+uses the strict `readDirection` parser, so a saved SHORT no longer defaults to
+LONG. Verification: compiler, 191 Vitest tests, frontend build, guarded backend
+suite (2482 passed; one execution-journal failure reproduces on the base
+commit), and browser checks at 1440px and 390px against intercepted APIs.
