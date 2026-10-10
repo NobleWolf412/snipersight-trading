@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 export interface BrowserPreferences { tacticalBackground: boolean; reticle: boolean }
-const defaults: BrowserPreferences = { tacticalBackground: false, reticle: false };
+const defaults: BrowserPreferences = { tacticalBackground: true, reticle: true };
 const key = 'sniper.browser.preferences.v2';
 let snapshot: BrowserPreferences | undefined;
 const listeners = new Set<() => void>();

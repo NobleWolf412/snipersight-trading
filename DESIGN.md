@@ -125,13 +125,13 @@ components:
 
 # Design System: SniperSight
 
-## Current product treatment, 2026-10-09
+## Current product treatment, 2026-10-10
 
-[PRODUCT.md](PRODUCT.md) owns current screen intent and tone. The olive dark palette is preserved; [tokens.css](src/styles/tokens.css) is its sole declaration owner, including compatibility aliases. Muted foreground tokens are now .78/.72 lightness; no whole-app contrast certification is implied.
+The operator requested restoration of the tactical visual identity after the simplification pass. Olive colors, Share Tech Mono display headings, glow, gradient panels, scanlines, decorative reticles and ambient background motion are restored. The historical HUD recipes below remain the visual reference. Decorative effects do not indicate session activity.
 
-Product page titles use sentence case and the sans body family; numbers, symbols and short state labels retain mono type. Shared panels are quiet, with visible focus and 44px common controls. Native dialog backdrops provide earned layering. Static surfaces have no implied stream or activity. [workspace.css](src/styles/workspace.css) contains these product rules and responsive corrections; legacy presentation selectors remain under the open A09 review.
+[PRODUCT.md](PRODUCT.md) owns screen intent and truthful state. [tokens.css](src/styles/tokens.css) remains the sole palette owner. Readable muted text, 44px common controls, responsive layouts, native dialogs and visible keyboard focus are retained. Motion respects reduced-motion preferences; the pointer reticle is hidden on coarse-pointer devices. Explicit browser appearance preferences remain authoritative; the default treatment is tactical.
 
-The historical component/effect recipes below describe the prior HUD treatment. Where they prescribe gratuitous glow, ambient animation, dim tiny hierarchy or all-uppercase prose, current PRODUCT.md and implemented product rules supersede them. They are retained as design history, not instructions to restore ornament. Current evidence: [UI audit](docs/audits/UI_REFACTOR_2026-10-09.md).
+The landing page restores its prior brand layout with implemented claims and clearly labeled static examples. Desktop scanner mode cards restore their colored HUD treatment; phones keep the compact selector and early Run scan action. State owners, backend behavior and transport contracts are unchanged. [workspace.css](src/styles/workspace.css) now contains usability and responsive rules rather than a flattening visual override. The [October 9 audit](docs/audits/UI_REFACTOR_2026-10-09.md) remains checkpoint history; the [restoration report](docs/audits/UI_HUD_RESTORE_2026-10-10.md) records the current appearance and verification.
 
 ## 1. Overview
 
@@ -139,7 +139,7 @@ The historical component/effect recipes below describe the prior HUD treatment. 
 
 SniperSight is a HUD overlaid on a working terminal, not a dashboard with a tactical theme. Density is high, but every glyph earns its rent. The system is dark by intent: an operator scanning multi-timeframe SMC structure at 2am on a 27-inch monitor under one warm lamp, watching for the moment four signals align. Light mode is not on the roadmap.
 
-The look reads as legible-aggressive: olive-tinted near-black surfaces, electric green as the default "GO" accent (with red on live mode and amber on warnings), mono type that owns the chrome, repeating CRT scanlines on every panel. Corner brackets and animated reticles signal that the system is *armed and watching*, not idle. Motion is restrained, repetitive, and slow: radar sweeps, pulse rings, drifting glow gradients. Nothing bounces. Nothing celebrates.
+The look reads as legible-aggressive: olive-tinted near-black surfaces, electric green as the default "GO" accent (with red on live mode and amber on warnings), mono type that owns the chrome, repeating CRT scanlines on every panel. Corner brackets and animated reticles establish the tactical identity. They are decorative; explicit state labels determine whether the system is armed or idle. Motion is restrained, repetitive, and slow: radar sweeps, pulse rings, drifting glow gradients. Nothing bounces. Nothing celebrates.
 
 This system explicitly rejects: the generic SaaS dashboard (Inter for everything, purple-to-blue gradients, identical card grids), the consumer finance softness (rounded everything, pastels, friendly empty states), the crypto-casino aesthetic (RGB neon, gamified XP, animated charts as decoration), and AI-tool landing-page reflex (white surface, vague gradient, "intelligent trading" copy). It also refuses Bloomberg-terminal nostalgia LARP: pure `#0F0` on `#000` with unreadable density. Olive-tint backgrounds and OKLCH neutrals are the difference.
 
@@ -148,7 +148,7 @@ This system explicitly rejects: the generic SaaS dashboard (Inter for everything
 - Mono type owns the chrome (Share Tech Mono for display, JetBrains Mono for labels and numbers, Inter only for prose body)
 - Accent color is dynamic: green by default, amber for warnings, red for live mode
 - Repeating scanlines on every `.panel` as a 2-bit overlay, not a hero effect
-- Corner brackets, reticles, and orbs as ambient state indicators
+- Corner brackets, reticles, and orbs as decorative HUD treatments
 - High density, low ornamentation; every chip is structural
 
 ## 2. Colors: The Olive-Tactical Palette

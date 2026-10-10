@@ -23,8 +23,10 @@ export function SniperReticle() {
   return (
     <div
       className="scope-reticle"
+      aria-hidden="true"
       style={{
         position: 'fixed',
+        visibility: mousePosition.x === 0 && mousePosition.y === 0 ? 'hidden' : 'visible',
         pointerEvents: 'none',
         zIndex: 100,
         willChange: 'transform',

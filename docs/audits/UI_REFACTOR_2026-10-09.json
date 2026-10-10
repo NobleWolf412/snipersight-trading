@@ -298,7 +298,8 @@
     "Six oversized screens split in place; private controller contract and keyboard switches consolidated.",
     "Seven obsolete modules proven and removed; archive/history/generated contracts retained.",
     "One palette owner and one API base resolver; mutation retry regression checks pass.",
-    "177 active unit tests, compiler, frontend and Storybook builds passed."
+    "177 active unit tests, compiler, frontend and Storybook builds passed.",
+    "Tactical HUD identity restored by user request; native controls, truthful examples and existing owners preserved (no additional points)."
   ],
   "levels": [
     {
@@ -542,6 +543,12 @@
       "date": "2026-10-09",
       "file": "UI_REFACTOR_2026-10-09_release.json",
       "note": "Additional concrete A08/A09 defects fixed and retested before main publication; previous checkpoint measurements and foundation records retained."
+    },
+    {
+      "date": "2026-10-10",
+      "file": "UI_HUD_RESTORE_2026-10-10.json",
+      "report": "UI_HUD_RESTORE_2026-10-10.md",
+      "note": "User-requested tactical presentation restored; functional fixes/cleanup retained. No additional points. Earlier metrics remain checkpoint evidence."
     }
   ],
   "cleanupItems": [
@@ -708,5 +715,182 @@
         "Mobile Safari and native200% browser zoom unverified; no full WCAG certification or screen-acceptance awards."
       ]
     }
+  },
+  "visualRestoration": {
+    "date": "2026-10-10",
+    "evidence": "UI_HUD_RESTORE_2026-10-10.json",
+    "additionalPoints": 0,
+    "build": {
+      "entryBytes": 287307,
+      "totalJavaScriptBytes": 874673,
+      "totalCssBytes": 75641,
+      "assets": [
+        {
+          "name": "01-order-blocks-BgMX-4tm.js",
+          "bytes": 22398
+        },
+        {
+          "name": "02-fvg-DCDfDA2e.js",
+          "bytes": 9437
+        },
+        {
+          "name": "03-bos-choch-BnHJ937S.js",
+          "bytes": 9278
+        },
+        {
+          "name": "04-liquidity-sweeps-BRyFiaG0.js",
+          "bytes": 8641
+        },
+        {
+          "name": "05-wyckoff-BtN4DaWe.js",
+          "bytes": 10574
+        },
+        {
+          "name": "06-confluence-D1lBGsdv.js",
+          "bytes": 10702
+        },
+        {
+          "name": "07-regime-BBvJpea0.js",
+          "bytes": 8506
+        },
+        {
+          "name": "08-position-sizing-BfvJAcJ-.js",
+          "bytes": 9599
+        },
+        {
+          "name": "09-kill-zones-D11GPBoe.js",
+          "bytes": 9841
+        },
+        {
+          "name": "accounting-BIIlaKsR.js",
+          "bytes": 13896
+        },
+        {
+          "name": "activeSession-JR-xxIMv.js",
+          "bytes": 1169
+        },
+        {
+          "name": "BotIndex-B5pBcnj4.js",
+          "bytes": 773
+        },
+        {
+          "name": "BotSetup-1PSL1ooX.js",
+          "bytes": 20277
+        },
+        {
+          "name": "BotStatus-g3suYQy6.js",
+          "bytes": 76457
+        },
+        {
+          "name": "Drills-ByGR-BXK.js",
+          "bytes": 9243
+        },
+        {
+          "name": "FooterStatus-BP8AjWlA.js",
+          "bytes": 798
+        },
+        {
+          "name": "index-Bato8gtb.js",
+          "bytes": 287307
+        },
+        {
+          "name": "index-DsgG9Rlg.css",
+          "bytes": 60076
+        },
+        {
+          "name": "Intel-C2sq720d.js",
+          "bytes": 10044
+        },
+        {
+          "name": "Intel-CWw7tBYe.css",
+          "bytes": 1264
+        },
+        {
+          "name": "Landing-BNjhHwqr.css",
+          "bytes": 7957
+        },
+        {
+          "name": "Landing-CIrP52Ui.js",
+          "bytes": 12765
+        },
+        {
+          "name": "Lessons-CMWW2B2r.js",
+          "bytes": 19927
+        },
+        {
+          "name": "Lessons-kEossNCU.css",
+          "bytes": 827
+        },
+        {
+          "name": "lightweight-charts.production-MNtGQzgA.js",
+          "bytes": 169995
+        },
+        {
+          "name": "RangeBot-DG5quQr2.js",
+          "bytes": 41426
+        },
+        {
+          "name": "Replay-B5NvMRH9.js",
+          "bytes": 25502
+        },
+        {
+          "name": "Reticle-Cl2yIdnt.js",
+          "bytes": 1091
+        },
+        {
+          "name": "Scanner-7vl-dDPR.css",
+          "bytes": 3246
+        },
+        {
+          "name": "Scanner-BMxG4h1g.js",
+          "bytes": 41632
+        },
+        {
+          "name": "ScannerSetupModal-CxG6ZJim.css",
+          "bytes": 2271
+        },
+        {
+          "name": "ScannerSetupModal-D6cy_IK1.js",
+          "bytes": 6836
+        },
+        {
+          "name": "SectionHead-Cr365S6N.js",
+          "bytes": 279
+        },
+        {
+          "name": "Settings-DeEcs3YE.js",
+          "bytes": 1683
+        },
+        {
+          "name": "Toggle-BOlNi6d7.js",
+          "bytes": 2356
+        },
+        {
+          "name": "TradeJournal-DdGx6AsB.js",
+          "bytes": 20835
+        },
+        {
+          "name": "tradeJournalService-DvDwQrSL.js",
+          "bytes": 551
+        },
+        {
+          "name": "TradeJournalViews-Dl7gJDoe.js",
+          "bytes": 5881
+        },
+        {
+          "name": "TrainingGround-B9N0Zvnt.js",
+          "bytes": 1224
+        },
+        {
+          "name": "useScannerRecommendation-D0wfaGF1.js",
+          "bytes": 1278
+        },
+        {
+          "name": "_shared-yX36JkDU.js",
+          "bytes": 2472
+        }
+      ]
+    },
+    "score": 315
   }
 }

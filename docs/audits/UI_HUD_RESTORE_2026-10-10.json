@@ -1,0 +1,1038 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "baseCommit": "f5f05deaaf99c4abbba5903249bf491e4677e890",
+  "request": "Revert it back. We lost some of the cool factor",
+  "interpretation": "Restore tactical presentation while retaining functional, accessibility, truthfulness and architecture fixes. Earlier commit-and-push-to-main authorization applies.",
+  "visualReference": "1c325d8",
+  "changes": [
+    "Restore olive panel gradients, depth, scanlines, HUD title typography and glow from the existing theme.",
+    "Restore branded landing layout, six console cards, illustrative setup cards and operating doctrine; accurate capability copy and static-example labels retained.",
+    "Restore colored native scanner mode cards above700px; compact manual selector remains on phones. Thresholds come from scannerModes; missing limits show Unavailable.",
+    "Tactical background and pointer reticle default on; saved appearance choices remain authoritative. Decorative reticles are aria-hidden, pointer reticle hidden until movement and on coarse-pointer/reduced-motion surfaces.",
+    "Retain shared native dialogs, focus restoration, 44px controls, mobile navigation/pagination, visible failure reasons, split screen structure, lessons and retired orphan/providers/dependencies.",
+    "Update PRODUCT and DESIGN to reflect the user-approved tactical identity. No strategy, thresholds, session commands, ML or backend changes in this restoration."
+  ],
+  "verification": {
+    "typeScript": {
+      "command": "node_modules/.bin/tsc.cmd --noEmit",
+      "exitCode": 0
+    },
+    "unitTests": {
+      "command": "npm test -- --reporter=json --outputFile=build/ui-restore-tests.json",
+      "passed": 177,
+      "files": 15,
+      "failed": 0,
+      "testsChanged": false
+    },
+    "finalModePolicyRetest": {
+      "command": "node_modules/.bin/vitest.cmd run src/components/hud/ScannerModePicker.policy.test.tsx",
+      "passed": 5,
+      "failed": 0
+    },
+    "frontendBuild": {
+      "command": "npm run build:frontend",
+      "exitCode": 0,
+      "transformedModules": 4714,
+      "entryBytes": 287307,
+      "totalJavaScriptBytes": 874673,
+      "totalCssBytes": 75641,
+      "assets": [
+        {
+          "name": "01-order-blocks-BgMX-4tm.js",
+          "bytes": 22398
+        },
+        {
+          "name": "02-fvg-DCDfDA2e.js",
+          "bytes": 9437
+        },
+        {
+          "name": "03-bos-choch-BnHJ937S.js",
+          "bytes": 9278
+        },
+        {
+          "name": "04-liquidity-sweeps-BRyFiaG0.js",
+          "bytes": 8641
+        },
+        {
+          "name": "05-wyckoff-BtN4DaWe.js",
+          "bytes": 10574
+        },
+        {
+          "name": "06-confluence-D1lBGsdv.js",
+          "bytes": 10702
+        },
+        {
+          "name": "07-regime-BBvJpea0.js",
+          "bytes": 8506
+        },
+        {
+          "name": "08-position-sizing-BfvJAcJ-.js",
+          "bytes": 9599
+        },
+        {
+          "name": "09-kill-zones-D11GPBoe.js",
+          "bytes": 9841
+        },
+        {
+          "name": "accounting-BIIlaKsR.js",
+          "bytes": 13896
+        },
+        {
+          "name": "activeSession-JR-xxIMv.js",
+          "bytes": 1169
+        },
+        {
+          "name": "BotIndex-B5pBcnj4.js",
+          "bytes": 773
+        },
+        {
+          "name": "BotSetup-1PSL1ooX.js",
+          "bytes": 20277
+        },
+        {
+          "name": "BotStatus-g3suYQy6.js",
+          "bytes": 76457
+        },
+        {
+          "name": "Drills-ByGR-BXK.js",
+          "bytes": 9243
+        },
+        {
+          "name": "FooterStatus-BP8AjWlA.js",
+          "bytes": 798
+        },
+        {
+          "name": "index-Bato8gtb.js",
+          "bytes": 287307
+        },
+        {
+          "name": "index-DsgG9Rlg.css",
+          "bytes": 60076
+        },
+        {
+          "name": "Intel-C2sq720d.js",
+          "bytes": 10044
+        },
+        {
+          "name": "Intel-CWw7tBYe.css",
+          "bytes": 1264
+        },
+        {
+          "name": "Landing-BNjhHwqr.css",
+          "bytes": 7957
+        },
+        {
+          "name": "Landing-CIrP52Ui.js",
+          "bytes": 12765
+        },
+        {
+          "name": "Lessons-CMWW2B2r.js",
+          "bytes": 19927
+        },
+        {
+          "name": "Lessons-kEossNCU.css",
+          "bytes": 827
+        },
+        {
+          "name": "lightweight-charts.production-MNtGQzgA.js",
+          "bytes": 169995
+        },
+        {
+          "name": "RangeBot-DG5quQr2.js",
+          "bytes": 41426
+        },
+        {
+          "name": "Replay-B5NvMRH9.js",
+          "bytes": 25502
+        },
+        {
+          "name": "Reticle-Cl2yIdnt.js",
+          "bytes": 1091
+        },
+        {
+          "name": "Scanner-7vl-dDPR.css",
+          "bytes": 3246
+        },
+        {
+          "name": "Scanner-BMxG4h1g.js",
+          "bytes": 41632
+        },
+        {
+          "name": "ScannerSetupModal-CxG6ZJim.css",
+          "bytes": 2271
+        },
+        {
+          "name": "ScannerSetupModal-D6cy_IK1.js",
+          "bytes": 6836
+        },
+        {
+          "name": "SectionHead-Cr365S6N.js",
+          "bytes": 279
+        },
+        {
+          "name": "Settings-DeEcs3YE.js",
+          "bytes": 1683
+        },
+        {
+          "name": "Toggle-BOlNi6d7.js",
+          "bytes": 2356
+        },
+        {
+          "name": "TradeJournal-DdGx6AsB.js",
+          "bytes": 20835
+        },
+        {
+          "name": "tradeJournalService-DvDwQrSL.js",
+          "bytes": 551
+        },
+        {
+          "name": "TradeJournalViews-Dl7gJDoe.js",
+          "bytes": 5881
+        },
+        {
+          "name": "TrainingGround-B9N0Zvnt.js",
+          "bytes": 1224
+        },
+        {
+          "name": "useScannerRecommendation-D0wfaGF1.js",
+          "bytes": 1278
+        },
+        {
+          "name": "_shared-yX36JkDU.js",
+          "bytes": 2472
+        }
+      ]
+    },
+    "storybookBuild": {
+      "command": "npm run build-storybook",
+      "exitCode": 0,
+      "transformedModules": 348,
+      "warnings": [
+        "Unmatched component-story glob",
+        "Stale baseline-browser metadata",
+        "Large Storybook preview chunks"
+      ]
+    },
+    "inventory": {
+      "activeFiles": 163,
+      "archivedFiles": 153,
+      "retainedCandidates": 18,
+      "inlineStyleCount": 1055,
+      "unresolvedImports": []
+    },
+    "nativeBrowser": "In-app browser: restored landing and1280px scanner manually inspected; four mode cards and existing backend minimums visible. No scan or session mutation. Viewport reset.",
+    "independentReview": {
+      "reviewedAt": "2026-10-10T14:45:44.436Z",
+      "reviewer": "Independent read-only reviewer",
+      "result": "Passed bounded restored-theme review; no remaining verified P1/P2 in sampled changes",
+      "scope": "Restore requested tactical HUD identity while preserving responsive structure, manual scanner selection, truthful examples, native dialogs, focus and stored browser preferences. Source files only; unrelated concurrent backend changes excluded.",
+      "source": [
+        {
+          "path": "src/components/SniperReticle.tsx",
+          "sha256": "3f07ada3488e579a34da5bb8e0abfd75500bf884a3fc6f293efaf1d112f4c3fe"
+        },
+        {
+          "path": "src/components/hud/Reticle.tsx",
+          "sha256": "78ec7a56adf6fe0c3f88c2390e315bd8fa0f16503470a95463c78149615b7c90"
+        },
+        {
+          "path": "src/components/hud/ScannerModePicker.tsx",
+          "sha256": "151763c3f3dec83c5571ba4b1fc92c169e875b86b8443989b76740f314b5b7e2"
+        },
+        {
+          "path": "src/pages/Landing.tsx",
+          "sha256": "184c455299ca3025ddd816d1c4a7ec6e1b202d2b732ca320a6c9eb7c33c56fcb"
+        },
+        {
+          "path": "src/pages/Landing.css",
+          "sha256": "e2d11adbbe6f15365914bec64823529ea0e9247494de1529560cb62b577a120a"
+        },
+        {
+          "path": "src/pages/Scanner.css",
+          "sha256": "5b08e5665f35627c1598df496695ee575e6c95f451fc74a161f5b0dea5bda864"
+        },
+        {
+          "path": "src/services/browserPreferences.ts",
+          "sha256": "db636ea9889c713abef89ecc9159fa09cea458b5667b7d310df208406a011a60"
+        },
+        {
+          "path": "src/styles/hud.css",
+          "sha256": "cb11b4e886a6a1f08a6a23049f7ac6d72ae2c07523841aa2375f27510436b570"
+        },
+        {
+          "path": "src/styles/workspace.css",
+          "sha256": "b11badcb4edfe5130679f6ffb41716ce2c8e0eb1e7e5ba437759eca74a045ed0"
+        }
+      ],
+      "findings": [],
+      "resolvedCandidates": [
+        {
+          "severity": "P2",
+          "path": "src/pages/Landing.css",
+          "finding": "Restored Explore signals CTA was42px; scoped landing .btn44px rule now passes all4widths.",
+          "evidence": "build/ui-restore-retest.json"
+        },
+        {
+          "severity": "P2",
+          "path": "src/components/hud/ScannerModePicker.tsx",
+          "finding": "Synthetic modes missing min_rr_ratio printed blank card value; explicit Unavailable fallback now verified768/1280.",
+          "evidence": "build/ui-restore-final.json"
+        }
+      ],
+      "rubric": [
+        {
+          "item": 1,
+          "status": "verified scoped",
+          "evidence": "User requested tactical restoration. Inspected actual nine-file source diff; no strategy/backend source reviewed or modified."
+        },
+        {
+          "item": 2,
+          "status": "verified scoped",
+          "evidence": "Mode limits come from scannerModes; absent values explicit. Static landing examples clearly labeled. Existing browser preferences override changed tactical defaults."
+        },
+        {
+          "item": 3,
+          "status": "verified scoped",
+          "evidence": "Mode cards call existing setSelectedMode, updating desired/manual scan configuration only. Recommendation freshness hook unchanged; no automatic application. Dialog and session owners unchanged."
+        },
+        {
+          "item": 4,
+          "status": "verified sampled",
+          "evidence": "Five routes×four widths expanded controls;20 reduced-motion samples; phone selector/desktop keyboard cards; native menu/Escape/focus; nested health; fresh available advice; stored appearance false after reload. Manual screenshots Landing320/1280 and Scanner1280 inspected."
+        },
+        {
+          "item": 5,
+          "status": "not changed",
+          "evidence": "No lifecycle, accounting, retry or financial display changes in scoped diff. Unknown card limits remain explicit; no trading correctness inference from fixtures."
+        },
+        {
+          "item": 6,
+          "status": "verified isolation",
+          "evidence": "All browser /api requests intercepted with synthetic responses. Zero page errors and zero nonGET API attempts across evidence. No backend imports/tests/external session or order commands. Parent reports compiler177units/frontend build passed; reviewer did not independently rerun these."
+        },
+        {
+          "item": 7,
+          "status": "verified scoped",
+          "evidence": "Landing says scores are not win probabilities and examples are static. Advice remains manual. Mode thresholds displayed without changed values; no directional strategy behavior modified."
+        },
+        {
+          "item": 8,
+          "status": "verified sampled",
+          "evidence": "Current diff and hashes preserved. Earlier42px/blank-value findings retained as history and corrected with targeted retests. Report save to requested build/ui-restore-review.json; parent owns committed evidence/navigation updates."
+        }
+      ],
+      "coverage": {
+        "widths": [
+          320,
+          390,
+          768,
+          1280
+        ],
+        "routes": [
+          "/",
+          "/scanner",
+          "/bot/setup",
+          "/journal",
+          "/settings"
+        ],
+        "initialExpandedRouteSamples": 20,
+        "reducedMotionSamples": 20,
+        "landingCorrectionRetestSamples": 4,
+        "errors": [],
+        "apiMutationAttempts": []
+      },
+      "limits": [
+        "Synthetic headless Edge only; Safari, native zoom, actual mobile hardware and all runtime states unverified.",
+        "Contrast scan composes solid computed backgrounds; restored gradients/ambient paint and inherited group opacity need broader manual WCAG audit. No full accessibility acceptance claim.",
+        "Motion compliance sampled through browser active animation inventory; GPU/frame-rate/battery performance not profiled.",
+        "This presentation review does not certify backend, live execution, exchange connectivity, strategy calibration or whole-system correctness.",
+        "A08/A09 and broader Level07 scope remain partial; no new score award claimed."
+      ],
+      "evidence": [
+        "build/ui-restore-rendered.json",
+        "build/ui-restore-interactions.json",
+        "build/ui-restore-advice.json",
+        "build/ui-restore-retest.json",
+        "build/ui-restore-final.json"
+      ],
+      "screenshots": [
+        "build/ui-restore-landing-320.png",
+        "build/ui-restore-landing-1280.png",
+        "build/ui-restore-scanner-1280.png"
+      ]
+    }
+  },
+  "browserEvidence": {
+    "rendered": {
+      "scope": "Synthetic Edge rendered active-route/expanded-input samples; all API intercepted, no commands. Contrast candidates use computed solid background composition; gradients and full WCAG/state acceptance need manual verification. Safari/native zoom not covered.",
+      "results": [
+        {
+          "route": "/",
+          "width": 320,
+          "docWidth": 320,
+          "controlCount": 1,
+          "targetIssues": [
+            {
+              "selector": "a.btn.btn-amber",
+              "label": "EXPLORE SIGNALS →",
+              "width": 205,
+              "height": 42,
+              "type": ""
+            }
+          ],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/scanner",
+          "width": 320,
+          "docWidth": 320,
+          "controlCount": 45,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/bot/setup",
+          "width": 320,
+          "docWidth": 320,
+          "controlCount": 32,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/journal",
+          "width": 320,
+          "docWidth": 320,
+          "controlCount": 27,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/settings",
+          "width": 320,
+          "docWidth": 320,
+          "controlCount": 7,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/",
+          "width": 390,
+          "docWidth": 390,
+          "controlCount": 1,
+          "targetIssues": [
+            {
+              "selector": "a.btn.btn-amber",
+              "label": "EXPLORE SIGNALS →",
+              "width": 205,
+              "height": 42,
+              "type": ""
+            }
+          ],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/scanner",
+          "width": 390,
+          "docWidth": 390,
+          "controlCount": 45,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/bot/setup",
+          "width": 390,
+          "docWidth": 390,
+          "controlCount": 32,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/journal",
+          "width": 390,
+          "docWidth": 390,
+          "controlCount": 27,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/settings",
+          "width": 390,
+          "docWidth": 390,
+          "controlCount": 7,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/",
+          "width": 768,
+          "docWidth": 768,
+          "controlCount": 1,
+          "targetIssues": [
+            {
+              "selector": "a.btn.btn-amber",
+              "label": "EXPLORE SIGNALS →",
+              "width": 205,
+              "height": 42,
+              "type": ""
+            }
+          ],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/scanner",
+          "width": 768,
+          "docWidth": 768,
+          "controlCount": 48,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/bot/setup",
+          "width": 768,
+          "docWidth": 768,
+          "controlCount": 32,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/journal",
+          "width": 768,
+          "docWidth": 768,
+          "controlCount": 32,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/settings",
+          "width": 768,
+          "docWidth": 768,
+          "controlCount": 7,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/",
+          "width": 1280,
+          "docWidth": 1280,
+          "controlCount": 1,
+          "targetIssues": [
+            {
+              "selector": "a.btn.btn-amber",
+              "label": "EXPLORE SIGNALS →",
+              "width": 205,
+              "height": 42,
+              "type": ""
+            }
+          ],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/scanner",
+          "width": 1280,
+          "docWidth": 1280,
+          "controlCount": 48,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/bot/setup",
+          "width": 1280,
+          "docWidth": 1280,
+          "controlCount": 32,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/journal",
+          "width": 1280,
+          "docWidth": 1280,
+          "controlCount": 32,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/settings",
+          "width": 1280,
+          "docWidth": 1280,
+          "controlCount": 7,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "interactions": {
+      "results": [
+        {
+          "mode": {
+            "width": 320,
+            "cardsVisible": false,
+            "selectVisible": true,
+            "selection": "strike",
+            "docWidth": 320
+          }
+        },
+        {
+          "width": 320,
+          "menu": {
+            "left": 32,
+            "right": 320,
+            "scrollLocked": "hidden",
+            "focusInside": true,
+            "tabInside": true,
+            "focusRestored": true,
+            "unlocked": true
+          }
+        },
+        {
+          "width": 320,
+          "route": "/",
+          "reducedMotion": {
+            "docWidth": 320,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 320,
+          "route": "/scanner",
+          "reducedMotion": {
+            "docWidth": 320,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 320,
+          "route": "/bot/setup",
+          "reducedMotion": {
+            "docWidth": 320,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 320,
+          "route": "/journal",
+          "reducedMotion": {
+            "docWidth": 320,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 320,
+          "route": "/settings",
+          "reducedMotion": {
+            "docWidth": 320,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "mode": {
+            "width": 390,
+            "cardsVisible": false,
+            "selectVisible": true,
+            "selection": "strike",
+            "docWidth": 390
+          }
+        },
+        {
+          "width": 390,
+          "menu": {
+            "left": 50,
+            "right": 390,
+            "scrollLocked": "hidden",
+            "focusInside": true,
+            "tabInside": true,
+            "focusRestored": true,
+            "unlocked": true
+          }
+        },
+        {
+          "width": 390,
+          "route": "/",
+          "reducedMotion": {
+            "docWidth": 390,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 390,
+          "route": "/scanner",
+          "reducedMotion": {
+            "docWidth": 390,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 390,
+          "route": "/bot/setup",
+          "reducedMotion": {
+            "docWidth": 390,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 390,
+          "route": "/journal",
+          "reducedMotion": {
+            "docWidth": 390,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 390,
+          "route": "/settings",
+          "reducedMotion": {
+            "docWidth": 390,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "mode": {
+            "width": 768,
+            "cardsVisible": true,
+            "selectVisible": false,
+            "outline": "solid",
+            "selectedCount": 1,
+            "selected": "true",
+            "priorSelected": "false",
+            "docWidth": 768
+          }
+        },
+        {
+          "width": 768,
+          "menu": {
+            "left": 428,
+            "right": 768,
+            "scrollLocked": "hidden",
+            "focusInside": true,
+            "tabInside": true,
+            "focusRestored": true,
+            "unlocked": true
+          }
+        },
+        {
+          "width": 768,
+          "route": "/",
+          "reducedMotion": {
+            "docWidth": 768,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 768,
+          "route": "/scanner",
+          "reducedMotion": {
+            "docWidth": 768,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 768,
+          "route": "/bot/setup",
+          "reducedMotion": {
+            "docWidth": 768,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 768,
+          "route": "/journal",
+          "reducedMotion": {
+            "docWidth": 768,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 768,
+          "route": "/settings",
+          "reducedMotion": {
+            "docWidth": 768,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "mode": {
+            "width": 1280,
+            "cardsVisible": true,
+            "selectVisible": false,
+            "outline": "solid",
+            "selectedCount": 1,
+            "selected": "true",
+            "priorSelected": "false",
+            "docWidth": 1280
+          }
+        },
+        {
+          "width": 1280,
+          "route": "/",
+          "reducedMotion": {
+            "docWidth": 1280,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 1280,
+          "route": "/scanner",
+          "reducedMotion": {
+            "docWidth": 1280,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 1280,
+          "route": "/bot/setup",
+          "reducedMotion": {
+            "docWidth": 1280,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 1280,
+          "route": "/journal",
+          "reducedMotion": {
+            "docWidth": 1280,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        },
+        {
+          "width": 1280,
+          "route": "/settings",
+          "reducedMotion": {
+            "docWidth": 1280,
+            "scopeReticle": [
+              "none"
+            ],
+            "activeAnimations": []
+          }
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "limits": "Synthetic Edge only, no actual API calls/session commands. Reduced motion sampled; native zoom/Safari unverified."
+    },
+    "advice": {
+      "results": [
+        {
+          "width": 390,
+          "adviceDidNotAutoApply": true,
+          "manualApplySelected": true,
+          "outline": "solid"
+        },
+        {
+          "nested": {
+            "menuStillOpen": true,
+            "restored": true,
+            "locked": true,
+            "unlocked": true
+          }
+        },
+        {
+          "width": 1280,
+          "adviceDidNotAutoApply": true,
+          "manualApplySelected": true,
+          "outline": "solid"
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "retest": {
+      "scope": "Synthetic Edge rendered active-route/expanded-input samples; all API intercepted, no commands. Contrast candidates use computed solid background composition; gradients and full WCAG/state acceptance need manual verification. Safari/native zoom not covered.",
+      "results": [
+        {
+          "route": "/",
+          "width": 320,
+          "docWidth": 320,
+          "controlCount": 1,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/",
+          "width": 390,
+          "docWidth": 390,
+          "controlCount": 1,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/",
+          "width": 768,
+          "docWidth": 768,
+          "controlCount": 1,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/",
+          "width": 1280,
+          "docWidth": 1280,
+          "controlCount": 1,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "final": {
+      "results": [
+        {
+          "width": 768,
+          "limits": [
+            "Score: ≥ 72 · R:R: Unavailable",
+            "Score: ≥ 68 · R:R: Unavailable",
+            "Score: ≥ 70 · R:R: Unavailable",
+            "Score: ≥ 70 · R:R: Unavailable"
+          ],
+          "reticlesHidden": true
+        },
+        {
+          "width": 1280,
+          "limits": [
+            "Score: ≥ 72 · R:R: Unavailable",
+            "Score: ≥ 68 · R:R: Unavailable",
+            "Score: ≥ 70 · R:R: Unavailable",
+            "Score: ≥ 70 · R:R: Unavailable"
+          ],
+          "reticlesHidden": true
+        },
+        {
+          "explicitPreferences": {
+            "reticleAbsent": true,
+            "tacticalAbsent": true,
+            "stored": {
+              "tacticalBackground": false,
+              "reticle": false
+            }
+          }
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    }
+  },
+  "progress": {
+    "additionalPoints": 0,
+    "committedOutcomeScore": 315,
+    "partialFindings": [
+      "A08",
+      "A09"
+    ],
+    "openLevel": "07",
+    "note": "Earlier removal/build measurements remain historical checkpoints; this style restoration is not another cleanup outcome."
+  },
+  "limitations": [
+    "Synthetic headless Edge only; Safari, native zoom, actual mobile hardware and all runtime states unverified.",
+    "Contrast scan composes solid computed backgrounds; restored gradients/ambient paint and inherited group opacity need broader manual WCAG audit. No full accessibility acceptance claim.",
+    "Motion compliance sampled through browser active animation inventory; GPU/frame-rate/battery performance not profiled.",
+    "This presentation review does not certify backend, live execution, exchange connectivity, strategy calibration or whole-system correctness.",
+    "A08/A09 and broader Level07 scope remain partial; no new score award claimed."
+  ]
+}

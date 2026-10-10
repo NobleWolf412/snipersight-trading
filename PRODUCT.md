@@ -40,7 +40,7 @@ Design serves the product. The HUD is a working cockpit, not a marketing surface
 
 - **Direct.** No hedging copy, no "we" voice, no emoji. Imperative or declarative.
 - **Terse.** Never a sentence where a chip will do.
-- **Type roles.** `JetBrains Mono` for numbers, symbols, chips and short state labels (uppercase allowed there). Sentence case for headings, explanations, errors and anything longer than a few words. Small dim uppercase text is not a substitute for hierarchy.
+- **Type roles.** `JetBrains Mono` for numbers, symbols, chips and short state labels (uppercase allowed there). `Share Tech Mono` for HUD display headings; uppercase is allowed in display headings and concise console names. Sentence case for explanations, errors and prose. Small dim uppercase text is not a substitute for hierarchy.
 - **Tactical, not military LARP.** Words like SCAN, FIRE, REJECT, BREACH, ARMED are earned by the function, not sprinkled for vibe. No "engaging targets" or "mission critical."
 - **Numeric where possible.** Show the score, the threshold, the delta. Show the regime label. Don't paraphrase.
 - **Loud failures.** Reject reasons are visible by default, not hidden behind an "expand" affordance. Supporting detail (family ledgers, raw inputs, diagnostics) may collapse; the reason itself may not. Diagnostic scripts return paste-friendly output: short summary first, structured detail second, raw data last.
@@ -48,7 +48,7 @@ Design serves the product. The HUD is a working cockpit, not a marketing surface
 ## Simplicity
 
 - **One primary task per screen.** Secondary evidence is arranged around it, not stacked in front of it. On a phone, the primary action is reachable without scrolling past setup chrome.
-- **No ornament that implies activity.** Animation, glow, pulsing and "live" labels only where an actual event or stream backs them. A static or stale surface looks static or stale.
+- **Keep the tactical identity.** Olive surfaces, glow, scanlines, ambient background motion and reticles are decorative HUD treatments, not activity indicators. Appearance controls and reduced motion remain supported. "Live", "streaming", armed and freshness labels require real state; static examples are explicitly labeled.
 - **State is explicit.** Paper, testnet and live are always distinguishable. Idle, loading, error, partial, stale and recovery states each have a visible form. Unknown quantities, fees and P&L render as unknown, never as zero.
 - **One owner per behavior.** Scan lifecycle, sessions, feeds, replay and financial display keep their current owners (see the index). Simplifying the UI never means merging these into a generic context, cache or retrying client.
 - **Fix in place before moving.** Split oversized screens where they live. Directory restructures need a concrete problem they solve, not a target layout.

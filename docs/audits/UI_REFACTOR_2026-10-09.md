@@ -120,3 +120,7 @@ The final review corrected inherited keyboard, target and contrast defects: nati
 Final inventory:163 active files,153 archive files,18 retained candidates and1,028 inline style objects; this supersedes the preceding checkpoint's1,026 count. The additional four-width clock retest passes with opaque label backplates.
 
 Implementation commit: 8e7bdf00e920bdaba8f72e19fbc98def571994f4. Score remains315: this closes concrete issues within partial A08/A09, with no duplicate awards. Level07 remains open for the complete native cross-browser and state matrix. Safari, native200% zoom and full WCAG remain unverified.
+
+## Tactical presentation restored, 2026-10-10
+
+The user's request to restore the cool factor supersedes the quiet presentation direction above. The [restoration report](UI_HUD_RESTORE_2026-10-10.md) and [evidence](UI_HUD_RESTORE_2026-10-10.json) record restored HUD typography, depth, glow, scanlines, decorative defaults, landing layout and desktop mode cards. Mobile focus, native controls, truthful examples and architecture/code cleanup remain. No additional points: score315; A08/A09 and Level07 remain partial/open. October9 asset and gross-removal measurements are preserved as historical checkpoints; current assets are recorded in the restoration evidence.

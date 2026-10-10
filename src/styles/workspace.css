@@ -8,28 +8,11 @@
 .preferences-fields label { display:flex; align-items:center; gap:12px; min-height:44px; }
 .preferences-fields p { color:var(--fg-2); line-height:1.6; }
 .preferences-links { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0; }
-.workspace .reticle { display:none; }
-.tactical-bg * { animation:none !important; }
-/* Product surfaces share a quiet, readable shell. Landing keeps its brand treatment. */
-
-.workspace .panel {
-  background: var(--bg-2);
-  box-shadow: none;
-}
-.workspace .panel::before,
-.workspace .panel-accent::after { display: none; }
-.workspace .page-title h1,
-.workspace .hud-glow,
-.workspace .hud-glow-amber,
-.workspace .hud-glow-red { text-shadow: none; }
-.workspace .page-title h1 { font-family:var(--font-sans); font-size:28px; letter-spacing:0; text-transform:none; }
-.workspace .page-title .sub { font-family:var(--font-sans); font-size:12px; letter-spacing:0; line-height:1.6; text-transform:none; }
-.workspace .sec-title { letter-spacing:0; text-transform:none; }
-.workspace .sec-title .dot { box-shadow: none; }
+/* Tactical HUD identity comes from hud.css; usability rules remain here. */
+.workspace .page-title h1 { font-size:28px; }
+.workspace .page-title .sub { font-size:12px; line-height:1.6; }
 .workspace .btn { min-height:44px; letter-spacing:.08em; white-space:normal; line-height:1.5; }
 .workspace .btn-icon { min-width: 44px; }
-.workspace .btn-cyan { background: var(--cyan-bg, oklch(0.27 0.025 210)); box-shadow: none; }
-.workspace .btn-cyan:active { transform: none; }
 .workspace a:not(.btn):not(.active):not(.brand) { color: var(--fg-2); }
 .workspace .nav a { letter-spacing: .06em; }
 .workspace .page-head,
@@ -50,11 +33,13 @@
 :where(a, button, input, select, textarea, summary, [role=button], [role=switch], [tabindex]):focus-visible {
   outline: 2px solid var(--accent); outline-offset: 3px;
 }
+@media (pointer:coarse), (prefers-reduced-motion:reduce) { .scope-reticle { display:none; } }
 @media (max-width: 700px) {
   .workspace .page-title h1 { font-size: 24px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .workspace *, .workspace *::before, .workspace *::after,
+  .landing-shell *, .landing-shell *::before, .landing-shell *::after,
   .tactical-bg *, .scope-reticle * {
     animation: none !important; transition: none !important;
   }

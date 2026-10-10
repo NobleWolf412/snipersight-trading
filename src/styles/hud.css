@@ -69,7 +69,7 @@ body{min-height:100vh;position:relative;}
 /* ── Surfaces ───────────────────────────────────────────── */
 .panel{
   position:relative;
-  background:var(--bg-2);
+  background:linear-gradient(135deg, rgba(0,0,0,.55) 0%, oklch(0.22 0.010 125 / .6) 100%);
   border:1px solid var(--border-soft);
   border-radius:14px;
   overflow:hidden;
@@ -364,7 +364,7 @@ body{min-height:100vh;position:relative;}
 /* Modal */
 .modal-bg{position:fixed;inset:0;margin:auto;width:calc(100% - 32px);max-height:calc(100dvh - 32px);padding:0;border:0;background:transparent;color:var(--fg);overflow-y:auto;overscroll-behavior:contain;}
 .modal-bg::backdrop{background:oklch(0.12 0.008 120 / .8);}
-.modal{width:100%;background:var(--bg-2);border:1px solid var(--accent-border);border-radius:14px;overflow:hidden;}
+.modal{width:100%;background:linear-gradient(180deg, oklch(0.20 0.010 125), oklch(0.16 0.010 125));border:1px solid var(--accent-border);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px color-mix(in oklch,var(--accent) 15%,transparent);}
 .modal-controls{display:flex;justify-content:flex-end;padding:8px 12px;border-bottom:1px solid var(--border-soft);}
 
 /* ── HUD overlays toggle ─────────────────────────────────── */

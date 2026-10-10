@@ -27,7 +27,20 @@
 .scanner-mode-summary { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr); gap: 8px 20px; }
 .scanner-mode-summary p { margin: 6px 0; line-height: 1.5; }
 .scanner-mode-summary > details, .scanner-mode-advice { grid-column: 1 / -1; }
+.scanner-mode-summary > div:not(.scanner-mode-cards) { grid-column:1/-1; }
 .scanner-mode-summary label, .scanner-history { display: grid; gap: 6px; }
 .scanner-mode-advice { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .scanner-history { margin: 16px 0; }
 @media (max-width: 600px) { .scanner-mode-summary { grid-template-columns: 1fr; } }
+.scanner-mode-cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; grid-column:1/-1; margin-bottom:8px; }
+.scanner-mode-card { position:relative; display:flex; flex-direction:column; gap:10px; min-width:0; min-height:142px; overflow:hidden; padding:18px; border:1px solid var(--border); border-radius:12px; color:var(--fg); background:linear-gradient(135deg,oklch(.16 .008 120),var(--bg-2)); text-align:left; cursor:pointer; transition:border-color .18s,box-shadow .18s; }
+.scanner-mode-card:hover, .scanner-mode-card[aria-pressed=true] { border-color:var(--mode-accent); box-shadow:0 0 18px color-mix(in oklch,var(--mode-accent) 14%,transparent); }
+.scanner-mode-card > span:not(.scanner-mode-card__art) { position:relative; z-index:2; }
+.scanner-mode-card__art { position:absolute; inset:0; color:var(--mode-accent); pointer-events:none; opacity:.45; }
+.scanner-mode-card__art .reticle { opacity:.3; }
+.scanner-mode-card__name { font-family:'Share Tech Mono',monospace; font-size:20px; letter-spacing:.1em; color:var(--mode-accent); }
+.scanner-mode-card__timeframes, .scanner-mode-card__limits { font-size:10px; line-height:1.5; color:var(--fg-2); overflow-wrap:anywhere; }
+.scanner-mode-card__state { margin-top:auto; font-size:10px; color:var(--mode-accent); }
+@media(min-width:701px) { .scanner-mode-select { display:none !important; } }
+@media(min-width:701px) and (max-width:1050px) { .scanner-mode-cards { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:700px) { .scanner-mode-cards { display:none; } }

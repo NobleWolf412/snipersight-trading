@@ -3,7 +3,7 @@
 
 export function Reticle() {
   return (
-    <div className="reticle">
+    <div className="reticle" aria-hidden="true">
       <svg viewBox="-100 -100 200 200" fill="none">
         <g className="ring-rotate">
           <circle r="80" stroke="currentColor" strokeOpacity=".35" strokeWidth=".4" strokeDasharray="2 4" />
