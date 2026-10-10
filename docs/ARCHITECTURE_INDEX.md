@@ -27,7 +27,7 @@ branch, exchange protocol or historical trade is correct. Open findings live in
 - `applyTweaks` (dynamic `--accent`) is exported but not called; the accent is fixed green. Live state is shown by the red page title and explicit chips.
 - No live session has been exercised end to end in the current review. Testnet is supported by the service but not selectable on `/bot/setup`.
 - Open positions do not report their plan timeframe (chart infers it from the cascade tier), and journal records do not carry the original stop/targets.
-- Plan editing from the Play Inspector is not implemented; there is no backend endpoint to modify a pending plan or an open position's stop/targets.
+- Plan editing from the Play Inspector is not implemented; there is no backend endpoint to modify a pending plan or an open position's stop/targets. Proposed design: [play override endpoint](design/PLAY_OVERRIDE_ENDPOINT.md).
 - ML code exists with a conditional legacy paper hook; it is deferred until trading logic is proven, so its activation is unverified.
 
 ## UI ownership
