@@ -713,8 +713,8 @@ export const HOTKEYS: Array<{
     { key: '1 / 2 / 5 / 0', action: 'Speed 1× / 2× / 5× / 10×' },
     { key: 'R', action: 'Reset to start' },
     { key: 'B', action: 'Bookmark current bar (localStorage)' },
-    { key: '?', action: 'Toggle this help' },
-    { key: 'Esc', action: 'End session' },
+    { key: '?', action: 'Open keyboard help' },
+    { key: 'Esc', action: 'Close an open dialog; end session when no dialog is open' },
 ];
 export function HelpOverlay({ onClose }: {
     onClose: () => void;

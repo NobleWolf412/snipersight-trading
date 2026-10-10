@@ -47,6 +47,7 @@
  *
  * Plan reference: peppy-sniffing-owl §3e (Bot · GauntletBreakdown).
  */
+import { Modal } from './Modal';
 import { useMemo, useState } from 'react';
 import type { ScannerMode, SignalLogEntry } from '@/utils/api';
 import { Chip, SectionHead } from '@/components/hud';
@@ -435,10 +436,11 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
           <button
             type="button"
             className="btn"
-            onClick={() => setDetail((d) => !d)}
+            aria-haspopup="dialog"
+            onClick={() => { setFilterStage(null); setDetail(true); }}
             style={{ padding: '4px 10px', fontSize: 9, letterSpacing: '.18em' }}
           >
-            {detail ? '\u25C9 DETAIL' : '\u25CB DETAIL'}
+            Inspect signals
           </button>
         </div>
       </div>
@@ -602,6 +604,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
                     <button
                       key={id}
                       type="button"
+                      aria-haspopup="dialog"
                       onClick={() => setFilterStage(sel ? null : id)}
                       title={STAGES[id].hint}
                       style={{
@@ -678,7 +681,8 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
 
       {/* Detail rows — visible when DETAIL toggle on, OR when filtering ─ */}
       {(detail || filterStage) && (
-        <div style={{ padding: '0 18px 18px' }}>
+        <Modal label="Signal pipeline evidence" onClose={() => { setDetail(false); setFilterStage(null); }} maxWidth={1000}>
+        <div className="dialog-panel-content"><h2>Signal pipeline evidence</h2>
           <div style={{ paddingTop: 10, borderTop: '1px dashed var(--border-soft)' }}>
             <div
               style={{
@@ -698,7 +702,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => setFilterStage(null)}
+                  onClick={() => { setDetail(true); setFilterStage(null); }}
                   style={{ padding: '3px 10px', fontSize: 9, letterSpacing: '.16em' }}
                 >
                   {'\u00D7'} CLEAR FILTER
@@ -810,7 +814,7 @@ export function GauntletBreakdown({ signals, onSignalClick, scannerModes, curren
             </table>
             </div>
           </div>
-        </div>
+        </div></Modal>
       )}
     </section>
   );

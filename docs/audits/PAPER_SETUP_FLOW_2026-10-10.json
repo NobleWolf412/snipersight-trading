@@ -1,0 +1,232 @@
+{
+  "date": "2026-10-10",
+  "baseCommit": "946e61816000a7ed676bab45cb776727e28f9224",
+  "request": "Give paper setup a mobile flow; expose essential bot settings and use native modals for optional detail across the UI.",
+  "changes": [
+    "Visible paper setup follows strategy, capital/risk/timing/entry requirements, order execution/management/market scope, final review. Four named navigation buttons scroll and focus headings without hiding settings.",
+    "Essential paper and live settings are visible; fixed/adaptive and fixed-mode choices are explicit buttons. Paper adaptive allowed modes retain the last-mode guard. Bot/scanner configuration owners remain separate.",
+    "Reusable DialogPanel owns only optional display state. Paper fill-cost compatibility controls and liquidity settings have named modal buttons with visible summaries. Sliders retain numbers, units and limits; explanations use help icons.",
+    "Paper fill help distinguishes service maker/taker fees and per-symbol slippage from legacy compatibility sliders. Macro help describes bounded context and missing-data rejection without unsupported probability or performance claims.",
+    "Session diagnostic evidence, completed-paper-trade autopsy, rejection samples and gauntlet signal table use native modals. Rejection causes and counts remain visible on the page. Saved chart rationale is visible inside its existing modal.",
+    "Replay initial inputs stay visible; replacing a loaded tape uses a native modal. Existing controller/keyboard governor retained; successful load closes setup display and errors remain visible. Loaded replacement/cleanup reviewed source-only.",
+    "Paper start errors are alerts adjacent to final Start; setup connection errors and status trade-history errors remain visible outside optional dialogs. No start/stop/reset/order/scan/ML action was performed on the app by this task."
+  ],
+  "verification": {
+    "typeScript": {
+      "command": "tsc --noEmit",
+      "exitCode": 0
+    },
+    "unitTests": {
+      "command": "vitest run",
+      "passed": 183,
+      "files": 16,
+      "failed": 0,
+      "newRegressions": 3
+    },
+    "build": {
+      "command": "npm run build:frontend",
+      "exitCode": 0,
+      "modules": 4715
+    },
+    "nativeBrowser": {
+      "url": "http://localhost:5000/training/range#setup",
+      "widths": [
+        320,
+        390,
+        768,
+        1280
+      ],
+      "pageOverflow": false,
+      "essentialControlsUnder44px": 0,
+      "detailsElements": 0,
+      "riskAndReviewNavigation": "Scrolled and focused the matching visible heading",
+      "help": "Risk and fill-cost dialogs opened; Escape restored focus; configuration unchanged",
+      "legacyRangeHeight": 44
+    },
+    "independentReview": {
+      "reviewedAt": "2026-10-10T15:46:42.519Z",
+      "reviewer": "Independent read-only reviewer",
+      "result": "Passed bounded current frontend review after targeted corrections",
+      "scope": "Visible paper/live essential configuration, paper scroll/focus flow, optional native help/detail dialogs, replay tape-input composition/hotkey guard and explicit error/rejection evidence. Current scoped frontend diff; unrelated backend/docs edits excluded.",
+      "source": [
+        {
+          "path": "src/components/hud/DialogPanel.tsx",
+          "sha256": "43b75efc61882ec409f883f8cba1255b2d258f397066d67829594094c29f990c"
+        },
+        {
+          "path": "src/components/hud/BotStrategySettings.tsx",
+          "sha256": "56b23f790baf4ee9882c39a0e8b90fef956ead0d8b0db941bbdea85c63494936"
+        },
+        {
+          "path": "src/components/hud/RejectionPanel.tsx",
+          "sha256": "7d844a255d34347232bc2fa4594288b63e72365d148fec9f13018a247778f954"
+        },
+        {
+          "path": "src/components/hud/GauntletBreakdown.tsx",
+          "sha256": "3289a6aa5c0f8187f43abc99feec1661a295f0a52b424cc0203b8144f2d254cb"
+        },
+        {
+          "path": "src/components/ScannerSetupModal.tsx",
+          "sha256": "65be65e96613d533683e5175545fcb2e5075128f4a7fadf608362098089baa25"
+        },
+        {
+          "path": "src/components/ScannerSetupModal.css",
+          "sha256": "95c2a05bc9c8f55ac947e363d46a57f7c312fbdc396c4d3c2b872c13e8dcec06"
+        },
+        {
+          "path": "src/pages/BotSetup.tsx",
+          "sha256": "4dbd865640c78824dad8e9cbfe9a423c7a31f79c1e3df2ed514f014f0e320c6e"
+        },
+        {
+          "path": "src/pages/BotSetupControls.tsx",
+          "sha256": "1a2a36e25a8dcfdedfd4411958bea532aead12602876e407281b36a2ab9ba6c8"
+        },
+        {
+          "path": "src/pages/BotStatus.tsx",
+          "sha256": "31214fcc18a2311ced7b0f90835985b222dd6aaae3381c98f280a307122cdded"
+        },
+        {
+          "path": "src/pages/training/RangeBot.tsx",
+          "sha256": "21872d6af09b0e7f807c6c2e00594b3474f1c66057077d11349045231ca37581"
+        },
+        {
+          "path": "src/pages/training/RangeBotViews.tsx",
+          "sha256": "dbfbb4aba9b5c813387c1c0501f666b786fd385a16061ad5384f27f7ef96e372"
+        },
+        {
+          "path": "src/pages/training/Replay.tsx",
+          "sha256": "2555c7b0412d7cc85a61382117409025f325273058195cd3e2296a1c9e54a2de"
+        },
+        {
+          "path": "src/pages/training/ReplayViews.tsx",
+          "sha256": "15b56198045f0c4133744181db84f332642d20b01002ca5e142976e28023a039"
+        },
+        {
+          "path": "src/styles/workspace.css",
+          "sha256": "353d1707258f130a2f816773dc72b92afe5257c768943137933ae9fdadace02a"
+        }
+      ],
+      "findings": [],
+      "resolvedCandidates": [
+        {
+          "severity": "P2",
+          "path": "src/styles/workspace.css",
+          "finding": "Portaled paper fill-cost/liquidity ranges lost workspace/paper-field44px target and initially rendered16px. Global modal range rule now44px; current32dialog retest clean.",
+          "initialEvidence": "docs/audits/paper_setup_flow_2026-10-10/dialogs.json",
+          "retestEvidence": "docs/audits/paper_setup_flow_2026-10-10/dialog-retest.json"
+        },
+        {
+          "severity": "P2",
+          "path": "src/pages/training/ReplayViews.tsx",
+          "finding": "Existing keyboard help said ? toggles help / Escape ends session despite native-dialog ownership. Current labels say open help and close open dialog/end session outside dialog. Source verified; empty replay help/r/arrow/Escape fixture attempted zero commands."
+        },
+        {
+          "severity": "P2",
+          "path": "src/pages/training/RangeBotViews.tsx",
+          "finding": "Start error remained far above relocated bottom Arm action. Current rolealert repeats beside start/review; synthetic error-prop rendered in viewport after scrolling toArm at all4widths.",
+          "retestEvidence": "docs/audits/paper_setup_flow_2026-10-10/error.json"
+        }
+      ],
+      "rubric": [
+        {
+          "item": 1,
+          "status": "verified scoped",
+          "evidence": "User requested usable paper mobile flow, visible essentials and optional help dialogs. Visible strategy/risk/execution/review with nonmutating scroll/focus nav; inspected actual14file source scope."
+        },
+        {
+          "item": 2,
+          "status": "verified frontend scoped",
+          "evidence": "Capital,risk,leverage,positions,duration,scan interval,entry threshold,position management,market scope,order execution remain visible. Optional compatibility fee/slippage andadvanced liquidity settings in named dialogs with summaries. Existing config values/units retained. New financial/market help claims were compared to existing frontend ownership/context; runtime/backend mechanics not recertified."
+        },
+        {
+          "item": 3,
+          "status": "verified source",
+          "evidence": "BotStrategySettings buttons perform existingconfig setters. Paper onArm(cfg), live commands/controllers, payload fields/defaults and configuration owners unchanged. DialogPanel owns open state only. ReplaySessionController lifecycle/generation/serial queue/cleanup implementation unchanged; handleLoad changes only tape-dialog/briefing display gating."
+        },
+        {
+          "item": 4,
+          "status": "verified sampled",
+          "evidence": "16route×width main samples clean;32currentdialog/native-help/nested/empty-replay samples clean;12directcompletedtrade/rejection samples fit/focusrestore;16paperflowjumpkeyboard samples focus correctheadings;4error-prop samples showalert besideArm. Essential settings remain mounted without hidden details. All APIs intercepted; no actual session/order/ML actions. Gauntlet4width nestedtrace Escape/focus/scrolllock and Clear filter keeps modal open showing all synthetic signals."
+        },
+        {
+          "item": 5,
+          "status": "verified scoped",
+          "evidence": "Start error now adjacent/alert; setupconnection error visible; tradehistory error remains outside collapsedoptional diagnostic modal. Recordedpositive rejection reasons includingunknownreason visible. Category/count builders and accounting functions unchanged; no conservation/outcome correctness claim."
+        },
+        {
+          "item": 6,
+          "status": "verified isolation",
+          "evidence": "Zero uncaughtpageerrors/nonGET API attempts in saved browser fixtures. No backendimports/tests/runtime-store operations. Parent reports180units/typecheck checks; reviewer did not independently rerun those. Firstdialog run timed out during concurrent edits and was retried; no transientrun used as success evidence."
+        },
+        {
+          "item": 7,
+          "status": "verified source scoped",
+          "evidence": "No strategy weights/thresholds/defaults modified by reviewed presentationdiff. Scores described as evidence, not probabilities; fixed/adaptive/paper/live boundaries retained. Direction-aware execution unchanged; directcompletedtrade sample LONG only, SHORT-specific content not newlycertified."
+        },
+        {
+          "item": 8,
+          "status": "verified scoped",
+          "evidence": "Source hashes/diff and initial16pxrange evidence retained; current retests separate. No source edits/reverts byreviewer. Parent owns finalcompilation/build and committednavigation/evidence updates."
+        }
+      ],
+      "coverage": {
+        "widths": [
+          320,
+          390,
+          768,
+          1280
+        ],
+        "routes": [
+          "/training/range#setup",
+          "/bot/setup",
+          "/bot/status",
+          "/training/replay"
+        ],
+        "routeSamples": 16,
+        "dialogRetestSamples": 32,
+        "directDetailSamples": 12,
+        "paperFlowKeyboardSamples": 16,
+        "errorPropSamples": 4,
+        "errors": [],
+        "apiMutationAttempts": [],
+        "gauntletNestedSamples": 4,
+        "gauntletFilterSamples": 4
+      },
+      "limits": [
+        "Headless synthetic Edge only; Safari/nativezoom/hardware/performance/fullWCAG and allstates unverified.",
+        "Loaded replay replacement tape success/failure/cleanup was reviewed source-only; no loaded replay session or load/delete/seek commands performed. Empty help keyboard test does not certify those runtime branches.",
+        "Optional liquidity local draft changed only within syntheticbrowsercontext; no sessionstarted.",
+        "Only representative strategy/slider help and nested participationhelp sampled; all helpcontent/callerstates not exhaustive.",
+        "ScannerSetupModal rationale visibility/CSS reviewed source-only; chart/load rendering not rerun for this content-onlychange.",
+        "Fundamentals/helpfinancialclaims do not establish live exchange fees, backend admission correctness or tradingcalibration.",
+        "Broader A08/A09/Level07 acceptance remainspartial; no newscoreaward.",
+        "Capturedpaper screenshots precede finalflow-nav/reorder; currentflow nav and latest source verified separately in paper-flow-path/audit JSON."
+      ],
+      "evidence": [
+        "docs/audits/paper_setup_flow_2026-10-10/audit.json",
+        "docs/audits/paper_setup_flow_2026-10-10/dialogs.json",
+        "docs/audits/paper_setup_flow_2026-10-10/dialog-retest.json",
+        "docs/audits/paper_setup_flow_2026-10-10/detail.json",
+        "docs/audits/paper_setup_flow_2026-10-10/error.json",
+        "docs/audits/paper_setup_flow_2026-10-10/path.json",
+        "docs/audits/paper_setup_flow_2026-10-10/gauntlet.json",
+        "docs/audits/paper_setup_flow_2026-10-10/gauntlet-filter.json"
+      ],
+      "screenshots": [
+        "build/paper-flow-320.png",
+        "build/paper-flow-1280.png"
+      ]
+    }
+  },
+  "progress": {
+    "additionalPoints": 0,
+    "score": 315,
+    "screenAcceptanceAwards": 0,
+    "reason": "Presentation follow-up to existing findings; broader A08/A09/Level07 gates stay partial."
+  },
+  "limits": [
+    "No backend imports/tests/exchange operations or changes to trading defaults, thresholds, payloads or session owners.",
+    "Safari, native 200% zoom, full WCAG and exhaustive state/contrast/provenance combinations remain unverified.",
+    "Loaded replay replacement success/failure and cleanup were source-reviewed; no historical session was created or mutated during browser review."
+  ]
+}

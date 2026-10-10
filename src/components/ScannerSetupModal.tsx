@@ -150,9 +150,10 @@ export function ScannerSetupModal({ plan, symbol, direction, rationale, onClose 
         </div>)}
         {!plan.levels.length && <p>Plan prices were not recorded.</p>}
       </section>
-      <details className="setup-rationale"><summary>Setup rationale</summary>
+      <section className="setup-rationale" aria-label="Setup rationale">
+        <h3>Setup rationale</h3>
         <p>{rationale || 'No rationale was supplied with this result.'}</p>
-      </details>
+      </section>
     </div>
   </dialog>, document.body);
 }

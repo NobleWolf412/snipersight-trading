@@ -911,5 +911,12 @@
       "totalJavaScriptBytes": 879316,
       "totalCssBytes": 79409
     }
+  },
+  "paperSetupFlowCorrection": {
+    "date": "2026-10-10",
+    "evidence": "PAPER_SETUP_FLOW_2026-10-10.json",
+    "additionalPoints": 0,
+    "unitTests": 183,
+    "buildExitCode": 0
   }
 }

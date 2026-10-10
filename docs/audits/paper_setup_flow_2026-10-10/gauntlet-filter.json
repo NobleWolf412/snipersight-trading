@@ -1,0 +1,30 @@
+{
+  "results": [
+    {
+      "viewportWidth": 320,
+      "initialRows": 2,
+      "afterClearRows": 3,
+      "openAfterClear": true
+    },
+    {
+      "viewportWidth": 390,
+      "initialRows": 2,
+      "afterClearRows": 3,
+      "openAfterClear": true
+    },
+    {
+      "viewportWidth": 768,
+      "initialRows": 2,
+      "afterClearRows": 3,
+      "openAfterClear": true
+    },
+    {
+      "viewportWidth": 1280,
+      "initialRows": 2,
+      "afterClearRows": 3,
+      "openAfterClear": true
+    }
+  ],
+  "errors": [],
+  "mutations": []
+}

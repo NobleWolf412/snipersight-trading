@@ -11,6 +11,17 @@ import { summarizeRejections } from './ScanController';
 import { renderStackedBar } from './ConfluenceBreakdown';
 
 describe('rejection evidence does not invent totals or counterfactuals', () => {
+  it.each([
+    { rejectionSummary: { by_reason: { future_gate: 2 } } },
+    { rejectionBreakdown: { future_gate: 2 } },
+  ])('exposes new and legacy rejection causes before opening sample evidence: %j', evidence => {
+    const entry = { symbolsScanned: 3, signalsRejected: 2, ...evidence } as unknown as ScanHistoryEntry;
+    const html = renderToStaticMarkup(createElement(RejectionPanel, { entry }));
+    expect(html).toContain('aria-label="Recorded rejection reasons"');
+    expect(html).toContain('FUTURE GATE');
+    expect(html).not.toContain('<dialog');
+  });
+
   it('keeps an accepted scan with feature failures out of rejection summaries', () => {
     const entry = { symbolsScanned: 1, signalsGenerated: 1, signalsRejected: 0,
       rejectionSummary: { total_rejected: 0, by_reason: { features: 1 },

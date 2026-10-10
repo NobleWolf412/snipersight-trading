@@ -1,0 +1,134 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "label": "Strategy",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 320,
+      "top": 16.375
+    },
+    {
+      "width": 320,
+      "label": "Risk",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 320,
+      "top": 15.875
+    },
+    {
+      "width": 320,
+      "label": "Execution",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 320,
+      "top": 15.875
+    },
+    {
+      "width": 320,
+      "label": "Review",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 320,
+      "top": 16.0625
+    },
+    {
+      "width": 390,
+      "label": "Strategy",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 390,
+      "top": 16.375
+    },
+    {
+      "width": 390,
+      "label": "Risk",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 390,
+      "top": 16.4375
+    },
+    {
+      "width": 390,
+      "label": "Execution",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 390,
+      "top": 16.4375
+    },
+    {
+      "width": 390,
+      "label": "Review",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 390,
+      "top": 24.828125
+    },
+    {
+      "width": 768,
+      "label": "Strategy",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 768,
+      "top": 16
+    },
+    {
+      "width": 768,
+      "label": "Risk",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 768,
+      "top": 16.375
+    },
+    {
+      "width": 768,
+      "label": "Execution",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 768,
+      "top": 16.375
+    },
+    {
+      "width": 768,
+      "label": "Review",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 768,
+      "top": 199.375
+    },
+    {
+      "width": 1280,
+      "label": "Strategy",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 1280,
+      "top": 16
+    },
+    {
+      "width": 1280,
+      "label": "Risk",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 1280,
+      "top": 16.375
+    },
+    {
+      "width": 1280,
+      "label": "Execution",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 1280,
+      "top": 16.375
+    },
+    {
+      "width": 1280,
+      "label": "Review",
+      "exists": true,
+      "focusedHeading": true,
+      "docWidth": 1280,
+      "top": 220.375
+    }
+  ],
+  "errors": [],
+  "mutations": []
+}

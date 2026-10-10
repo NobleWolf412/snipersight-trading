@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "docWidth": 320,
+      "reviewShowsError": true,
+      "alerts": [
+        {
+          "text": "Synthetic start failure: admission unavailable",
+          "top": 747.625,
+          "bottom": 768.421875
+        }
+      ],
+      "reviewText": "08 · Review and start\n\nSTEALTH · 10,000 USD simulated · 2% risk · 1× leverage · 3 positions maximum\n\nRest / maker · 20 pairs maximum · 2m scan interval · 24h duration\n\nSynthetic start failure: admission unavailable\n\n▶ ARM PAPER BOT\nPAPER MODE: SIMULATED CAPITAL ONLY: NO REAL ORDERS SENT"
+    },
+    {
+      "width": 390,
+      "docWidth": 390,
+      "reviewShowsError": true,
+      "alerts": [
+        {
+          "text": "Synthetic start failure: admission unavailable",
+          "top": 757.84375,
+          "bottom": 778.640625
+        }
+      ],
+      "reviewText": "08 · Review and start\n\nSTEALTH · 10,000 USD simulated · 2% risk · 1× leverage · 3 positions maximum\n\nRest / maker · 20 pairs maximum · 2m scan interval · 24h duration\n\nSynthetic start failure: admission unavailable\n\n▶ ARM PAPER BOT\nPAPER MODE: SIMULATED CAPITAL ONLY: NO REAL ORDERS SENT"
+    },
+    {
+      "width": 768,
+      "docWidth": 768,
+      "reviewShowsError": true,
+      "alerts": [
+        {
+          "text": "Synthetic start failure: admission unavailable",
+          "top": 757.65625,
+          "bottom": 778.453125
+        }
+      ],
+      "reviewText": "08 · Review and start\n\nSTEALTH · 10,000 USD simulated · 2% risk · 1× leverage · 3 positions maximum\n\nRest / maker · 20 pairs maximum · 2m scan interval · 24h duration\n\nSynthetic start failure: admission unavailable\n\n▶ ARM PAPER BOT\nPAPER MODE: SIMULATED CAPITAL ONLY: NO REAL ORDERS SENT"
+    },
+    {
+      "width": 1280,
+      "docWidth": 1280,
+      "reviewShowsError": true,
+      "alerts": [
+        {
+          "text": "Synthetic start failure: admission unavailable",
+          "top": 757.65625,
+          "bottom": 778.453125
+        }
+      ],
+      "reviewText": "08 · Review and start\n\nSTEALTH · 10,000 USD simulated · 2% risk · 1× leverage · 3 positions maximum\n\nRest / maker · 20 pairs maximum · 2m scan interval · 24h duration\n\nSynthetic start failure: admission unavailable\n\n▶ ARM PAPER BOT\nPAPER MODE: SIMULATED CAPITAL ONLY: NO REAL ORDERS SENT"
+    }
+  ],
+  "errors": [],
+  "mutations": []
+}

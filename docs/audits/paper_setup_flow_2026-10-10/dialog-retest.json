@@ -1,0 +1,874 @@
+{
+  "results": [
+    {
+      "viewportWidth": 320,
+      "route": "/training/range#setup",
+      "label": "Bot strategy help",
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "width": 288,
+      "controls": [
+        {
+          "name": "Close Bot strategy help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 320,
+      "route": "/training/range#setup",
+      "label": "Initial Balance help",
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "width": 288,
+      "controls": [
+        {
+          "name": "Close Initial Balance help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 320,
+      "route": "/training/range#setup",
+      "label": "Paper fill costs",
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "width": 288,
+      "controls": [
+        {
+          "name": "Close Paper fill costs",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Legacy slippage fallback",
+          "type": "range",
+          "width": 224,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Legacy / Testnet Fee",
+          "type": "range",
+          "width": 224,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "width": 320,
+      "route": "/training/range#setup",
+      "nestedHelp": {
+        "outerOpen": true,
+        "restored": true,
+        "locked": true
+      }
+    },
+    {
+      "viewportWidth": 320,
+      "route": "/training/range#setup",
+      "label": "Liquidity and admission settings",
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "width": 288,
+      "controls": [
+        {
+          "name": "Close Liquidity and admission settings",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "FIXED · $5M FLOOR",
+          "type": "button",
+          "width": 123,
+          "height": 50,
+          "visible": true
+        },
+        {
+          "name": "ACCOUNT-AWARE",
+          "type": "button",
+          "width": 123,
+          "height": 50,
+          "visible": true
+        },
+        {
+          "name": "Participation Cap help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Participation Cap",
+          "type": "range",
+          "width": 224,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Hard Min Volume help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Hard Min Volume",
+          "type": "range",
+          "width": 224,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Depth Gate",
+          "type": "button",
+          "width": 254,
+          "height": 86,
+          "visible": true
+        },
+        {
+          "name": "Min-Order Guard",
+          "type": "button",
+          "width": 254,
+          "height": 86,
+          "visible": true
+        },
+        {
+          "name": "Liquidation Guard",
+          "type": "button",
+          "width": 254,
+          "height": 68,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 320,
+      "route": "/bot/setup",
+      "label": "Bot strategy help",
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "width": 288,
+      "controls": [
+        {
+          "name": "Close Bot strategy help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 320,
+      "route": "/bot/status",
+      "label": "Session statistics and diagnostic evidence",
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "width": 288,
+      "controls": [
+        {
+          "name": "Close Session statistics and diagnostic evidence",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "width": 320,
+      "route": "/training/replay",
+      "replayHotkeysInDialogNoMutations": true
+    },
+    {
+      "viewportWidth": 390,
+      "route": "/training/range#setup",
+      "label": "Bot strategy help",
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "width": 358,
+      "controls": [
+        {
+          "name": "Close Bot strategy help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 390,
+      "route": "/training/range#setup",
+      "label": "Initial Balance help",
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "width": 358,
+      "controls": [
+        {
+          "name": "Close Initial Balance help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 390,
+      "route": "/training/range#setup",
+      "label": "Paper fill costs",
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "width": 358,
+      "controls": [
+        {
+          "name": "Close Paper fill costs",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Legacy slippage fallback",
+          "type": "range",
+          "width": 294,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Legacy / Testnet Fee",
+          "type": "range",
+          "width": 294,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "width": 390,
+      "route": "/training/range#setup",
+      "nestedHelp": {
+        "outerOpen": true,
+        "restored": true,
+        "locked": true
+      }
+    },
+    {
+      "viewportWidth": 390,
+      "route": "/training/range#setup",
+      "label": "Liquidity and admission settings",
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "width": 358,
+      "controls": [
+        {
+          "name": "Close Liquidity and admission settings",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "FIXED · $5M FLOOR",
+          "type": "button",
+          "width": 158,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "ACCOUNT-AWARE",
+          "type": "button",
+          "width": 158,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Participation Cap help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Participation Cap",
+          "type": "range",
+          "width": 294,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Hard Min Volume help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Hard Min Volume",
+          "type": "range",
+          "width": 294,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Depth Gate",
+          "type": "button",
+          "width": 324,
+          "height": 86,
+          "visible": true
+        },
+        {
+          "name": "Min-Order Guard",
+          "type": "button",
+          "width": 324,
+          "height": 68,
+          "visible": true
+        },
+        {
+          "name": "Liquidation Guard",
+          "type": "button",
+          "width": 324,
+          "height": 68,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 390,
+      "route": "/bot/setup",
+      "label": "Bot strategy help",
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "width": 358,
+      "controls": [
+        {
+          "name": "Close Bot strategy help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 390,
+      "route": "/bot/status",
+      "label": "Session statistics and diagnostic evidence",
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "width": 358,
+      "controls": [
+        {
+          "name": "Close Session statistics and diagnostic evidence",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "width": 390,
+      "route": "/training/replay",
+      "replayHotkeysInDialogNoMutations": true
+    },
+    {
+      "viewportWidth": 768,
+      "route": "/training/range#setup",
+      "label": "Bot strategy help",
+      "left": 104,
+      "right": 664,
+      "scrollWidth": 560,
+      "width": 560,
+      "controls": [
+        {
+          "name": "Close Bot strategy help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 768,
+      "route": "/training/range#setup",
+      "label": "Initial Balance help",
+      "left": 124,
+      "right": 644,
+      "scrollWidth": 520,
+      "width": 520,
+      "controls": [
+        {
+          "name": "Close Initial Balance help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 768,
+      "route": "/training/range#setup",
+      "label": "Paper fill costs",
+      "left": 16,
+      "right": 752,
+      "scrollWidth": 736,
+      "width": 736,
+      "controls": [
+        {
+          "name": "Close Paper fill costs",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Legacy slippage fallback",
+          "type": "range",
+          "width": 664,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Legacy / Testnet Fee",
+          "type": "range",
+          "width": 664,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "width": 768,
+      "route": "/training/range#setup",
+      "nestedHelp": {
+        "outerOpen": true,
+        "restored": true,
+        "locked": true
+      }
+    },
+    {
+      "viewportWidth": 768,
+      "route": "/training/range#setup",
+      "label": "Liquidity and admission settings",
+      "left": 16,
+      "right": 752,
+      "scrollWidth": 736,
+      "width": 736,
+      "controls": [
+        {
+          "name": "Close Liquidity and admission settings",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "FIXED · $5M FLOOR",
+          "type": "button",
+          "width": 343,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "ACCOUNT-AWARE",
+          "type": "button",
+          "width": 343,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Participation Cap help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Participation Cap",
+          "type": "range",
+          "width": 311,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Hard Min Volume help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Hard Min Volume",
+          "type": "range",
+          "width": 311,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Depth Gate",
+          "type": "button",
+          "width": 223.328125,
+          "height": 104,
+          "visible": true
+        },
+        {
+          "name": "Min-Order Guard",
+          "type": "button",
+          "width": 223.328125,
+          "height": 104,
+          "visible": true
+        },
+        {
+          "name": "Liquidation Guard",
+          "type": "button",
+          "width": 223.328125,
+          "height": 104,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 768,
+      "route": "/bot/setup",
+      "label": "Bot strategy help",
+      "left": 104,
+      "right": 664,
+      "scrollWidth": 560,
+      "width": 560,
+      "controls": [
+        {
+          "name": "Close Bot strategy help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 768,
+      "route": "/bot/status",
+      "label": "Session statistics and diagnostic evidence",
+      "left": 16,
+      "right": 752,
+      "scrollWidth": 736,
+      "width": 736,
+      "controls": [
+        {
+          "name": "Close Session statistics and diagnostic evidence",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "width": 768,
+      "route": "/training/replay",
+      "replayHotkeysInDialogNoMutations": true
+    },
+    {
+      "viewportWidth": 1280,
+      "route": "/training/range#setup",
+      "label": "Bot strategy help",
+      "left": 360,
+      "right": 920,
+      "scrollWidth": 560,
+      "width": 560,
+      "controls": [
+        {
+          "name": "Close Bot strategy help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 1280,
+      "route": "/training/range#setup",
+      "label": "Initial Balance help",
+      "left": 380,
+      "right": 900,
+      "scrollWidth": 520,
+      "width": 520,
+      "controls": [
+        {
+          "name": "Close Initial Balance help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 1280,
+      "route": "/training/range#setup",
+      "label": "Paper fill costs",
+      "left": 260,
+      "right": 1020,
+      "scrollWidth": 760,
+      "width": 760,
+      "controls": [
+        {
+          "name": "Close Paper fill costs",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Legacy slippage fallback",
+          "type": "range",
+          "width": 688,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Legacy / Testnet Fee",
+          "type": "range",
+          "width": 688,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "width": 1280,
+      "route": "/training/range#setup",
+      "nestedHelp": {
+        "outerOpen": true,
+        "restored": true,
+        "locked": true
+      }
+    },
+    {
+      "viewportWidth": 1280,
+      "route": "/training/range#setup",
+      "label": "Liquidity and admission settings",
+      "left": 260,
+      "right": 1020,
+      "scrollWidth": 760,
+      "width": 760,
+      "controls": [
+        {
+          "name": "Close Liquidity and admission settings",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "FIXED · $5M FLOOR",
+          "type": "button",
+          "width": 355,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "ACCOUNT-AWARE",
+          "type": "button",
+          "width": 355,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Participation Cap help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Participation Cap",
+          "type": "range",
+          "width": 323,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Hard Min Volume help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Hard Min Volume",
+          "type": "range",
+          "width": 323,
+          "height": 44,
+          "visible": true
+        },
+        {
+          "name": "Depth Gate",
+          "type": "button",
+          "width": 231.328125,
+          "height": 86,
+          "visible": true
+        },
+        {
+          "name": "Min-Order Guard",
+          "type": "button",
+          "width": 231.328125,
+          "height": 86,
+          "visible": true
+        },
+        {
+          "name": "Liquidation Guard",
+          "type": "button",
+          "width": 231.328125,
+          "height": 86,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 1280,
+      "route": "/bot/setup",
+      "label": "Bot strategy help",
+      "left": 360,
+      "right": 920,
+      "scrollWidth": 560,
+      "width": 560,
+      "controls": [
+        {
+          "name": "Close Bot strategy help",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "viewportWidth": 1280,
+      "route": "/bot/status",
+      "label": "Session statistics and diagnostic evidence",
+      "left": 260,
+      "right": 1020,
+      "scrollWidth": 760,
+      "width": 760,
+      "controls": [
+        {
+          "name": "Close Session statistics and diagnostic evidence",
+          "type": "button",
+          "width": 44,
+          "height": 44,
+          "visible": true
+        }
+      ],
+      "backgroundFocusBlocked": true,
+      "focusRestored": true,
+      "unlocked": true
+    },
+    {
+      "width": 1280,
+      "route": "/training/replay",
+      "replayHotkeysInDialogNoMutations": true
+    }
+  ],
+  "errors": [],
+  "mutations": []
+}

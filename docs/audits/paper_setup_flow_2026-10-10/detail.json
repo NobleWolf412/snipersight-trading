@@ -1,0 +1,106 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "reasons": "DATA FETCH FAILED\n2\nCRITICAL TF MISSING\n3\nBELOW MIN SCORE\n5\nPLAN UNAVAILABLE\n1\nREVIEW UNKNOWN REASON\n2",
+      "docWidth": 320
+    },
+    {
+      "width": 320,
+      "label": "REVIEW/USDT completed trade",
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "dialogWidth": 288,
+      "text": "CLOSE\nREVIEW/USDT · LONG\n\nEntry 10.00 · Exit 12.00 · $20.00 (+2.00%)\n\nTAKE PROFIT\nEXCURSION ANALYSIS\nMFE\n+3.00%\nMAE\n-1.00%\nCONFIDENCE\n70.0\nDURATION\n60m\nTARGETS\nT1\nENTERED\n10:00Z",
+      "restored": true
+    },
+    {
+      "width": 320,
+      "label": "CONFLUENCE rejection details",
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "dialogWidth": 288,
+      "text": "CLOSE\nCONFLUENCE · 5 REJECTIONS\nBELOW MIN SCORE\n5\nREVIEW/USDT· Recorded synthetic evidence",
+      "restored": true
+    },
+    {
+      "width": 390,
+      "reasons": "DATA FETCH FAILED\n2\nCRITICAL TF MISSING\n3\nBELOW MIN SCORE\n5\nPLAN UNAVAILABLE\n1\nREVIEW UNKNOWN REASON\n2",
+      "docWidth": 390
+    },
+    {
+      "width": 390,
+      "label": "REVIEW/USDT completed trade",
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "dialogWidth": 358,
+      "text": "CLOSE\nREVIEW/USDT · LONG\n\nEntry 10.00 · Exit 12.00 · $20.00 (+2.00%)\n\nTAKE PROFIT\nEXCURSION ANALYSIS\nMFE\n+3.00%\nMAE\n-1.00%\nCONFIDENCE\n70.0\nDURATION\n60m\nTARGETS\nT1\nENTERED\n10:00Z",
+      "restored": true
+    },
+    {
+      "width": 390,
+      "label": "CONFLUENCE rejection details",
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "dialogWidth": 358,
+      "text": "CLOSE\nCONFLUENCE · 5 REJECTIONS\nBELOW MIN SCORE\n5\nREVIEW/USDT· Recorded synthetic evidence",
+      "restored": true
+    },
+    {
+      "width": 768,
+      "reasons": "DATA FETCH FAILED\n2\nCRITICAL TF MISSING\n3\nBELOW MIN SCORE\n5\nPLAN UNAVAILABLE\n1\nREVIEW UNKNOWN REASON\n2",
+      "docWidth": 768
+    },
+    {
+      "width": 768,
+      "label": "REVIEW/USDT completed trade",
+      "left": 74,
+      "right": 694,
+      "scrollWidth": 620,
+      "dialogWidth": 620,
+      "text": "CLOSE\nREVIEW/USDT · LONG\n\nEntry 10.00 · Exit 12.00 · $20.00 (+2.00%)\n\nTAKE PROFIT\nEXCURSION ANALYSIS\nMFE\n+3.00%\nMAE\n-1.00%\nCONFIDENCE\n70.0\nDURATION\n60m\nTARGETS\nT1\nENTERED\n10:00Z",
+      "restored": true
+    },
+    {
+      "width": 768,
+      "label": "CONFLUENCE rejection details",
+      "left": 16,
+      "right": 752,
+      "scrollWidth": 736,
+      "dialogWidth": 736,
+      "text": "CLOSE\nCONFLUENCE · 5 REJECTIONS\nBELOW MIN SCORE\n5\nREVIEW/USDT· Recorded synthetic evidence",
+      "restored": true
+    },
+    {
+      "width": 1280,
+      "reasons": "DATA FETCH FAILED\n2\nCRITICAL TF MISSING\n3\nBELOW MIN SCORE\n5\nPLAN UNAVAILABLE\n1\nREVIEW UNKNOWN REASON\n2",
+      "docWidth": 1280
+    },
+    {
+      "width": 1280,
+      "label": "REVIEW/USDT completed trade",
+      "left": 330,
+      "right": 950,
+      "scrollWidth": 620,
+      "dialogWidth": 620,
+      "text": "CLOSE\nREVIEW/USDT · LONG\n\nEntry 10.00 · Exit 12.00 · $20.00 (+2.00%)\n\nTAKE PROFIT\nEXCURSION ANALYSIS\nMFE\n+3.00%\nMAE\n-1.00%\nCONFIDENCE\n70.0\nDURATION\n60m\nTARGETS\nT1\nENTERED\n10:00Z",
+      "restored": true
+    },
+    {
+      "width": 1280,
+      "label": "CONFLUENCE rejection details",
+      "left": 215,
+      "right": 1065,
+      "scrollWidth": 850,
+      "dialogWidth": 850,
+      "text": "CLOSE\nCONFLUENCE · 5 REJECTIONS\nBELOW MIN SCORE\n5\nREVIEW/USDT· Recorded synthetic evidence",
+      "restored": true
+    }
+  ],
+  "errors": [],
+  "mutations": []
+}

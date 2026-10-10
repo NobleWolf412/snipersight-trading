@@ -1,0 +1,54 @@
+{
+  "results": [
+    {
+      "open": true,
+      "left": 16,
+      "right": 304,
+      "scrollWidth": 288,
+      "locked": true,
+      "traceFocusRestored": true,
+      "outerFocusRestored": true,
+      "unlocked": true,
+      "dialogWidth": 288,
+      "viewportWidth": 320
+    },
+    {
+      "open": true,
+      "left": 16,
+      "right": 374,
+      "scrollWidth": 358,
+      "locked": true,
+      "traceFocusRestored": true,
+      "outerFocusRestored": true,
+      "unlocked": true,
+      "dialogWidth": 358,
+      "viewportWidth": 390
+    },
+    {
+      "open": true,
+      "left": 16,
+      "right": 752,
+      "scrollWidth": 736,
+      "locked": true,
+      "traceFocusRestored": true,
+      "outerFocusRestored": true,
+      "unlocked": true,
+      "dialogWidth": 736,
+      "viewportWidth": 768
+    },
+    {
+      "open": true,
+      "left": 140,
+      "right": 1140,
+      "scrollWidth": 1000,
+      "locked": true,
+      "traceFocusRestored": true,
+      "outerFocusRestored": true,
+      "unlocked": true,
+      "dialogWidth": 1000,
+      "viewportWidth": 1280
+    }
+  ],
+  "errors": [],
+  "mutations": []
+}

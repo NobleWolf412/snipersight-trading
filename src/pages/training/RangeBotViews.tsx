@@ -1,3 +1,5 @@
+import { Modal } from '@/components/hud/Modal';
+import { DialogPanel } from '@/components/hud/DialogPanel';
 import { Toggle } from '@/components/hud/Toggle';
 export { Toggle } from '@/components/hud/Toggle';
 import { paperSessionNeedsAttention } from '@/services/paperTradingService';
@@ -111,32 +113,32 @@ export function Slider({ label, value, min, max, step, onChange, suffix, color, 
             borderRadius: 6,
             background: 'rgba(0,0,0,.3)',
         }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.16em', textTransform: 'uppercase' }}>
+      <div className="setup-slider-heading">
+        <span className="mono" style={{ fontSize: 12, color: 'var(--fg-2)', letterSpacing: '.04em' }}>
           {label}
         </span>
         <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: color || 'var(--accent)' }}>
           {value}{suffix || ''}
         </span>
+        {hint && <DialogPanel label={label + ' help'} icon maxWidth={520}><p>{hint.replace(/—/g, ':')}</p></DialogPanel>}
       </div>
       <input type="range" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => onChange(+e.target.value)} style={{ width: '100%' }}/>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
         <span className="mono" style={{ fontSize: 8, color: 'var(--fg-4)' }}>{min}{suffix || ''}</span>
         <span className="mono" style={{ fontSize: 8, color: 'var(--fg-4)' }}>{max}{suffix || ''}</span>
       </div>
-      {hint && (<div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 6 }}>
-          {hint}
-        </div>)}
+
     </div>);
 }
 
-export function SectionPanel({ num, title, desc, children, }: {
+export function SectionPanel({ num, title, desc, children, id, }: {
+    id?: string;
     num: string;
     title: string;
     desc?: string;
     children: React.ReactNode;
 }) {
-    return (<section className="panel" style={{ marginBottom: 14 }}>
+    return (<section id={id} className="panel" style={{ marginBottom: 14 }}>
       <div style={{
             padding: '14px 18px',
             borderBottom: '1px solid var(--border-soft)',
@@ -163,9 +165,9 @@ export function SectionPanel({ num, title, desc, children, }: {
           {num}
         </span>
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: 'Share Tech Mono,monospace', fontSize: 15, letterSpacing: '.08em', color: 'var(--fg)', textTransform: 'uppercase' }}>
+          <h2 style={{ margin: 0, fontFamily: 'Share Tech Mono,monospace', fontSize: 18, letterSpacing: '.04em', color: 'var(--fg)' }}>
             {title}
-          </div>
+          </h2>
           {desc && (<div className="mono" style={{ fontSize: 10, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 2 }}>
               {desc}
             </div>)}
@@ -370,7 +372,7 @@ export function TradeHistoryRow({ trade }: {
     const fmtP = (p: number) => p < 1 ? p.toFixed(4) : p.toFixed(2);
     return (<div style={{ borderBottom: '1px solid var(--border-soft)', background: open ? 'rgba(0,0,0,.15)' : 'transparent', transition: 'background .15s' }}>
       {/* Collapsed summary row */}
-      <button type="button" className="paper-trade-summary" aria-expanded={open}
+      <button type="button" className="paper-trade-summary" aria-haspopup="dialog"
         aria-label={`Inspect ${trade.symbol} completed ${trade.direction} trade`}
         onClick={() => setOpen((s) => !s)} style={{ width: '100%', border: 0, background: 'transparent', color: 'var(--fg)', font: 'inherit', display: 'grid', gridTemplateColumns: '90px 64px 1fr 1fr auto', gap: 10, padding: '10px 12px', cursor: 'pointer', alignItems: 'center', textAlign: 'left' }}>
         <span className="mono" style={{ fontWeight: 700 }}>{trade.symbol}</span>
@@ -388,7 +390,11 @@ export function TradeHistoryRow({ trade }: {
       </button>
 
       {/* Expanded autopsy panel */}
-      {open && (<div className="paper-trade-autopsy" style={{ padding: '12px 14px 14px', borderTop: '1px solid var(--border-soft)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+      {open && <Modal label={trade.symbol + ' completed trade'} onClose={() => setOpen(false)} maxWidth={620}><div className="dialog-panel-content">
+        <h2>{trade.symbol} · {trade.direction}</h2>
+        <p>Entry {fmtP(trade.entry_price)} · Exit {fmtP(trade.exit_price)} · {fmtCurrency(trade.pnl)} ({fmtPct(trade.pnl_pct, true)})</p>
+        <ExitBadge reason={trade.exit_reason} />
+        <div className="paper-trade-autopsy" style={{ padding: '12px 14px 14px', borderTop: '1px solid var(--border-soft)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
           <div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 8, textTransform: 'uppercase' }}>
               excursion analysis
@@ -406,7 +412,7 @@ export function TradeHistoryRow({ trade }: {
                 <div className="mono" style={{ fontSize: 12, color: 'var(--fg-1)' }}>{val}</div>
               </div>))}
           </div>
-        </div>)}
+        </div></div></Modal>}
     </div>);
 }
 // ─── Activity row ──────────────────────────────────────────────────────
@@ -507,8 +513,8 @@ export function SetupTab({ sniperMode, onArm, working, armErr, decisionMode, cfg
     const set = useCallback(<K extends keyof PaperConfig>(key: K, val: PaperConfig[K]) => {
         setCfg((prev) => ({ ...prev, [key]: val }));
     }, []);
-    return (<div>
-      {/* Header strip: detection mode + paper-mode reminder */}
+    return (<div className="paper-setup-flow">
+      {/* Current draft identity. Configuration flows into final review. */}
       <div style={{
             background: 'rgba(0,0,0,.4)',
             border: '1px solid rgba(34,211,238,.2)',
@@ -521,47 +527,38 @@ export function SetupTab({ sniperMode, onArm, working, armErr, decisionMode, cfg
             flexWrap: 'wrap',
         }}>
         <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.14em' }}>
-          ◉ BOT MODE · <span style={{ color: '#22d3ee' }}>{sniperMode.toUpperCase()}</span> · strategy selected above · paper execution settings below
+          ◉ BOT MODE · <span style={{ color: '#22d3ee' }}>{sniperMode.toUpperCase()}</span> · configuration for the next paper session
         </span>
         {thesis && <Chip kind="green">DECISION · THESIS (structure-led)</Chip>}
-        <Chip kind="cyan">PAPER ONLY — NO REAL FUNDS</Chip>
+        <Chip kind="cyan">PAPER ONLY: NO REAL FUNDS</Chip>
       </div>
 
       {armErr && (<div style={{ margin: '0 0 14px', padding: '10px 14px', border: '1px solid var(--red)', borderRadius: 8, background: 'rgba(239,68,68,.08)', color: 'var(--red)', fontSize: 12 }}>
           ⚠ {armErr}
         </div>)}
 
-      {/* § 1 — Capital */}
-      <p className="mono">Paper capital: {cfg.initial_balance.toLocaleString()} USD · risk: {cfg.risk_per_trade}% · leverage: {cfg.leverage}× · {cfg.max_positions} positions maximum.</p>
-      {/* ARM button */}
-      <div style={{ paddingBottom: 20 }}>
-        <button type="button" className="btn btn-cyan" onClick={() => onArm(cfg)} disabled={working} style={{ width: '100%', fontSize: 13, letterSpacing: '.2em', padding: '14px 0', fontWeight: 700 }}>
-          {working ? '↻ ARMING PAPER BOT…' : '▶ ARM PAPER BOT'}
-        </button>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', textAlign: 'center', marginTop: 8, letterSpacing: '.14em' }}>
-          PAPER MODE — SIMULATED CAPITAL ONLY — NO REAL ORDERS SENT
-        </div>
-      </div>
-      <details className="paper-setup-fields"><summary>Edit paper execution settings</summary>
-      <SectionPanel num="01" title="Simulated Capital" desc="initial balance for the paper session — not real money">
+      {/* § 1: Capital */}
+      <p className="setup-note">Set capital and risk, choose execution, then review before starting.</p>
+      <div className="paper-setup-fields">
+      <SectionPanel id="paper-risk" num="02" title="Simulated Capital" desc="initial balance for the paper session: not real money">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
           <Slider label="Initial Balance" value={cfg.initial_balance} min={1000} max={100000} step={1000} onChange={(v) => set('initial_balance', v)} suffix=" USD" color="#22d3ee" hint="starting equity for the paper session"/>
           <Slider label="Risk per Trade" value={cfg.risk_per_trade} min={0.5} max={10} step={0.5} onChange={(v) => set('risk_per_trade', v)} suffix="%" hint="% of current balance risked per position"/>
         </div>
       </SectionPanel>
 
-      {/* § 2 — Execution */}
-      <SectionPanel num="02" title="Execution" desc="position sizing, duration, leverage">
+      {/* § 2: Execution */}
+      <SectionPanel num="03" title="Exposure and timing" desc="position sizing, duration, leverage">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
           <Slider label="Max Concurrent Positions" value={cfg.max_positions} min={1} max={10} step={1} onChange={(v) => set('max_positions', v)} hint="positions open simultaneously"/>
           <Slider label="Leverage" value={cfg.leverage} min={1} max={20} step={1} onChange={(v) => set('leverage', v)} suffix="×" hint="applied to each simulated position"/>
-          <Slider label="Session Duration" value={cfg.duration_hours} min={0} max={168} step={1} onChange={(v) => set('duration_hours', v)} suffix="h" hint="auto-stop after this many hours · 0 = run until manually stopped (best for long capture — no restart)"/>
+          <Slider label="Session Duration" value={cfg.duration_hours} min={0} max={168} step={1} onChange={(v) => set('duration_hours', v)} suffix="h" hint="auto-stop after this many hours · 0 = run until manually stopped (best for long capture: no restart)"/>
           <Slider label="Scan Interval" value={cfg.scan_interval_minutes} min={1} max={30} step={1} onChange={(v) => set('scan_interval_minutes', v)} suffix="m" hint="minutes between scanner sweeps"/>
         </div>
       </SectionPanel>
 
-      {/* § 3 — Confluence */}
-      <SectionPanel num="03" title="Confluence Gate" desc="Minimum score for entry. The selected mode’s qualification threshold always applies.">
+      {/* § 3: Confluence */}
+      <SectionPanel num="04" title="Entry requirements" desc="Minimum score for entry. The selected mode’s qualification threshold always applies.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
           <Slider label="Min Confluence Score" value={cfg.min_confluence} min={50} max={95} step={1} onChange={(v) => set('min_confluence', v)} hint="Can tighten the selected mode’s threshold; cannot lower it"/>
         </div>
@@ -570,68 +567,63 @@ export function SetupTab({ sniperMode, onArm, working, armErr, decisionMode, cfg
           </div>)}
       </SectionPanel>
 
-      {/* § 4 — Position management toggles */}
-      <SectionPanel num="04" title="Position Management" desc="trailing stop + breakeven — applied to all simulated trades">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
-          <Toggle label="Trailing Stop" value={cfg.trailing_stop} onChange={(v) => set('trailing_stop', v)} hint="trail stop once price moves in favour"/>
-          <Toggle label="Breakeven on TP1" value={cfg.breakeven_after_target >= 1} onChange={(v) => set('breakeven_after_target', v ? 1 : 0)} hint="move stop to entry after first target hit"/>
-        </div>
-        {cfg.trailing_stop && (<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-            <Slider label="Trailing Activation" value={cfg.trailing_activation} min={1} max={5} step={0.5} onChange={(v) => set('trailing_activation', v)} suffix="R" hint="profit in R (multiples of stop distance) before trailing arms — NOT a percent"/>
-          </div>)}
-      </SectionPanel>
-
-      {/* § 5 — Universe */}
-      <SectionPanel num="05" title="Universe Scope" desc="which pairs the paper bot is allowed to trade">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
-          <Toggle label="Majors (BTC/ETH/SOL…)" value={cfg.majors} onChange={(v) => set('majors', v)} hint="high-liquidity large-caps"/>
-          <Toggle label="Altcoins" value={cfg.altcoins} onChange={(v) => set('altcoins', v)} hint="mid-cap altcoins — wider spreads"/>
-          <Toggle label="Meme Mode" value={cfg.meme_mode} onChange={(v) => set('meme_mode', v)} hint="high-volatility meme coins — highest risk"/>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
-          <Slider label="Universe Size" value={cfg.universe_size} min={5} max={100} step={5} onChange={(v) => set('universe_size', v)} hint="max symbols the scanner evaluates per sweep"/>
-        </div>
-      </SectionPanel>
-
-      {/* § 6 — Simulated fill realism */}
-      <SectionPanel num="06" title="Simulated Fill Realism" desc="slippage + fee model applied to all paper trades">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-          <Slider label="Slippage" value={cfg.slippage_bps} min={0} max={50} step={1} onChange={(v) => set('slippage_bps', v)} suffix=" bps" hint="basis points per fill — models market impact"/>
-          <Slider label="Legacy / Testnet Fee" value={cfg.fee_rate} min={0} max={0.5} step={0.05} onChange={(v) => set('fee_rate', v)} suffix="%" hint="testnet/live path only — NOT used by the normal paper sim"/>
-        </div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 8 }}>
-          paper fills use REAL Phemex fees automatically — <span style={{ color: cfg.execution_mode === 'rest_maker' ? '#22d3ee' : 'var(--fg-3)' }}>maker 0.01% (rest/maker)</span> · <span style={{ color: cfg.execution_mode === 'snap_taker' ? '#f5a623' : 'var(--fg-3)' }}>taker 0.06% (snap/taker)</span> — picked by execution mode below. The slider above only applies to testnet/live.
-        </div>
-      </SectionPanel>
-
-      {/* § 7 — Signal & execution mode */}
-      <SectionPanel num="07" title="Signal & Execution Mode" desc="how orders fill + whether the macro/dominance overlay biases direction">
+      {/* § 7: Signal & execution mode */}
+      <SectionPanel id="paper-execution" num="05" title="Order execution" desc="Rest / maker waits for the planned limit entry. Snap / taker simulates an immediate market fill.">
         <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 6 }}>
           ORDER EXECUTION
         </div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          {([['rest_maker', 'REST / MAKER ★'], ['snap_taker', 'SNAP / TAKER']] as const).map(([m, lbl]) => (<button key={m} type="button" className={`btn ${cfg.execution_mode === m ? 'btn-cyan' : ''}`} onClick={() => set('execution_mode', m)} style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0', opacity: m === 'snap_taker' ? 0.7 : 1 }}>
+        <div className="setup-choice-row">
+          {([['rest_maker', 'REST / MAKER'], ['snap_taker', 'SNAP / TAKER']] as const).map(([m, lbl]) => (<button key={m} type="button" className={`btn ${cfg.execution_mode === m ? 'btn-cyan' : ''}`} aria-pressed={cfg.execution_mode === m} onClick={() => set('execution_mode', m)} style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0', opacity: m === 'snap_taker' ? 0.7 : 1 }}>
               {lbl}
             </button>))}
         </div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: cfg.execution_mode === 'snap_taker' ? 6 : 14 }}>
-          rest/maker (recommended) = rest the limit AT the order block, fill on the pullback — that retrace IS the SMC edge — at maker fees (0.01%) · snap/taker = fill at market now at taker fees (0.06%) · (paper-only — ignored under testnet)
-        </div>
-        {cfg.execution_mode === 'snap_taker' && (<div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginBottom: 14 }}>
-            ⚠ SNAP/TAKER fills at market — it abandons the order-block retrace entry (the SMC edge) and pays taker fees, where this strategy is net-negative. REST/MAKER is the correct mode. Sparse fills in chop = the market offering no clean retrace, not a setting to change.
-          </div>)}
-        <div style={{ opacity: thesis ? 0.4 : 1 }}>
-          <Toggle label="Macro / Dominance Overlay" value={cfg.macro_overlay_enabled} onChange={(v) => set('macro_overlay_enabled', v)} hint="BTC.D / stable.D / alt.D bias on direction · OFF = pure technicals"/>
+        <div className="setup-toggle-help">
+          <Toggle label="Macro / Dominance Overlay" value={cfg.macro_overlay_enabled} onChange={(v) => set('macro_overlay_enabled', v)} hint="Adds wider market context to scoring within existing evidence limits"/>
+          <DialogPanel label="Paper macro overlay help" icon maxWidth={520}>
+            <p>Adds Bitcoin, altcoin and stablecoin dominance, market direction and participation to setup scoring. Context can strengthen or reduce evidence within the existing score limits.</p>
+            <p>Enabled overlays reject setups when required market context is unavailable. Turning it off skips the overlay; mode requirements and other safety checks still apply.</p>
+            <p>Applies to the next paper session. It does not change a running session.</p>
+          </DialogPanel>
         </div>
         {thesis && (<div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginTop: 6 }}>
             The structure thesis owns direction. Macro context can affect qualification and remains visible in the score.
           </div>)}
       </SectionPanel>
 
-      {/* § 8 — Account-aware admission */}
-      <SectionPanel num="08" title="Account-Aware Admission" desc="scale the tradeable universe to YOUR balance × leverage + live order-book depth">
-        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          {([['fixed', 'FIXED · $5M FLOOR'], ['account_aware', 'ACCOUNT-AWARE ★']] as const).map(([m, lbl]) => (<button key={m} type="button" className={`btn ${cfg.liquidity_mode === m ? 'btn-cyan' : ''}`} onClick={() => set('liquidity_mode', m)} style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0' }}>
+      {/* § 4: Position management toggles */}
+      <SectionPanel num="06" title="Position management" desc="trailing stop + breakeven: applied to all simulated trades">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+          <Toggle label="Trailing Stop" value={cfg.trailing_stop} onChange={(v) => set('trailing_stop', v)} hint="trail stop once price moves in favour"/>
+          <Toggle label="Breakeven on TP1" value={cfg.breakeven_after_target >= 1} onChange={(v) => set('breakeven_after_target', v ? 1 : 0)} hint="move stop to entry after first target hit"/>
+        </div>
+        {cfg.trailing_stop && (<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            <Slider label="Trailing Activation" value={cfg.trailing_activation} min={1} max={5} step={0.5} onChange={(v) => set('trailing_activation', v)} suffix="R" hint="profit in R (multiples of stop distance) before trailing arms: NOT a percent"/>
+          </div>)}
+      </SectionPanel>
+
+      {/* § 5: Universe */}
+      <SectionPanel num="07" title="Market scope" desc="which pairs the paper bot is allowed to trade">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+          <Toggle label="Majors (BTC/ETH/SOL…)" value={cfg.majors} onChange={(v) => set('majors', v)} hint="high-liquidity large-caps"/>
+          <Toggle label="Altcoins" value={cfg.altcoins} onChange={(v) => set('altcoins', v)} hint="mid-cap altcoins: wider spreads"/>
+          <Toggle label="Meme Mode" value={cfg.meme_mode} onChange={(v) => set('meme_mode', v)} hint="high-volatility meme coins: highest risk"/>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
+          <Slider label="Universe Size" value={cfg.universe_size} min={5} max={100} step={5} onChange={(v) => set('universe_size', v)} hint="max symbols the scanner evaluates per sweep"/>
+        </div>
+      </SectionPanel>
+
+      <DialogPanel label="Paper fill costs" trigger="Inspect fill costs" summary={<>Fill model: {cfg.execution_mode === 'rest_maker' ? '0.01% maker fee' : '0.06% taker fee'} · per-symbol simulated slippage</>}>
+        <p>Normal paper fills use the service's maker/taker fees and per-symbol slippage: 10 bps for majors, 35 bps for other coins by default. One basis point is 0.01%.</p>
+        <p>These compatibility settings are sent with the session but do not change normal paper fills.</p>
+        <Slider label="Legacy slippage fallback" value={cfg.slippage_bps} min={0} max={50} step={1} onChange={(v) => set('slippage_bps', v)} suffix=" bps" />
+        <Slider label="Legacy / Testnet Fee" value={cfg.fee_rate} min={0} max={0.5} step={0.05} onChange={(v) => set('fee_rate', v)} suffix="%" />
+      </DialogPanel>
+
+      {/* § 8: Account-aware admission */}
+      <DialogPanel label="Liquidity and admission settings" trigger="Edit liquidity settings" summary={<>Liquidity: {cfg.liquidity_mode === 'fixed' ? 'Fixed volume floor' : 'Account-aware'} · guards {cfg.liquidity_mode === 'fixed' ? 'use fixed admission' : 'configured below'}</>}>
+        <div className="setup-choice-row">
+          {([['fixed', 'FIXED · $5M FLOOR'], ['account_aware', 'ACCOUNT-AWARE']] as const).map(([m, lbl]) => (<button key={m} type="button" className={`btn ${cfg.liquidity_mode === m ? 'btn-cyan' : ''}`} aria-pressed={cfg.liquidity_mode === m} onClick={() => set('liquidity_mode', m)} style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0' }}>
               {lbl}
             </button>))}
         </div>
@@ -641,7 +633,7 @@ export function SetupTab({ sniperMode, onArm, working, armErr, decisionMode, cfg
         {cfg.liquidity_mode === 'account_aware' && (<>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
               <Slider label="Participation Cap" value={cfg.participation_rate * 100} min={0.1} max={2} step={0.1} onChange={(v) => set('participation_rate', v / 100)} suffix="%" hint="your position stays under this % of 24h volume"/>
-              <Slider label="Hard Min Volume" value={cfg.hard_min_volume_usdt / 1000} min={100} max={5000} step={100} onChange={(v) => set('hard_min_volume_usdt', v * 1000)} suffix="k USD" hint="absolute floor — never trade a deader market than this"/>
+              <Slider label="Hard Min Volume" value={cfg.hard_min_volume_usdt / 1000} min={100} max={5000} step={100} onChange={(v) => set('hard_min_volume_usdt', v * 1000)} suffix="k USD" hint="absolute floor: never trade a deader market than this"/>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
               <Toggle label="Depth Gate" value={cfg.depth_aware_admission} onChange={(v) => set('depth_aware_admission', v)} hint="live order-book spread/depth (volume ≠ depth)"/>
@@ -652,10 +644,25 @@ export function SetupTab({ sniperMode, onArm, working, armErr, decisionMode, cfg
               ◉ at ${cfg.initial_balance.toLocaleString()} × {cfg.leverage}× → volume floor ≈ ${Math.max(cfg.hard_min_volume_usdt, (cfg.initial_balance * cfg.leverage) / (cfg.participation_rate || 0.005)).toLocaleString(undefined, { maximumFractionDigits: 0 })} (then live depth/spread admits the final set)
             </div>
           </>)}
-      </SectionPanel>
+      </DialogPanel>
 
 
-      </details>
+      </div>
+      <section id="paper-review" className="paper-setup-review" aria-label="Review paper session">
+        <h2>08 · Review and start</h2>
+        <p>{sniperMode.toUpperCase()} · {cfg.initial_balance.toLocaleString()} USD simulated · {cfg.risk_per_trade}% risk · {cfg.leverage}× leverage · {cfg.max_positions} positions maximum</p>
+        <p>{cfg.execution_mode === 'rest_maker' ? 'Rest / maker' : 'Snap / taker'} · {cfg.universe_size} pairs maximum · {cfg.scan_interval_minutes}m scan interval · {cfg.duration_hours === 0 ? 'Until manually stopped' : cfg.duration_hours + 'h duration'}</p>
+        {armErr && <p role="alert" style={{ color: 'var(--red)' }}>{armErr}</p>}
+        {/* ARM button */}
+      <div style={{ paddingBottom: 20 }}>
+        <button type="button" className="btn btn-cyan" onClick={() => onArm(cfg)} disabled={working} style={{ width: '100%', fontSize: 13, letterSpacing: '.2em', padding: '14px 0', fontWeight: 700 }}>
+          {working ? '↻ ARMING PAPER BOT…' : '▶ ARM PAPER BOT'}
+        </button>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', textAlign: 'center', marginTop: 8, letterSpacing: '.14em' }}>
+          PAPER MODE: SIMULATED CAPITAL ONLY: NO REAL ORDERS SENT
+        </div>
+      </div>
+      </section>
     </div>);
 }
 // ─── Status Tab ────────────────────────────────────────────────────────

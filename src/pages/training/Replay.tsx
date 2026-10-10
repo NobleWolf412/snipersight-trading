@@ -1,3 +1,4 @@
+import { Modal } from '@/components/hud/Modal';
 import { ReplaySessionController } from '@/services/replaySessionController';
 /** Historical candle playback. ReplaySessionController serializes cursor mutations
  * and cleanup; historical inputs determine which evidence is available. */
@@ -24,6 +25,7 @@ export function Replay() {
   const [speed, setSpeed] = useState(1);
   const [showBriefing, setShowBriefing] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showTapeSetup, setShowTapeSetup] = useState(false);
 
   const [helpClickHint, setHelpClickHint] = useState(true);
 
@@ -53,7 +55,7 @@ export function Replay() {
 
   const handleLoad = useCallback(async (symbol: string, mode: ReplayMode, windowStartIso: string, windowEndIso: string) => {
     await controller.load({ symbol, mode, window_start: windowStartIso, window_end: windowEndIso });
-    if (controller.getSnapshot().session) { setShowBriefing(true); setHelpClickHint(true); }
+    if (controller.getSnapshot().session && !controller.getSnapshot().errorMsg) { setShowTapeSetup(false); setShowBriefing(true); setHelpClickHint(true); }
   }, [controller]);
   const doStep = controller.stepBy;
   const doScrub = controller.seek;
@@ -201,15 +203,16 @@ export function Replay() {
         are missing, so trade-signal replay is unavailable.
       </p>
 
-      <details open={!session} className="replay-setup"><summary>{session ? 'Load another tape' : 'Historical tape inputs'}</summary>
-      <SetupPanel
-        defaultSymbol="BTC/USDT"
-        defaultMode="stealth"
-        defaultDays={DEFAULT_WINDOW_DAYS}
-        loading={playState === 'loading'}
-        onLoad={handleLoad}
-      />
-      </details>
+      {session && <button type="button" className="btn" aria-haspopup="dialog" onClick={() => setShowTapeSetup(true)}>Load another tape</button>}
+      {!session && !showTapeSetup && <SetupPanel defaultSymbol="BTC/USDT" defaultMode="stealth"
+        defaultDays={DEFAULT_WINDOW_DAYS} loading={playState === 'loading'} onLoad={handleLoad} />}
+      {showTapeSetup && <Modal label="Load historical tape" onClose={() => setShowTapeSetup(false)} maxWidth={760}>
+        <div className="dialog-panel-content"><h2>Load historical tape</h2>
+          <SetupPanel defaultSymbol={session?.symbol ?? 'BTC/USDT'} defaultMode="stealth"
+            defaultDays={DEFAULT_WINDOW_DAYS} loading={playState === 'loading'} onLoad={handleLoad} />
+          {errorMsg && <p role="alert" style={{ color: 'var(--red)' }}>{errorMsg}</p>}
+        </div>
+      </Modal>}
 
       {moveTarget !== null && (
         <div className="panel" role="status" style={{ padding: 10, marginTop: 10 }}>

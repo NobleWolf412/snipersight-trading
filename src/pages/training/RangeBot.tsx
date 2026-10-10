@@ -305,9 +305,21 @@ export function RangeBot() {
       </div>
 
       {/* Cycle heartbeat — both tabs */}
-      <CycleHeartbeat />
+      {activeTab === 'status' && <CycleHeartbeat />}
 
-      {activeTab === 'setup' && <BotStrategySettings config={botConfig} onChange={setBotConfig} paper />}
+      {activeTab === 'setup' && <>
+        {connErr && <p role="alert" style={{ color: 'var(--amber)' }}>{connErr}</p>}
+        <nav className="paper-setup-path" aria-label="Paper setup flow">
+          {(['Strategy', 'Risk', 'Execution', 'Review'] as const).map((step, index) => <button
+            type="button" className="btn" key={step} onClick={() => {
+              const section = document.getElementById('paper-' + step.toLowerCase());
+              section?.scrollIntoView({ block: 'start', behavior: 'auto' });
+              const heading = section?.querySelector('h2');
+              if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+            }}><span className="mono">{index + 1}</span>{step}</button>)}
+        </nav>
+        <BotStrategySettings config={botConfig} onChange={setBotConfig} paper />
+      </>}
       {/* Tab content */}
       {activeTab === 'setup' ? (
         <SetupTab cfg={draft} setCfg={setDraft}

@@ -1,3 +1,4 @@
+import { DialogPanel } from '@/components/hud/DialogPanel';
 import { accountingColor,accountingLabel,executionReportNotice } from '../services/accounting';
 import { BotPositions } from './BotPositions';
 import { buildBotStatusViewModel } from './botStatusViewModel';
@@ -481,7 +482,10 @@ export function BotStatus() {
 
           <BotPositions positions={positions} pendingOrders={pendingOrders} onSelect={setDetailSelection} />
 
-          <details className="session-diagnostics"><summary>Session statistics and diagnostic evidence</summary><CycleHeartbeat /><MacroBand />
+          {tradesError && <p role="alert" style={{ color: 'var(--amber)' }}>Trade history: {tradesError}</p>}
+          <DialogPanel label="Session statistics and diagnostic evidence" trigger="Inspect session evidence"
+            summary="Equity, closed-trade statistics, scan timing and market context.">
+          <div className="session-diagnostics"><CycleHeartbeat /><MacroBand />
           {/* ── Two-column: Equity + Statistics ──────────────────── */}
           <div
             style={{
@@ -617,7 +621,7 @@ export function BotStatus() {
             </section>
           </div>
 
-          </details>
+          </div></DialogPanel>
           {/* ── Signal Log ────────────────────────────────────────── */}
           <section className="panel" style={{ padding: 14 }}>
             <SectionHead

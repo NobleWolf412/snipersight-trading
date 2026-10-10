@@ -1,0 +1,167 @@
+{
+  "scope": "Synthetic Edge rendered active-route/expanded-input samples; all API intercepted, no commands. Contrast candidates use computed solid background composition; gradients and full WCAG/state acceptance need manual verification. Safari/native zoom not covered.",
+  "results": [
+    {
+      "route": "/training/range#setup",
+      "width": 320,
+      "docWidth": 320,
+      "controlCount": 43,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/bot/setup",
+      "width": 320,
+      "docWidth": 320,
+      "controlCount": 37,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/bot/status",
+      "width": 320,
+      "docWidth": 320,
+      "controlCount": 33,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/training/replay",
+      "width": 320,
+      "docWidth": 320,
+      "controlCount": 5,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/training/range#setup",
+      "width": 390,
+      "docWidth": 390,
+      "controlCount": 43,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/bot/setup",
+      "width": 390,
+      "docWidth": 390,
+      "controlCount": 37,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/bot/status",
+      "width": 390,
+      "docWidth": 390,
+      "controlCount": 33,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/training/replay",
+      "width": 390,
+      "docWidth": 390,
+      "controlCount": 5,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/training/range#setup",
+      "width": 768,
+      "docWidth": 768,
+      "controlCount": 43,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/bot/setup",
+      "width": 768,
+      "docWidth": 768,
+      "controlCount": 37,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/bot/status",
+      "width": 768,
+      "docWidth": 768,
+      "controlCount": 33,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/training/replay",
+      "width": 768,
+      "docWidth": 768,
+      "controlCount": 5,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/training/range#setup",
+      "width": 1280,
+      "docWidth": 1280,
+      "controlCount": 43,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/bot/setup",
+      "width": 1280,
+      "docWidth": 1280,
+      "controlCount": 37,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/bot/status",
+      "width": 1280,
+      "docWidth": 1280,
+      "controlCount": 33,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    },
+    {
+      "route": "/training/replay",
+      "width": 1280,
+      "docWidth": 1280,
+      "controlCount": 5,
+      "targetIssues": [],
+      "nameIssues": [],
+      "focusIssues": [],
+      "contrastCandidates": []
+    }
+  ],
+  "errors": [],
+  "mutations": []
+}

@@ -42,6 +42,7 @@
  * details may carry direction-specific reasons but the chip aggregates
  * are intentionally unscoped.
  */
+import { Modal } from './Modal';
 import { useState, type ReactNode } from 'react';
 import type {
   ScanHistoryEntry,
@@ -345,7 +346,9 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
                 key={cat.key}
                 onClick={() => setExpandedKey(isOpen ? null : cat.key)}
                 disabled={disabled}
-                aria-expanded={isOpen}
+                type="button"
+                aria-haspopup="dialog"
+                aria-label={cat.label + ' rejection details'}
                 title={cat.description}
                 style={{
                   background: 'none',
@@ -389,9 +392,14 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
           </div>
         )}
 
-        {/* §12 ordering: structured detail (click-expanded) */}
-        {expandedKey &&
-          (() => {
+        <div className="rejection-reasons" aria-label="Recorded rejection reasons">
+          {categories.flatMap(cat => cat.subBuckets.filter(sub => sub.count > 0).map(sub =>
+            <div key={cat.key + ':' + sub.reason}><span>{prettyReason(sub.reason)}</span><strong className="mono">{sub.count}</strong></div>
+          ))}
+        </div>
+        {/* Sample evidence opens separately; the reasons remain visible above. */}
+        {expandedKey && <Modal label={expandedKey + ' rejection details'} onClose={() => setExpandedKey(null)} maxWidth={850}>
+          <div className="dialog-panel-content">{(() => {
             const cat = categories.find((c) => c.key === expandedKey);
             if (!cat) return null;
             if (cat.subBuckets.length === 0) {
@@ -480,7 +488,7 @@ export function RejectionPanel({ entry }: RejectionPanelProps) {
                 ))}
               </DetailWrapper>
             );
-          })()}
+          })()}</div></Modal>}
 
         {/* §12 ordering: raw data row — link to the operator's hand-curl
              path for forensic dives. Always present, low-emphasis. */}

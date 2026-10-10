@@ -1,3 +1,4 @@
+import { DialogPanel } from '@/components/hud/DialogPanel';
 import { Toggle } from '@/components/hud/Toggle';
 export { Toggle } from '@/components/hud/Toggle';
 /**
@@ -126,17 +127,11 @@ export function Slider({ label, value, min, max, step, onChange, suffix, color, 
             borderRadius: 6,
             background: 'rgba(0,0,0,.3)',
         }}>
-      <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 8,
-        }}>
+      <div className="setup-slider-heading">
         <span className="mono" style={{
-            fontSize: 10,
-            color: 'var(--fg-3)',
-            letterSpacing: '.16em',
-            textTransform: 'uppercase',
+            fontSize: 12,
+            color: 'var(--fg-2)',
+            letterSpacing: '.04em',
         }}>
           {label}
         </span>
@@ -148,6 +143,7 @@ export function Slider({ label, value, min, max, step, onChange, suffix, color, 
           {value}
           {suffix || ''}
         </span>
+        {hint && <DialogPanel label={label + ' help'} icon maxWidth={520}><p>{hint.replace(/—/g, ':')}</p></DialogPanel>}
       </div>
       <input type="range" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => onChange(+e.target.value)} style={{ width: '100%' }}/>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
@@ -160,9 +156,7 @@ export function Slider({ label, value, min, max, step, onChange, suffix, color, 
           {suffix || ''}
         </span>
       </div>
-      {hint && (<div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 6 }}>
-          {hint}
-        </div>)}
+
     </div>);
 }
 export interface ToggleProps {

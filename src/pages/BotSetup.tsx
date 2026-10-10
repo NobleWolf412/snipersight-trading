@@ -215,7 +215,7 @@ export function BotSetup() {
       </div>
 
       <p className="mono">Bot mode: {modeName}. Mode minimum: {modeMinScore}. Effective entry gate: {Math.max(modeMinScore, config.min_confluence)}.</p>
-      <details className="bot-strategy-choice"><summary>Change bot strategy</summary><BotStrategySettings config={botConfig} onChange={setBotConfig} /></details>
+      <BotStrategySettings config={botConfig} onChange={setBotConfig} />
       {error && (
         <section
           className="panel"
@@ -483,7 +483,7 @@ export function BotSetup() {
           </button>
         </div>
         {/* Execution settings stay editable without blocking risk review. */}
-        <details className="bot-setup-fields"><summary>Edit execution settings</summary>
+        <div className="bot-setup-fields">
           {/* RISK */}
           <SectionPanel
             num="01"
@@ -910,7 +910,7 @@ export function BotSetup() {
             <p><Link to="/training/replay">Inspect historical candles in Replay</Link></p>
             <p><Link to="/training/range#setup">Configure a paper session for forward testing</Link></p>
           </SectionPanel>
-        </details>
+        </div>
       </div>
 
       <FooterStatus />
