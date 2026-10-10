@@ -124,3 +124,7 @@ Implementation commit: 8e7bdf00e920bdaba8f72e19fbc98def571994f4. Score remains31
 ## Tactical presentation restored, 2026-10-10
 
 The user's request to restore the cool factor supersedes the quiet presentation direction above. The [restoration report](UI_HUD_RESTORE_2026-10-10.md) and [evidence](UI_HUD_RESTORE_2026-10-10.json) record restored HUD typography, depth, glow, scanlines, decorative defaults, landing layout and desktop mode cards. Mobile focus, native controls, truthful examples and architecture/code cleanup remain. No additional points: score315; A08/A09 and Level07 remain partial/open. October9 asset and gross-removal measurements are preserved as historical checkpoints; current assets are recorded in the restoration evidence.
+
+## Scanner choices and help dialogs, 2026-10-10
+
+The [scanner correction](SCANNER_SETUP_2026-10-10.md) follows the user preference: every mode card shows its requirements on every device, the recommendation panel leads, scan inputs stay visible, and optional explanations/filters use native dialogs. This supersedes the scanner dropdown/compact-selector direction in earlier checkpoints. Current verification is recorded in the [evidence](SCANNER_SETUP_2026-10-10.json); score stays315, with no duplicate awards.

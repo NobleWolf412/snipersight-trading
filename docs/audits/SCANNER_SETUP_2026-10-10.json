@@ -1,0 +1,5490 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "baseCommit": "608f844b26829bcca3c143ade137608fb7eda02c",
+  "request": "Restore recommended mode at the top; requirements accessible inside each mode card; optional info/help dialogs instead of hiding essential UI behind dropdowns.",
+  "changes": [
+    "Recommendation panel leads scanner setup with actual backend reason, warning and regime. Available, stand-aside and unavailable states stay distinct; application is manual and rechecks freshness.",
+    "All four mode cards remain visible on phones, tablets and desktops. Each shows backend default score, R:R, planning timeframe, critical data requirements and analysis timeframes.",
+    "Each card has a separate information button opening the shared native dialog for optional description/profile/timeframe-role explanation. Help never selects a mode or starts a scan.",
+    "Scan inputs are visible in a labeled responsive grid; existing config handlers, reset/reload and busy disabling remain unchanged.",
+    "Result filters use a native dialog beside the result count; existing filters, reset and receipt ownership remain unchanged. Portal range retains a 44px target.",
+    "Incomplete mode metadata no longer crashes the page title or displays an invented zero score; unavailable card fields remain explicit.",
+    "PRODUCT and DESIGN record the preference. No scan/session/feed/replay/accounting/trading/ML owner or policy changes."
+  ],
+  "verification": {
+    "typeScript": {
+      "command": "tsc --noEmit",
+      "exitCode": 0
+    },
+    "unitTests": {
+      "passed": 180,
+      "files": 15,
+      "failed": 0,
+      "additionalRegressionTests": 3
+    },
+    "targetTests": {
+      "passed": 73,
+      "files": 3,
+      "failed": 0
+    },
+    "frontendBuild": {
+      "exitCode": 0,
+      "transformedModules": 4714,
+      "entryBytes": 287307,
+      "totalJavaScriptBytes": 879316,
+      "totalCssBytes": 79409
+    },
+    "independentReview": {
+      "reviewedAt": "2026-10-10T15:10:19.558Z",
+      "reviewer": "Independent read-only reviewer",
+      "result": "Passed bounded scanner-card review after targeted fixes",
+      "scope": "User correction: essential requirements on each mode card at all widths; recommendation hero above cards; visible core scan inputs; optional help and displayed-result filters in named native dialogs. Four-file source diff only. Concurrent backend/docs changes excluded.",
+      "source": [
+        {
+          "path": "src/components/hud/ScannerModePicker.tsx",
+          "sha256": "346b431e873e3f2db3c3547e7e3ff02c94e85251d3293460a6cedf99384753b2"
+        },
+        {
+          "path": "src/components/hud/ScannerInputs.tsx",
+          "sha256": "baac32f5da7d26f81b2f65c615a3faf18d60604e80bd2a664189b18e90f05556"
+        },
+        {
+          "path": "src/pages/Scanner.css",
+          "sha256": "651126a40e4f85b79f9f9419ce0a45cbab2b01737cb2f6df9ecb3c265d95e471"
+        },
+        {
+          "path": "src/pages/Scanner.tsx",
+          "sha256": "d6f78d788e9c445eab2cd5764ee375f307a2112ce11edeac184c2e9b6864b517"
+        }
+      ],
+      "findings": [],
+      "resolvedCandidates": [
+        {
+          "severity": "P1",
+          "path": "src/pages/Scanner.tsx",
+          "finding": "Partial mode missing timeframes caused runtime fault through subtitle selectedMode?.timeframes.length. Initial320/390 failures retained; nested optional chaining now renders unavailable and all8 partial/unknown-mode retests pass.",
+          "initialEvidence": "build/scanner-card-matrix.json",
+          "retestEvidence": "build/scanner-card-retest.json"
+        },
+        {
+          "severity": "P2",
+          "path": "src/pages/Scanner.css",
+          "finding": "Filter range lost workspace44px target when moved to portal and rendered16px. Scoped scanner-result-filters rule now restores44px at all4widths.",
+          "initialEvidence": "build/scanner-card-dialogs.json",
+          "retestEvidence": "build/scanner-card-filter-retest.json"
+        }
+      ],
+      "rubric": [
+        {
+          "item": 1,
+          "status": "verified scoped",
+          "evidence": "Current user requested visible card requirements and recommendation hero, optional detail dialogs. Source diff limited to presentation/composition and render guards."
+        },
+        {
+          "item": 2,
+          "status": "verified sampled",
+          "evidence": "Card score/R:R/planning TF/critical and analysis timeframes use current mode metadata. Missing metadata explicit Unavailable. Recommendation available,stand-aside,unavailable,stale,unknown-mode states sampled. Unknown-mode producer reason retained alongside definition-unavailable cause."
+        },
+        {
+          "item": 3,
+          "status": "verified scoped",
+          "evidence": "Existing ScannerContext manual mode/config owner retained; ScanController,scanRunService and recommendation hook lifecycle unchanged. FilterRail filters same recorded/displayed signals. Inputs fieldset keeps existing busy guard."
+        },
+        {
+          "item": 4,
+          "status": "verified sampled",
+          "evidence": "24initial state/width samples;8partial/unknown-mode correction retests;4latestavailable layout checks;4expiry/busy boundaries;12named-dialog keyboard samples;4filtertarget retests;4main-control/contrast samples. Latest modes/cards visible at all4widths. Manual Use/Select works without scans. Help preserves selection. Escape restores triggers and inert background blocks focus."
+        },
+        {
+          "item": 5,
+          "status": "not changed",
+          "evidence": "No accounting or execution logic change. Explicit unknown card values and original incoming recommendation reasons retained. Existing hook expiry normalization limitation documented separately."
+        },
+        {
+          "item": 6,
+          "status": "verified isolation",
+          "evidence": "All /api browser requests intercepted. Zero nonGET API attempts and zero uncaught page errors. Initial partial renderer faults were caught by app error boundary and are explicitly recorded. No backend imports/tests/session/order/ML commands. Parent reports180units passing; reviewer did not rerun compiler/units."
+        },
+        {
+          "item": 7,
+          "status": "verified scoped",
+          "evidence": "Threshold values unchanged and advice labeled hypothesis, not win probability. Selection stays manual; freshness rechecked at Use click. Expiry removes Use and does not select a mode. No LONG/SHORT strategy logic changed; preserved direction filter options."
+        },
+        {
+          "item": 8,
+          "status": "verified sampled",
+          "evidence": "Actual diff and current source hashes inspected. Initial defects preserved in separate evidence, passing targeted retests appended. No unrelated source modifications. Parent owns final compiler/build and committed evidence updates."
+        }
+      ],
+      "coverage": {
+        "widths": [
+          320,
+          390,
+          768,
+          1280
+        ],
+        "adviceStates": [
+          "fresh available",
+          "fresh stand_aside",
+          "unavailable",
+          "stale",
+          "unknown mode"
+        ],
+        "partialMetadata": [
+          "missing score",
+          "missing R:R",
+          "missing planning TF",
+          "missing critical TF list",
+          "missing analysis TF list"
+        ],
+        "dialogs": [
+          "OVERWATCH mode help",
+          "Mode recommendation help",
+          "Filter displayed setups"
+        ],
+        "busySamples": [
+          320,
+          1280
+        ],
+        "expirySamples": [
+          320,
+          1280
+        ],
+        "manualHelpDoesNotSelect": true,
+        "errors": [],
+        "apiMutationAttempts": [],
+        "partialHeaderRetestSamples": 4,
+        "partialHeaderResult": "SCORE UNAVAILABLE and UNAVAILABLE TIMEFRAMES at all4widths; no invented zero"
+      },
+      "limits": [
+        "Headless synthetic Edge only; Safari/native zoom/mobile hardware/full WCAG and all runtime states unverified.",
+        "Mode help dialog exercised OVERWATCH plus partial metadata; other four card help callers share same code but exhaustive mode-specific content not certified.",
+        "Native dialog Tab may move to browser chrome/BODY when only Close is focusable; background controls explicitly remain inert, Escape/focus restoration verified.",
+        "Existing useScannerRecommendation normalizes stale/expired payload to generic unavailable and drops prior reason/warning/timestamps. This owner was explicitly kept unchanged; renderer preserves all incoming producer reason/cause data.",
+        "Main text contrast scan is heuristic solid-background composition; gradients/ambient paint and all portal content need broader accessibility review.",
+        "This UI review does not establish actual scan outcomes/live exchange/session/strategy correctness or whole-system acceptance."
+      ],
+      "evidence": [
+        "build/scanner-card-matrix.json",
+        "build/scanner-card-boundaries.json",
+        "build/scanner-card-audit.json",
+        "build/scanner-card-dialogs.json",
+        "build/scanner-card-retest.json",
+        "build/scanner-card-filter-retest.json",
+        "build/scanner-card-final-layout.json",
+        "build/scanner-card-header-retest.json"
+      ],
+      "screenshots": [
+        "build/scanner-card-320.png",
+        "build/scanner-card-1280.png"
+      ]
+    },
+    "nativeBrowser": "Actual scanner recommendation and four cards inspected in-app; OVERWATCH help opens, Escape restores its trigger without changing selected STEALTH. No scans or session operations. Viewport reset."
+  },
+  "browserEvidence": {
+    "matrix": {
+      "results": [
+        {
+          "width": 320,
+          "state": "available",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal available fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "manualInitial": true,
+          "manualApply": "true",
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 16,
+              "right": 304,
+              "focusInside": false,
+              "height": 686.0625,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 16,
+              "right": 304,
+              "focusInside": false,
+              "height": 565.875,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 16,
+              "right": 304,
+              "focusInside": true,
+              "height": 868,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 320,
+          "state": "stand_aside",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nStand aside\n\nOriginal stand_aside fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 320,
+          "state": "unavailable",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nAdvice unavailable\n\nOriginal unavailable fixture reason\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 320,
+          "state": "stale",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nAdvice unavailable\n\nMarket analysis has expired.\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 320,
+          "state": "unknown_mode",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nAdvice unavailable\n\nOriginal unknown_mode fixture reason\n\nRecommended mode definitions are unavailable.\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 320,
+          "state": "partial",
+          "renderFailure": "// RUNTIME FAULT\nThe HUD encountered a runtime error. Details below. Reload to retry.\nERROR.MESSAGE\nCannot read properties of undefined (reading 'length')\n↻ RETRY"
+        },
+        {
+          "width": 390,
+          "state": "available",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal available fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "manualInitial": true,
+          "manualApply": "true",
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 16,
+              "right": 374,
+              "focusInside": false,
+              "height": 630.46875,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 16,
+              "right": 374,
+              "focusInside": false,
+              "height": 513.28125,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 16,
+              "right": 374,
+              "focusInside": true,
+              "height": 853,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 390,
+          "state": "stand_aside",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nStand aside\n\nOriginal stand_aside fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 390,
+          "state": "unavailable",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nAdvice unavailable\n\nOriginal unavailable fixture reason\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 390,
+          "state": "stale",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nAdvice unavailable\n\nMarket analysis has expired.\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 390,
+          "state": "unknown_mode",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nAdvice unavailable\n\nOriginal unknown_mode fixture reason\n\nRecommended mode definitions are unavailable.\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 390,
+          "state": "partial",
+          "renderFailure": "// RUNTIME FAULT\nThe HUD encountered a runtime error. Details below. Reload to retry.\nERROR.MESSAGE\nCannot read properties of undefined (reading 'length')\n↻ RETRY"
+        },
+        {
+          "width": 768,
+          "state": "available",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal available fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "manualInitial": true,
+          "manualApply": "true",
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 74,
+              "right": 694,
+              "focusInside": true,
+              "height": 789.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 768,
+          "state": "stand_aside",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nStand aside\n\nOriginal stand_aside fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 768,
+          "state": "unavailable",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nAdvice unavailable\n\nOriginal unavailable fixture reason\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 768,
+          "state": "stale",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nAdvice unavailable\n\nMarket analysis has expired.\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 768,
+          "state": "unknown_mode",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nAdvice unavailable\n\nOriginal unknown_mode fixture reason\n\nRecommended mode definitions are unavailable.\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 768,
+          "state": "partial",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 74,
+              "right": 694,
+              "focusInside": true,
+              "height": 789.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 1280,
+          "state": "available",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal available fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "manualInitial": true,
+          "manualApply": "true",
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 330,
+              "right": 950,
+              "focusInside": true,
+              "height": 789.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 1280,
+          "state": "stand_aside",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nStand aside\n\nOriginal stand_aside fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 1280,
+          "state": "unavailable",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nAdvice unavailable\n\nOriginal unavailable fixture reason\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 1280,
+          "state": "stale",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nAdvice unavailable\n\nMarket analysis has expired.\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 1280,
+          "state": "unknown_mode",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nAdvice unavailable\n\nOriginal unknown_mode fixture reason\n\nRecommended mode definitions are unavailable.\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 1280,
+          "state": "partial",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 330,
+              "right": 950,
+              "focusInside": true,
+              "height": 789.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "retest": {
+      "results": [
+        {
+          "width": 320,
+          "state": "partial",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 16,
+              "right": 304,
+              "focusInside": false,
+              "height": 686.0625,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 16,
+              "right": 304,
+              "focusInside": false,
+              "height": 565.875,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 16,
+              "right": 304,
+              "focusInside": true,
+              "height": 868,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 320,
+          "state": "unknown_mode",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nAdvice unavailable\n\nOriginal unknown_mode fixture reason\n\nRecommended mode definitions are unavailable.\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 390,
+          "state": "partial",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 16,
+              "right": 374,
+              "focusInside": false,
+              "height": 631.46875,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 16,
+              "right": 374,
+              "focusInside": false,
+              "height": 514.28125,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 16,
+              "right": 374,
+              "focusInside": true,
+              "height": 853,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 390,
+          "state": "unknown_mode",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nAdvice unavailable\n\nOriginal unknown_mode fixture reason\n\nRecommended mode definitions are unavailable.\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 768,
+          "state": "partial",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 74,
+              "right": 694,
+              "focusInside": true,
+              "height": 789.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 768,
+          "state": "unknown_mode",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nAdvice unavailable\n\nOriginal unknown_mode fixture reason\n\nRecommended mode definitions are unavailable.\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        },
+        {
+          "width": 1280,
+          "state": "partial",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 330,
+              "right": 950,
+              "focusInside": true,
+              "height": 789.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 1280,
+          "state": "unknown_mode",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nAdvice unavailable\n\nOriginal unknown_mode fixture reason\n\nRecommended mode definitions are unavailable.\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": false,
+          "recommendedCards": 0,
+          "cardManual": "true"
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "audit": {
+      "scope": "Synthetic Edge rendered active-route/expanded-input samples; all API intercepted, no commands. Contrast candidates use computed solid background composition; gradients and full WCAG/state acceptance need manual verification. Safari/native zoom not covered.",
+      "results": [
+        {
+          "route": "/scanner",
+          "width": 320,
+          "docWidth": 320,
+          "controlCount": 25,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/scanner",
+          "width": 390,
+          "docWidth": 390,
+          "controlCount": 25,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/scanner",
+          "width": 768,
+          "docWidth": 768,
+          "controlCount": 25,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        },
+        {
+          "route": "/scanner",
+          "width": 1280,
+          "docWidth": 1280,
+          "controlCount": 25,
+          "targetIssues": [],
+          "nameIssues": [],
+          "focusIssues": [],
+          "contrastCandidates": []
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "dialogs": {
+      "results": [
+        {
+          "width": 320,
+          "label": "OVERWATCH mode help",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close OVERWATCH mode help",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "BODY",
+            "inDialog": false
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 320,
+          "label": "Mode recommendation help",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Mode recommendation help",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "BODY",
+            "inDialog": false
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 320,
+          "label": "Filter displayed setups",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Filter displayed setups",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "Minimum displayed score",
+              "type": "range",
+              "width": 254,
+              "height": 16,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "ALL",
+              "type": "submit",
+              "width": 80.65625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LONG",
+              "type": "submit",
+              "width": 80.671875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SHORT",
+              "type": "submit",
+              "width": 80.671875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1mOutside mode",
+              "type": "submit",
+              "width": 83.421875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "5m",
+              "type": "submit",
+              "width": 79.28125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "15m",
+              "type": "submit",
+              "width": 79.296875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1h",
+              "type": "submit",
+              "width": 83.421875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "4h",
+              "type": "submit",
+              "width": 79.28125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1D",
+              "type": "submit",
+              "width": 79.296875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1WOutside mode",
+              "type": "submit",
+              "width": 83.421875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 79.28125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB+FVG",
+              "type": "submit",
+              "width": 62.125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BOS",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHoCH",
+              "type": "submit",
+              "width": 55.109375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LIQ-SWEEP",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB-RETEST",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "FVG-FILL",
+              "type": "submit",
+              "width": 76.171875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BREAKER",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SMC",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "TREND",
+              "type": "submit",
+              "width": 61,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RANGE",
+              "type": "submit",
+              "width": 61,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHOP",
+              "type": "submit",
+              "width": 53.203125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 76.609375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RESET FILTERS",
+              "type": "submit",
+              "width": 254,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "INPUT",
+            "inDialog": true
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 390,
+          "label": "OVERWATCH mode help",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close OVERWATCH mode help",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "BODY",
+            "inDialog": false
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 390,
+          "label": "Mode recommendation help",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Mode recommendation help",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "BODY",
+            "inDialog": false
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 390,
+          "label": "Filter displayed setups",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Filter displayed setups",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "Minimum displayed score",
+              "type": "range",
+              "width": 324,
+              "height": 16,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "ALL",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LONG",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SHORT",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1mOutside mode",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "5m",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "15m",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1h",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "4h",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1D",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1WOutside mode",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB+FVG",
+              "type": "submit",
+              "width": 62.125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BOS",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHoCH",
+              "type": "submit",
+              "width": 55.109375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LIQ-SWEEP",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB-RETEST",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "FVG-FILL",
+              "type": "submit",
+              "width": 76.171875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BREAKER",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SMC",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "TREND",
+              "type": "submit",
+              "width": 76.453125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RANGE",
+              "type": "submit",
+              "width": 76.46875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHOP",
+              "type": "submit",
+              "width": 76.46875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 76.609375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RESET FILTERS",
+              "type": "submit",
+              "width": 324,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "INPUT",
+            "inDialog": true
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 768,
+          "label": "OVERWATCH mode help",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close OVERWATCH mode help",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "BODY",
+            "inDialog": false
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 768,
+          "label": "Mode recommendation help",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Mode recommendation help",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "BODY",
+            "inDialog": false
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 768,
+          "label": "Filter displayed setups",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Filter displayed setups",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "Minimum displayed score",
+              "type": "range",
+              "width": 586,
+              "height": 16,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "ALL",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LONG",
+              "type": "submit",
+              "width": 191.34375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SHORT",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1mOutside mode",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "5m",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "15m",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1h",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "4h",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1D",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1WOutside mode",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB+FVG",
+              "type": "submit",
+              "width": 62.125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BOS",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHoCH",
+              "type": "submit",
+              "width": 55.109375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LIQ-SWEEP",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB-RETEST",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "FVG-FILL",
+              "type": "submit",
+              "width": 76.171875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BREAKER",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SMC",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "TREND",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RANGE",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHOP",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RESET FILTERS",
+              "type": "submit",
+              "width": 586,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "INPUT",
+            "inDialog": true
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 1280,
+          "label": "OVERWATCH mode help",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close OVERWATCH mode help",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "BODY",
+            "inDialog": false
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 1280,
+          "label": "Mode recommendation help",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Mode recommendation help",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "BODY",
+            "inDialog": false
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 1280,
+          "label": "Filter displayed setups",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Filter displayed setups",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "Minimum displayed score",
+              "type": "range",
+              "width": 586,
+              "height": 16,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "ALL",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LONG",
+              "type": "submit",
+              "width": 191.34375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SHORT",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1mOutside mode",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "5m",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "15m",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1h",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "4h",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1D",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1WOutside mode",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB+FVG",
+              "type": "submit",
+              "width": 62.125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BOS",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHoCH",
+              "type": "submit",
+              "width": 55.109375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LIQ-SWEEP",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB-RETEST",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "FVG-FILL",
+              "type": "submit",
+              "width": 76.171875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BREAKER",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SMC",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "TREND",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RANGE",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHOP",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RESET FILTERS",
+              "type": "submit",
+              "width": 586,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "INPUT",
+            "inDialog": true
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "filter-retest": {
+      "results": [
+        {
+          "width": 320,
+          "label": "Filter displayed setups",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Filter displayed setups",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "Minimum displayed score",
+              "type": "range",
+              "width": 254,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "ALL",
+              "type": "submit",
+              "width": 80.65625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LONG",
+              "type": "submit",
+              "width": 80.671875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SHORT",
+              "type": "submit",
+              "width": 80.671875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1mOutside mode",
+              "type": "submit",
+              "width": 83.421875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "5m",
+              "type": "submit",
+              "width": 79.28125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "15m",
+              "type": "submit",
+              "width": 79.296875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1h",
+              "type": "submit",
+              "width": 83.421875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "4h",
+              "type": "submit",
+              "width": 79.28125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1D",
+              "type": "submit",
+              "width": 79.296875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1WOutside mode",
+              "type": "submit",
+              "width": 83.421875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 79.28125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB+FVG",
+              "type": "submit",
+              "width": 62.125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BOS",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHoCH",
+              "type": "submit",
+              "width": 55.109375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LIQ-SWEEP",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB-RETEST",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "FVG-FILL",
+              "type": "submit",
+              "width": 76.171875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BREAKER",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SMC",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "TREND",
+              "type": "submit",
+              "width": 61,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RANGE",
+              "type": "submit",
+              "width": 61,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHOP",
+              "type": "submit",
+              "width": 53.203125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 76.609375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RESET FILTERS",
+              "type": "submit",
+              "width": 254,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "INPUT",
+            "inDialog": true
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 390,
+          "label": "Filter displayed setups",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Filter displayed setups",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "Minimum displayed score",
+              "type": "range",
+              "width": 324,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "ALL",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LONG",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SHORT",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1mOutside mode",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "5m",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "15m",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1h",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "4h",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1D",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1WOutside mode",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 104,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB+FVG",
+              "type": "submit",
+              "width": 62.125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BOS",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHoCH",
+              "type": "submit",
+              "width": 55.109375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LIQ-SWEEP",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB-RETEST",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "FVG-FILL",
+              "type": "submit",
+              "width": 76.171875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BREAKER",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SMC",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "TREND",
+              "type": "submit",
+              "width": 76.453125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RANGE",
+              "type": "submit",
+              "width": 76.46875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHOP",
+              "type": "submit",
+              "width": 76.46875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 76.609375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RESET FILTERS",
+              "type": "submit",
+              "width": 324,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "INPUT",
+            "inDialog": true
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 768,
+          "label": "Filter displayed setups",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Filter displayed setups",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "Minimum displayed score",
+              "type": "range",
+              "width": 586,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "ALL",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LONG",
+              "type": "submit",
+              "width": 191.34375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SHORT",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1mOutside mode",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "5m",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "15m",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1h",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "4h",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1D",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1WOutside mode",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB+FVG",
+              "type": "submit",
+              "width": 62.125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BOS",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHoCH",
+              "type": "submit",
+              "width": 55.109375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LIQ-SWEEP",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB-RETEST",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "FVG-FILL",
+              "type": "submit",
+              "width": 76.171875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BREAKER",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SMC",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "TREND",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RANGE",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHOP",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RESET FILTERS",
+              "type": "submit",
+              "width": 586,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "INPUT",
+            "inDialog": true
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        },
+        {
+          "width": 1280,
+          "label": "Filter displayed setups",
+          "initialFocus": true,
+          "controls": [
+            {
+              "name": "Close Filter displayed setups",
+              "type": "button",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "Minimum displayed score",
+              "type": "range",
+              "width": 586,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "ALL",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LONG",
+              "type": "submit",
+              "width": 191.34375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SHORT",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1mOutside mode",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "5m",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "15m",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1h",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "4h",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1D",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "1WOutside mode",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 191.328125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB+FVG",
+              "type": "submit",
+              "width": 62.125,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BOS",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHoCH",
+              "type": "submit",
+              "width": 55.109375,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "LIQ-SWEEP",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "OB-RETEST",
+              "type": "submit",
+              "width": 83.1875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "FVG-FILL",
+              "type": "submit",
+              "width": 76.171875,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "BREAKER",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "SMC",
+              "type": "submit",
+              "width": 44,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 69.140625,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "TREND",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RANGE",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "CHOP",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "UNKNOWN",
+              "type": "submit",
+              "width": 142,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            },
+            {
+              "name": "RESET FILTERS",
+              "type": "submit",
+              "width": 586,
+              "height": 44,
+              "visible": true,
+              "disabled": false
+            }
+          ],
+          "tabFocus": {
+            "tag": "INPUT",
+            "inDialog": true
+          },
+          "backgroundFocusBlocked": true,
+          "restored": true
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "boundaries": {
+      "results": [
+        {
+          "kind": "expiry",
+          "width": 320,
+          "initialUseVisible": true,
+          "expiredText": "MARKET GUIDANCE\nAdvice unavailable\n\nMarket analysis has expired.\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "expiredUseHidden": true,
+          "notSelected": true,
+          "dialogControls": [
+            {
+              "name": "Close OVERWATCH mode help",
+              "width": 44,
+              "height": 44
+            }
+          ],
+          "helpPreservedSelection": true,
+          "helpFocusRestored": true
+        },
+        {
+          "kind": "expiry",
+          "width": 1280,
+          "initialUseVisible": true,
+          "expiredText": "MARKET GUIDANCE\nAdvice unavailable\n\nMarket analysis has expired.\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.",
+          "expiredUseHidden": true,
+          "notSelected": true,
+          "dialogControls": [
+            {
+              "name": "Close OVERWATCH mode help",
+              "width": 44,
+              "height": 44
+            }
+          ],
+          "helpPreservedSelection": true,
+          "helpFocusRestored": true
+        },
+        {
+          "kind": "busy",
+          "width": 320,
+          "inputsDisabled": true,
+          "effectiveInputStates": [
+            {
+              "name": "Exchange phemexbinancebybit",
+              "disabled": true
+            },
+            {
+              "name": "Pairs ",
+              "disabled": true
+            },
+            {
+              "name": "Target pair (optional) ",
+              "disabled": true
+            },
+            {
+              "name": "Market PerpetualSpot",
+              "disabled": true
+            },
+            {
+              "name": "Leverage ",
+              "disabled": true
+            },
+            {
+              "name": " Majors",
+              "disabled": true
+            },
+            {
+              "name": " Altcoins",
+              "disabled": true
+            },
+            {
+              "name": " Meme coins",
+              "disabled": true
+            },
+            {
+              "name": " Macro overlay",
+              "disabled": true
+            },
+            {
+              "name": "Reset scan inputs",
+              "disabled": true
+            },
+            {
+              "name": "Reload mode definitions",
+              "disabled": true
+            }
+          ],
+          "dialogControls": [
+            {
+              "name": "Close OVERWATCH mode help",
+              "width": 44,
+              "height": 44
+            }
+          ],
+          "helpPreservedSelection": true,
+          "helpFocusRestored": true
+        },
+        {
+          "kind": "busy",
+          "width": 1280,
+          "inputsDisabled": true,
+          "effectiveInputStates": [
+            {
+              "name": "Exchange phemexbinancebybit",
+              "disabled": true
+            },
+            {
+              "name": "Pairs ",
+              "disabled": true
+            },
+            {
+              "name": "Target pair (optional) ",
+              "disabled": true
+            },
+            {
+              "name": "Market PerpetualSpot",
+              "disabled": true
+            },
+            {
+              "name": "Leverage ",
+              "disabled": true
+            },
+            {
+              "name": " Majors",
+              "disabled": true
+            },
+            {
+              "name": " Altcoins",
+              "disabled": true
+            },
+            {
+              "name": " Meme coins",
+              "disabled": true
+            },
+            {
+              "name": " Macro overlay",
+              "disabled": true
+            },
+            {
+              "name": "Reset scan inputs",
+              "disabled": true
+            },
+            {
+              "name": "Reload mode definitions",
+              "disabled": true
+            }
+          ],
+          "dialogControls": [
+            {
+              "name": "Close OVERWATCH mode help",
+              "width": 44,
+              "height": 44
+            }
+          ],
+          "helpPreservedSelection": true,
+          "helpFocusRestored": true
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "final-layout": {
+      "results": [
+        {
+          "width": 320,
+          "state": "available",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal available fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "manualInitial": true,
+          "manualApply": "true",
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 16,
+              "right": 304,
+              "focusInside": false,
+              "height": 686.0625,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 16,
+              "right": 304,
+              "focusInside": false,
+              "height": 565.875,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 16,
+              "right": 304,
+              "focusInside": true,
+              "height": 868,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 390,
+          "state": "available",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal available fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "manualInitial": true,
+          "manualApply": "true",
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 16,
+              "right": 374,
+              "focusInside": false,
+              "height": 630.46875,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 16,
+              "right": 374,
+              "focusInside": false,
+              "height": 513.28125,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 16,
+              "right": 374,
+              "focusInside": true,
+              "height": 868,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 768,
+          "state": "available",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal available fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "manualInitial": true,
+          "manualApply": "true",
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 74,
+              "right": 694,
+              "focusInside": true,
+              "height": 817.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 1280,
+          "state": "available",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\n72\nMin R:R\nUnavailable\nPlanning TF\n4h\n\nCritical data\n(reject if missing)\n\n1w · 1d\n\nAnalysis timeframes\n\n1w · 1d · 4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\n68\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n15m\n\nCritical data\n(reject if missing)\n\n15m\n\nAnalysis timeframes\n\n4h · 1h · 15m · 5m\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\n70\nMin R:R\nUnavailable\nPlanning TF\n1h\n\nCritical data\n(reject if missing)\n\n4h · 1h\n\nAnalysis timeframes\n\n1d · 4h · 1h · 15m · 5m\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal available fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "useVisible": true,
+          "recommendedCards": 1,
+          "manualInitial": true,
+          "manualApply": "true",
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 330,
+              "right": 950,
+              "focusInside": true,
+              "height": 817.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    },
+    "header-retest": {
+      "results": [
+        {
+          "width": 320,
+          "state": "partial",
+          "docWidth": 320,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 274,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 274,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 274,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 130,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "header": "SCANNER\nREAL-TIME SIGNAL DETECTION · 4 MODES · UNAVAILABLE TIMEFRAMES\nMODE · STEALTH\n0 ARMED\nSCORE UNAVAILABLE",
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 16,
+              "right": 304,
+              "focusInside": false,
+              "height": 686.0625,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 16,
+              "right": 304,
+              "focusInside": false,
+              "height": 565.875,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 16,
+              "right": 304,
+              "focusInside": true,
+              "height": 868,
+              "scrollWidth": 288,
+              "width": 288,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 390,
+          "state": "partial",
+          "docWidth": 390,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 344,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 344,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 344,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 165,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "header": "SCANNER\nREAL-TIME SIGNAL DETECTION · 4 MODES · UNAVAILABLE TIMEFRAMES\nMODE · STEALTH\n0 ARMED\nSCORE UNAVAILABLE",
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 16,
+              "right": 374,
+              "focusInside": false,
+              "height": 630.46875,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 16,
+              "right": 374,
+              "focusInside": false,
+              "height": 513.28125,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 16,
+              "right": 374,
+              "focusInside": true,
+              "height": 868,
+              "scrollWidth": 358,
+              "width": 358,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 768,
+          "state": "partial",
+          "docWidth": 768,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 345,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 345,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.65625,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 224.671875,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "header": "SCANNER\nREAL-TIME SIGNAL DETECTION · 4 MODES · UNAVAILABLE TIMEFRAMES\nMODE · STEALTH\n0 ARMED\nSCORE UNAVAILABLE",
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 74,
+              "right": 694,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 74,
+              "right": 694,
+              "focusInside": true,
+              "height": 817.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        },
+        {
+          "width": 1280,
+          "state": "partial",
+          "docWidth": 1280,
+          "cards": [
+            {
+              "text": "OVERWATCH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STRIKE\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "SURGICAL\nRECOMMENDED\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECT MODE",
+              "visible": true,
+              "width": 287.5,
+              "selected": "false"
+            },
+            {
+              "text": "STEALTH\nMin score\nUnavailable\nMin R:R\nUnavailable\nPlanning TF\nUnavailable\n\nCritical data\n(reject if missing)\n\nUnavailable\n\nAnalysis timeframes\n\nUnavailable\n\nSELECTED",
+              "visible": true,
+              "width": 287.5,
+              "selected": "true"
+            }
+          ],
+          "recommendation": "MARKET GUIDANCE\nRANGING\nRecommended mode\nSURGICAL\n\nOriginal partial fixture reason\n\nSynthetic warning\n\nMode advice is a hypothesis, not a win probability. Selection stays manual.\n\nUSE SURGICAL",
+          "cardCount": 4,
+          "inputs": [
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            },
+            {
+              "visible": true,
+              "width": 226,
+              "height": 44
+            }
+          ],
+          "recommendationBeforeCards": true,
+          "header": "SCANNER\nREAL-TIME SIGNAL DETECTION · 4 MODES · UNAVAILABLE TIMEFRAMES\nMODE · STEALTH\n0 ARMED\nSCORE UNAVAILABLE",
+          "useVisible": true,
+          "recommendedCards": 1,
+          "cardManual": "true",
+          "dialogs": [
+            {
+              "label": "OVERWATCH mode help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 595.28125,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Mode recommendation help",
+              "left": 330,
+              "right": 950,
+              "focusInside": false,
+              "height": 446.09375,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            },
+            {
+              "label": "Filter displayed setups",
+              "left": 330,
+              "right": 950,
+              "focusInside": true,
+              "height": 817.5,
+              "scrollWidth": 620,
+              "width": 620,
+              "focusRestored": true
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "mutations": []
+    }
+  },
+  "inventory": {
+    "active": 163,
+    "archived": 153,
+    "candidates": 18,
+    "inlineStyles": 1054,
+    "unresolved": []
+  },
+  "developmentProgress": {
+    "additionalPoints": 0,
+    "priorCommittedScore": 315,
+    "partial": [
+      "A08",
+      "A09",
+      "Level07"
+    ],
+    "note": "Preference correction and bounded follow-up, no duplicate outcome award. Earlier audit/build checkpoints retained."
+  },
+  "limitations": [
+    "Synthetic Edge and sampled in-app browser checks do not cover Safari, native200% zoom, full WCAG, every runtime state or hardware performance.",
+    "Existing recommendation-hook expiry normalization remains unchanged; it can replace previous payload detail with an unavailable expiry reason.",
+    "No exchange, scan, session, order or ML operation was exercised. Concurrent backend and structural audit edits excluded."
+  ]
+}

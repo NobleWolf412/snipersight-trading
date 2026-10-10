@@ -1,4 +1,5 @@
 import { ScannerInputs } from '@/components/hud/ScannerInputs';
+import { Modal } from '@/components/hud/Modal';
 /** Manual scanner: application-owned runs, recorded history and explicit evidence.
  * Chart review overlays saved plan levels on source-specific candles.
  * The selected history receipt owns result counts, timestamps and setup summaries.
@@ -269,7 +270,7 @@ function FilterRail({
     [modeTfs],
   );
   return (
-    <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className="scanner-result-filters" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* 3a''-C: filter scope label. Single line above the rail killing
           the implicit assumption that filtering = additional scanning.
           Sits at the top so it sets context before any control. */}
@@ -569,6 +570,7 @@ export function Scanner() {
     }
   }, []);
 
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(() => ({
     minScore: 0,
     dir: 'ALL',
@@ -591,7 +593,7 @@ export function Scanner() {
   );
 
   const armedCount = filtered.filter(passesAdmission).length;
-  const minScore = selectedMode?.min_confluence_score ?? 0;
+  const minScore = selectedMode?.min_confluence_score;
   const modeName = (selectedMode?.name ?? '—').toUpperCase();
   const tfRoster = (selectedMode?.timeframes ?? []).join(' · ') || '—';
 
@@ -616,19 +618,18 @@ export function Scanner() {
           </svg>
         }
         title="Scanner"
-        subtitle={`real-time signal detection · ${scannerModes.length} modes · ${selectedMode?.timeframes.length ?? 0} timeframes`}
+        subtitle={`real-time signal detection · ${scannerModes.length} modes · ${selectedMode?.timeframes?.length ?? 'unavailable'} timeframes`}
         badges={
           <>
             <Chip kind="blue">MODE · {modeName}</Chip>
             <Chip kind="green">{armedCount} ARMED</Chip>
-            <Chip>≥ {minScore} SCORE</Chip>
+            <Chip>{minScore == null ? 'SCORE UNAVAILABLE' : `≥ ${minScore} SCORE`}</Chip>
           </>
         }
       />
 
       <section className="panel scanner-run-panel" aria-label="Scan configuration and actions">
-        <ScannerModePicker />
-        <ScanController onComplete={refreshCardSignals} />
+        <ScannerModePicker actions={<ScanController onComplete={refreshCardSignals} />} />
         <ScannerInputs />
       </section>
       <label className="scanner-history">Scan history
@@ -652,19 +653,17 @@ export function Scanner() {
         <RejectionPanel entry={latestHistoryEntry} />
       </div>
 
-      {/* Main 3-col ─────────────────────────────────────────────── */}
+      {/* Results and recorded evidence */}
       <div className="layout-grid scanner-layout">
-        {/* Left rail */}
-        <section className="panel scanner-filter-panel">
-          <details><summary>Filter displayed setups</summary>
+        {filtersOpen && <Modal label="Filter displayed setups" onClose={() => setFiltersOpen(false)}>
+          <SectionHead title="Filter displayed setups" />
           <FilterRail
             filters={filters}
             setFilters={setFilters}
             counts={{ passing: filtered.length, total: cardSignals.length }}
             modeTfs={latestHistoryEntry?.timeframes ?? selectedMode?.timeframes ?? []}
           />
-          </details>
-        </section>
+        </Modal>}
 
         {/* Center grid */}
         <section className="panel">
@@ -672,6 +671,9 @@ export function Scanner() {
             title={`Scan results · ${filtered.length}`}
             right={
               <>
+                <button type="button" className="btn" aria-haspopup="dialog" onClick={() => setFiltersOpen(true)}>
+                  FILTERS · {filtered.length}/{cardSignals.length}
+                </button>
                 <Chip kind="green">SORT · SCORE ↓</Chip>
                 <button className="btn" disabled={!latestHistoryEntry} onClick={() => {
                   const url = URL.createObjectURL(new Blob([JSON.stringify(latestHistoryEntry, null, 2)], { type: 'application/json' }));

@@ -549,6 +549,12 @@
       "file": "UI_HUD_RESTORE_2026-10-10.json",
       "report": "UI_HUD_RESTORE_2026-10-10.md",
       "note": "User-requested tactical presentation restored; functional fixes/cleanup retained. No additional points. Earlier metrics remain checkpoint evidence."
+    },
+    {
+      "date": "2026-10-10",
+      "file": "SCANNER_SETUP_2026-10-10.json",
+      "report": "SCANNER_SETUP_2026-10-10.md",
+      "note": "User correction: essential mode requirements visible inside every card; recommendation at top; optional help/filter dialogs. No new score."
     }
   ],
   "cleanupItems": [
@@ -892,5 +898,18 @@
       ]
     },
     "score": 315
+  },
+  "scannerSetupCorrection": {
+    "date": "2026-10-10",
+    "evidence": "SCANNER_SETUP_2026-10-10.json",
+    "additionalPoints": 0,
+    "unitTests": 180,
+    "build": {
+      "exitCode": 0,
+      "transformedModules": 4714,
+      "entryBytes": 287307,
+      "totalJavaScriptBytes": 879316,
+      "totalCssBytes": 79409
+    }
   }
 }

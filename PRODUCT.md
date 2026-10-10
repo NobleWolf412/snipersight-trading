@@ -47,7 +47,7 @@ Design serves the product. The HUD is a working cockpit, not a marketing surface
 
 ## Simplicity
 
-- **One primary task per screen.** Secondary evidence is arranged around it, not stacked in front of it. On a phone, the primary action is reachable without scrolling past setup chrome.
+- **One primary task per screen.** Secondary evidence is arranged around it, not stacked in front of it. Keep decision requirements beside the choice, including requirements inside each scanner mode card on every device. Optional explanations may use labeled help dialogs; hiding essential configuration behind a dropdown is not simplification. On a phone, the primary action is reachable without scrolling past setup chrome.
 - **Keep the tactical identity.** Olive surfaces, glow, scanlines, ambient background motion and reticles are decorative HUD treatments, not activity indicators. Appearance controls and reduced motion remain supported. "Live", "streaming", armed and freshness labels require real state; static examples are explicitly labeled.
 - **State is explicit.** Paper, testnet and live are always distinguishable. Idle, loading, error, partial, stale and recovery states each have a visible form. Unknown quantities, fees and P&L render as unknown, never as zero.
 - **One owner per behavior.** Scan lifecycle, sessions, feeds, replay and financial display keep their current owners (see the index). Simplifying the UI never means merging these into a generic context, cache or retrying client.

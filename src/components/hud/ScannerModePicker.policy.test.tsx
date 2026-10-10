@@ -48,6 +48,28 @@ describe('authoritative mode advice', () => {
     expect(recommendationIsFresh({ ...state.advice, timestamp: new Date(now + 1).toISOString() }, now)).toBe(false);
     expect(recommendationIsFresh({ ...state.advice, timestamp: 'bad' }, now)).toBe(false);
   });
+  it('keeps requirements in each card rather than a collapsed section', () => {
+    const html = renderToStaticMarkup(createElement(ScannerModePicker));
+    for (const mode of ['OVERWATCH', 'STRIKE', 'SURGICAL', 'STEALTH']) {
+      expect(html).toContain(`${mode} mode requirements`);
+      expect(html).toContain(`${mode} mode help`);
+    }
+    expect(html.match(/Critical data/g)).toHaveLength(4);
+    expect(html.match(/Planning TF/g)).toHaveLength(4);
+    expect(html.match(/Min R:R/g)).toHaveLength(4);
+    expect(html).not.toContain('<details');
+  });
+  it.each(['expired', 'unknown-mode'])('does not offer stale or unavailable mode application: %s', condition => {
+    state.advice = condition === 'expired'
+      ? { ...state.advice, expires_at: new Date(Date.now() - 1).toISOString() }
+      : { ...state.advice, mode: 'missing-profile' };
+    const html = renderToStaticMarkup(createElement(ScannerModePicker));
+    expect(html).toContain('Advice unavailable');
+    expect(html).toContain('4h trend is clear.');
+    expect(html).not.toContain('USE STRIKE');
+    expect(html).not.toContain('scanner-mode-card__recommended');
+    expect(state.select).not.toHaveBeenCalled();
+  });
   it('shows adaptive controls only in paper and retains independent fixed mode for live', () => {
     const config = { sniperMode: 'surgical', selectionMode: 'adaptive', allowedModes: ['strike'] } as any;
     const live = renderToStaticMarkup(createElement(BotStrategySettings, { config, onChange: vi.fn() }));
