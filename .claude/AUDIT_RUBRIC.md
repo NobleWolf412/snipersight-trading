@@ -1,6 +1,6 @@
 # Change verification checklist
 
-Reviewed 2026-10-08. Replaces the May 2026 rubric and its tool-specific protocol.
+Reviewed 2026-10-10. Replaces the May 2026 rubric and its tool-specific protocol.
 Apply this checklist to the actual change; use "not applicable" with a reason.
 A clean review establishes only the evidence and scope it names.
 
@@ -29,7 +29,11 @@ A clean review establishes only the evidence and scope it names.
    old thresholds as proven optimal. Separate software defects, strategy
    hypotheses and calibration evidence. Test effective overrides as well as
    defaults; preserve user risk boundaries through the affected path.
-8. **Reviewable completion.** Inspect the actual diff; preserve unrelated edits,
+8. **UI and product fit** (UI changes only). Check against PRODUCT.md and
+   DESIGN.md: desktop and 390px phone both deliberate, reduced motion honored,
+   ambient effects never posing as state signals, unknowns shown as unknown,
+   paper/live distinguishable, extra detail in modals rather than dropdown text.
+9. **Reviewable completion.** Inspect the actual diff; preserve unrelated edits,
    verify remaining references after deletion, update navigation/evidence and
    record open risks. State which checks ran versus source-only inspection.
 

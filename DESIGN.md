@@ -125,35 +125,37 @@ components:
 
 # Design System: SniperSight
 
-## Current product treatment, 2026-10-10
+## Direction (reviewed 2026-10-10)
 
-The operator requested restoration of the tactical visual identity after the simplification pass. Olive colors, Share Tech Mono display headings, glow, gradient panels, scanlines, decorative reticles and ambient background motion are restored. The historical HUD recipes below remain the visual reference. Decorative effects do not indicate session activity.
+**Pro trading terminal with a tactical HUD soul.** Chart-led and crisp like a modern pro terminal, but unmistakably SniperSight: olive surfaces, mono chrome, scanlines, reticles, glow and deliberate motion. The operator likes effects and motion; use them with intent rather than stripping them out. The identity is tactical; the usability is pro-grade.
 
-[PRODUCT.md](PRODUCT.md) owns screen intent and truthful state. [tokens.css](src/styles/tokens.css) remains the sole palette owner. Readable muted text, 44px common controls, responsive layouts, native dialogs and visible keyboard focus are retained. Motion respects reduced-motion preferences; the pointer reticle is hidden on coarse-pointer devices. Explicit browser appearance preferences remain authoritative; the default treatment is tactical.
+**Phone and desktop are equals.** The operator spends about 90% of the time on a phone. Every screen must look as good at 390px as at 1440px. The phone layout is designed on purpose, not squeezed from desktop. Charts and the Play Inspector go full-screen on phones.
 
-The landing page restores its prior brand layout with implemented claims and clearly labeled static examples. Scanner mode cards keep their colored HUD treatment and visible requirements on every device. The recommendation panel leads the setup; Run scan stays early. Optional explanations use help dialogs, and scan inputs stay visible. State owners, backend behavior and transport contracts are unchanged. [workspace.css](src/styles/workspace.css) now contains usability and responsive rules rather than a flattening visual override. The [October 9 audit](docs/audits/UI_REFACTOR_2026-10-09.md) remains checkpoint history; the [restoration report](docs/audits/UI_HUD_RESTORE_2026-10-10.md) records the current appearance and verification.
+**Detail lives in modals, not dropdowns.** When a surface has more to show, open a modal (full-screen sheet on phones) with real layout: chart, tables, labeled sections. Never expand a dropdown or accordion into a wall of text. See [PRODUCT.md](PRODUCT.md#progressive-disclosure-modals-not-text-piles).
+
+[PRODUCT.md](PRODUCT.md) owns screen intent, truthful state and priorities. [tokens.css](src/styles/tokens.css) is the sole palette owner; [hud.css](src/styles/hud.css) carries the tactical treatment; [workspace.css](src/styles/workspace.css) carries responsive, focus and touch rules. Retained requirements: readable muted text, 44px touch targets, native dialogs, visible keyboard focus, reduced-motion support (decorative animation off), and pointer reticles hidden on coarse pointers. Saved browser appearance preferences are authoritative; the default is tactical. Checkpoint history is in [docs/audits/](docs/audits/) (latest: [HUD restoration](docs/audits/UI_HUD_RESTORE_2026-10-10.md)).
 
 ## 1. Overview
 
 **Creative North Star: "The Tactical Cockpit"**
 
-SniperSight is a HUD overlaid on a working terminal, not a dashboard with a tactical theme. Density is high, but every glyph earns its rent. The system is dark by intent: an operator scanning multi-timeframe SMC structure at 2am on a 27-inch monitor under one warm lamp, watching for the moment four signals align. Light mode is not on the roadmap.
+SniperSight is a HUD overlaid on a working terminal, not a dashboard with a tactical theme. Every glyph earns its rent. The system is dark by intent. Picture two scenes and design for both: the operator at a desk scanning multi-timeframe SMC structure, and the same operator on a phone in daylight between errands, checking whether the bot's limit filled and nudging a stop with a thumb. Desktop can carry density; the phone carries one clear thing at a time, large. Light mode is not on the roadmap.
 
-The look reads as legible-aggressive: olive-tinted near-black surfaces, electric green as the default "GO" accent (with red on live mode and amber on warnings), mono type that owns the chrome, repeating CRT scanlines on every panel. Corner brackets and animated reticles establish the tactical identity. They are decorative; explicit state labels determine whether the system is armed or idle. Motion is restrained, repetitive, and slow: radar sweeps, pulse rings, drifting glow gradients. Nothing bounces. Nothing celebrates.
+The look reads as legible-aggressive: olive-tinted near-black surfaces, electric green as the default "GO" accent (with red on live mode and amber on warnings), mono type that owns the chrome, repeating CRT scanlines on every panel. Corner brackets and animated reticles establish the tactical identity. They are decorative; explicit state labels determine whether the system is armed or idle. Motion is a feature: ambient motion is slow and repetitive (radar sweeps, pulse rings, drifting glow), while interaction motion is quick and purposeful (modals and sheets sliding in, chart lines tracking a drag, values ticking to new numbers, reveal sweeps on earned insignia). Nothing bounces. Nothing throws confetti.
 
 This system explicitly rejects: the generic SaaS dashboard (Inter for everything, purple-to-blue gradients, identical card grids), the consumer finance softness (rounded everything, pastels, friendly empty states), the crypto-casino aesthetic (RGB neon, gamified XP, animated charts as decoration), and AI-tool landing-page reflex (white surface, vague gradient, "intelligent trading" copy). It also refuses Bloomberg-terminal nostalgia LARP: pure `#0F0` on `#000` with unreadable density. Olive-tint backgrounds and OKLCH neutrals are the difference.
 
 **Key Characteristics:**
 - Olive-tinted dark surfaces, never pure black
 - Mono type owns the chrome (Share Tech Mono for display, JetBrains Mono for labels and numbers, Inter only for prose body)
-- Accent color is dynamic: green by default, amber for warnings, red for live mode
+- Accent is green today; a state-driven accent (amber warning, red live) is the target, not yet wired
 - Repeating scanlines on every `.panel` as a 2-bit overlay, not a hero effect
 - Corner brackets, reticles, and orbs as decorative HUD treatments
 - High density, low ornamentation; every chip is structural
 
 ## 2. Colors: The Olive-Tactical Palette
 
-The system runs on tinted neutrals plus a status-coded accent family. Strategy is **Restrained at rest, Committed under state.** Tiles and panels are tinted-neutral by default; saturated color only enters via accent edges, status chips, and live-mode chrome shifts. The accent itself is a CSS variable, so a panel marked `.panel-accent` inherits whatever state the screen is in (green idle, amber armed, red live).
+The system runs on tinted neutrals plus a status-coded accent family. Strategy is **Restrained at rest, Committed under state.** Tiles and panels are tinted-neutral by default; saturated color only enters via accent edges, status chips, and live-mode chrome shifts. The accent itself is a CSS variable, so a panel marked `.panel-accent` will inherit the screen's operating state once the dynamic accent is wired (target: green at rest, amber on warning, red live; fixed green today).
 
 ### Primary
 - **Electric Mantis Green** (`#00ffaa`): the default accent. Used for the operating accent variable, brand mark, success states, "GO" affordances, the equity-up direction. Appears as edge glow on `.panel-accent`, as the brand text-shadow, and as the dynamic `--accent` token.
@@ -174,14 +176,14 @@ The system runs on tinted neutrals plus a status-coded accent family. Strategy i
 - **Border Soft** (`oklch(0.32 0.015 130 / 0.6)`): primary divider, panel outline.
 - **FG Primary** (`oklch(0.94 0.012 150)`): primary text, metric values.
 - **FG Secondary** (`oklch(0.78 0.012 150)`): body prose, button text.
-- **FG Tertiary** (`oklch(0.58 0.015 150)`): nav links at rest, supporting copy.
-- **FG Quaternary** (`oklch(0.42 0.012 150)`): labels, timestamps, dim metadata.
+- **FG Tertiary** (`oklch(0.78 0.012 150)`): nav links at rest, supporting copy. Raised to equal FG Secondary for readability; hierarchy comes from size, weight and color, not dimming.
+- **FG Quaternary** (`oklch(0.72 0.012 150)`): labels, timestamps, dim metadata. The floor for readable muted text; do not go darker.
 
 ### Named Rules
 
 **The No-Pure-Black Rule.** Surfaces are olive-tinted near-black, never `#000`. The chroma is small (0.008-0.015) but non-zero; it's what stops the HUD from feeling like a Bloomberg terminal. If you ever write `#000` or `#fff`, rewrite the value.
 
-**The Dynamic Accent Rule.** The `--accent` token is whatever the current state mandates: green at rest, amber on warning surfaces, red in live mode. Every chip, button, panel-edge, and orb that wants the operating-state color references `var(--accent)`, not a hard-coded hue. Hard-coding green into a status-aware surface is a bug.
+**The Dynamic Accent Rule (target).** Every chip, button, panel edge and orb that wants the operating-state color references `var(--accent)`, not a hard-coded hue. Today `--accent` is fixed green: `applyTweaks` in `src/components/hud/applyTweaks.ts` can rebind it but is not called. The intended mapping is green at rest, amber on warning surfaces and red in live mode. Wiring it to real session state is planned work. Live mode is currently signaled by the red page title and explicit LIVE chips.
 
 **The 10% Saturation Rule.** Saturated colors cover ≤10% of any single screen. Green edges, red chips, amber labels, cyan buttons: each used in pixels-not-percentages. The remaining 90% is olive-tinted neutrals. Drenched surfaces are forbidden in product register; landing is allowed exceptions.
 
@@ -232,7 +234,9 @@ The system is **flat at rest, glowing on state.** No drop shadows on cards or pa
 
 **The Flat-Default Rule.** Panels, cards, chips, buttons, and tiles ship flat. Shadows appear only when state demands it (accent panel, hover, modal, button press). A drop-shadow on a default surface is a bug.
 
-**The Glow-Is-State Rule.** Glow means "this surface is participating in the current operating state." Green glow → engine armed. Amber glow → caution. Red glow → live. Glow is never decorative; if it doesn't reflect state, it doesn't belong.
+**The Ambient-Versus-Signal Rule.** Two classes of effect, never confused:
+- **Ambient (decorative, always allowed):** tactical background drift, scanlines, reticles, corner brackets, brand and title text glow. They set the mood and never imply activity.
+- **Signals (must reflect real state):** the orb, `.panel-accent` glow, live/armed colors, pulse rings on status indicators and anything labeled LIVE, STREAMING or ARMED. If the state isn't real, the signal doesn't render. A pulsing orb on an idle bot is a bug.
 
 ## 5. Components
 
@@ -241,7 +245,7 @@ The system is **flat at rest, glowing on state.** No drop shadows on cards or pa
 - **Background:** `linear-gradient(135deg, rgba(0,0,0,0.55), oklch(0.22 0.010 125 / 0.6))`. Gradient anchors top-left.
 - **Overlay:** every `.panel` carries a `::before` repeating-linear-gradient scanline at 2px intervals, `rgba(255,255,255,0.012)` opacity. Toggleable via `.scanlines-off`.
 - **Accent variant:** `.panel-accent` adds the colored outline + halo glow described under Elevation.
-- **Corner brackets:** `.brackets` class adds two 14px corner brackets (top-left, bottom-right) drawn from accent color. Decorative-structural; signals "active panel" without taking up content space.
+- **Corner brackets:** `.brackets` class adds two 14px corner brackets (top-left, bottom-right) drawn from accent color. Ambient decoration; they frame a panel but do not signal state.
 - **Section header:** internal `.sec-head` divider with `.sec-title` (Share Tech Mono, 13px) and the pulsing accent dot. Separator is `border-bottom: 1px solid var(--border-soft)`.
 
 ### Buttons
@@ -271,13 +275,28 @@ The system is **flat at rest, glowing on state.** No drop shadows on cards or pa
 - **Density-aware:** all three values scale via `.density-sparse` / `.density-dense` modifiers on the shell.
 
 ### Inputs / Fields
-- **Style:** inherited from base. No dedicated `.input` class in the kept system; fields use ghost-button-style outlines when they appear. (The HUD avoids forms wherever possible; inputs that exist are in Settings and inline filters.)
+- **Style:** inherited from base. No dedicated `.input` class yet; fields use ghost-button-style outlines. Inputs exist in scanner setup, bot/paper setup, journal filters and Settings, and plan editing will add price fields to the Play Inspector.
+- **Numeric fields:** JetBrains Mono, tabular-nums, right-aligned, unit suffix visible (price, %, R). On phones use `inputmode="decimal"` and at least 44px height.
 - **Focus:** 2px outline using `var(--accent)`, offset 2px (`outline:2px solid var(--accent); outline-offset:2px`). Used on the hamburger button and adopted across keyboardable affordances.
 
 ### Navigation
-- **Topbar:** brand mark + nav links + topbar-right cluster (mode badge, Phemex status pill, UTC clock).
+- **Topbar:** brand mark + nav links + topbar-right status cluster. Read `Topbar.tsx` for its current contents; don't assume a specific pill set.
 - **Nav links:** JetBrains Mono 11px weight 600, uppercase, letter-spacing 0.16em, `var(--fg-3)` at rest. Active link picks up `var(--accent)` text, accent-tinted border and background. Hover lifts to `var(--fg)` with a faint white overlay.
-- **Mobile:** ≤700px collapses the nav into a slide-in drawer keyed to the right edge, backdrop-blur darkened. Hamburger appears in the topbar; nav, mode badge, Phemex pill, and UTC clock all move into the drawer.
+- **Mobile:** ≤700px collapses the nav into a slide-in drawer keyed to the right edge, backdrop-blur darkened. Hamburger appears in the topbar; the nav and status cluster move into the drawer. A running bot session should stay visible from the collapsed topbar.
+
+### Play Inspector (signature component, planned)
+- One chart modal used for open positions, pending orders, bot-planned entries, scanner setups (read/plan), journal entries (read-only) and replay. Build from `ScannerSetupModal`; don't fork it per screen.
+- **Layout:** chart dominant (≥60% of the modal on desktop, full-width and most of the height on phones). A compact header strip shows symbol, side chip, mode chip, PAPER/LIVE chip and the order state. Below or beside it: risk, size, R:R, unrealized/estimated P&L and distance-to-stop/targets as metric tiles. Then the "why" (score vs threshold, top families, anchor structure). Then actions.
+- **Chart lines:** entry (or zone band), stop (red), targets (green, numbered), current price. Lines are draggable when editing is allowed; values tick live and R:R/P&L recompute as the line moves.
+- **Edit state:** a visible MODIFIED chip, the original plan as a faint ghost line, and a risk meter that turns red and blocks save on a breach. Save and revert are explicit; LIVE adds a confirm step.
+- **Phone:** full-screen sheet, chart on top, sticky action bar at the bottom within thumb reach.
+
+### Modal / Sheet
+- Desktop: centered native dialog, Modal Lift shadow, blurred backdrop. Phone: full-screen sheet sliding up (transform/opacity only, ~200ms ease-out), with a sticky header holding title and close.
+- Content inside uses real layout (tiles, tables, charts, labeled sections), not paragraphs of text.
+
+### Rank insignia (future)
+- For the deferred rank system: HUD-patch style insignia using the accent family and Share Tech Mono labels, with a scan-sweep or glow reveal when earned. No confetti, coins or slot animations.
 
 ### Orb (signature component)
 - 40px square, contains a 14px solid core, a pinging ring (opacity 0.25, scales to 2.2x over 2.5s), and a blurred halo. Green/amber/red variants matching status. The product's defining live-indicator. Appears in BotStatus, ActiveScanBeacon, and any "is this running?" question the operator might have.
@@ -286,7 +305,7 @@ The system is **flat at rest, glowing on state.** No drop shadows on cards or pa
 - An SVG crosshair scaled to 120% of container, two counter-rotating rings (45s and 30s), opacity 0.18. Sits behind primary content on Scanner and Landing scope panels. Toggleable via `.hud-overlays-off`. Conveys "the system is watching" without competing for attention.
 
 ### Tactical Background (signature component)
-- A four-layer composition pinned at z-index -10: gradient base, drifting radial glows in the accent color (30s loop), a soft dot grid (40px spacing, drifting 120s), a sweeping scanline (8s sweep), and a fractal-noise grain overlay (0.04 opacity, 0.5s flicker). All four layers respect the dynamic accent; switching modes shifts the entire ambient color of the background.
+- A four-layer composition pinned at z-index -10: gradient base, drifting radial glows in the accent color (30s loop), a soft dot grid (40px spacing, drifting 120s), a sweeping scanline (8s sweep), and a fractal-noise grain overlay (0.04 opacity, 0.5s flicker). All four layers read `var(--accent)`, so the ambient color will follow state once the dynamic accent is wired.
 
 ### HUD Progress Bar (signature component)
 - 6px height, gradient from red (left = stop loss) through neutral mid through green (right = take profit). 12px circular marker with accent border and glow, animated `left` transition with `cubic-bezier(0.22, 0.9, 0.3, 1)` over 0.8s. Used on open positions to show price-relative-to-plan in a single glance.
@@ -294,7 +313,7 @@ The system is **flat at rest, glowing on state.** No drop shadows on cards or pa
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** use `var(--accent)` for any element that reflects operating state. The token rebinds per mode (green/amber/red); hard-coded colors are a bug.
+- **Do** use `var(--accent)` for any element that reflects operating state. It is fixed green today and will rebind by state; hard-coded colors are a bug either way.
 - **Do** tint every neutral toward olive. Surfaces sit at chroma 0.008-0.015 on hues 120-150. Pure-gray neutrals read wrong on this palette.
 - **Do** reach for chips and labels before reaching for prose. If a status can be a pill, it is a pill.
 - **Do** stack monospace fonts by role: Share Tech Mono for display chrome, JetBrains Mono for labels and numerics, Inter only for actual prose.
@@ -303,6 +322,8 @@ The system is **flat at rest, glowing on state.** No drop shadows on cards or pa
 - **Do** put the accent dot on every `.sec-title`. The pulsing dot signals the panel is participating in the current state.
 - **Do** capitalize mode labels and signal tags (STEALTH, ARMED, FIRED, REJECTED). Lowercase chrome reads as a SaaS dashboard.
 - **Do** include a `density-sparse` / `density-dense` modifier path on any new tile or row component.
+- **Do** design the phone layout deliberately for every new surface and check it at 390px before calling it done.
+- **Do** use motion to explain change: values ticking, lines tracking drags, sheets sliding. Respect reduced motion.
 
 ### Don't:
 - **Don't** use `#000` or `#fff`. Every neutral is olive-tinted OKLCH. Pure-black backgrounds are forbidden.
@@ -316,4 +337,6 @@ The system is **flat at rest, glowing on state.** No drop shadows on cards or pa
 - **Don't** animate layout properties (width, height, top, left, padding, margin). Animate transforms and opacity. The marker bar animates `left`, which is the one tolerated exception, and only because the bar is purely decorative geometry, not layout.
 - **Don't** use illustrated empty states, soft pastels, "Welcome back!" copy, or any consumer-finance softness. The empty state for a scan with no candidates is a chip that says `NO CANDIDATES` and a one-line reason, not a friendly illustration.
 - **Don't** introduce a hero-metric template (big number + tiny label + supporting stat + gradient accent). That's the AI-tool landing reflex; product surfaces don't get it, and landing has its own register-specific hero treatment.
-- **Don't** modify `min_confluence_score` or pre-scoring gate thresholds in the name of "better defaults." The numbers were tuned from session win-rate data and live outside the design system's jurisdiction.
+- **Don't** change scores, thresholds, weights or mode minimums from the design layer. They belong to the operator and change only on explicit request with evidence (see PRODUCT.md strategic principles). The design layer displays them; it doesn't tune them.
+- **Don't** hide detail in dropdowns or accordions that expand into text walls. Use a modal or sheet with structure.
+- **Don't** let an ambient effect look like a state signal (for example, a pulsing orb on idle).
