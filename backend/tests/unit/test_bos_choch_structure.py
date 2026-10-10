@@ -199,6 +199,31 @@ class TestPatternNegatives:
         assert bt1 is None and bt2 is None
 
 
+@pytest.mark.parametrize('types,levels,close,kind,direction', [
+    ([1,-1,1,-1], [101.,94.,103.,96.], 104., 'BOS', 'bullish'),
+    ([1,-1,1,-1], [104.,96.,102.,94.], 103., 'CHoCH', 'bullish'),
+    ([-1,1,-1,1], [99.,106.,97.,104.], 96., 'BOS', 'bearish'),
+    ([-1,1,-1,1], [96.,104.,98.,106.], 97., 'CHoCH', 'bearish'),
+])
+def test_structural_four_swing_checks_both_boundaries(types, levels, close, kind, direction):
+    found = _detect_bos_choch_pattern(types, levels, TS4, close, close+.5, close-.5)
+    assert found == (kind, direction, levels[-2], TS4[-2])
+    # Touches and wick-only breaks do not confirm a close beyond the boundary.
+    level = levels[-2]
+    assert _detect_bos_choch_pattern(types, levels, TS4, level, level+1., level-1.)[0] is None
+    mirrored = _detect_bos_choch_pattern([-t for t in types], [200.-x for x in levels],
+                                        TS4, 200.-close, 200.-close+.5, 200.-close-.5)
+    assert mirrored == (kind, 'bearish' if direction == 'bullish' else 'bullish', 200.-level, TS4[-2])
+
+
+def test_structural_four_swing_mixed_newest_geometry_is_not_older_trend():
+    # A higher high and lower low are mixed evidence; do not search an older
+    # ascending window just to manufacture a bullish continuation.
+    for close in (104., 91.):
+        assert _detect_bos_choch_pattern([1,-1,1,-1], [101.,94.,103.,92.],
+                                       TS4, close, close+.5, close-.5)[0] is None
+
+
 class TestPatternSymmetry:
     """Mirror prices around 200: bullish inputs must map to bearish outputs exactly."""
 
@@ -340,18 +365,16 @@ class TestRanging4SwingResolve:
         monkeypatch.setitem(MODE_BOS_VALIDATION, "test_4swing", "4swing")
         return "test_4swing"
 
-    def test_4swing_ranging_resolves_and_emits(self, fourswing_profile, caplog):
+    def test_4swing_geometry_establishes_prior_trend_and_emits_once(self, fourswing_profile):
         df = _df_from_closes(_ranging_4swing_closes())
-        with caplog.at_level(logging.INFO, logger="backend.strategy.smc.bos_choch"):
-            breaks = detect_structural_breaks(
-                df, {"swing_lookback": 3}, mode_profile=fourswing_profile
-            )
-        assert len(breaks) >= 1, "4swing ranging start must resolve and then emit"
+        breaks = detect_structural_breaks(
+            df, {"swing_lookback": 3}, mode_profile=fourswing_profile
+        )
+        # Unlike the simple detector, four alternating pivots already establish
+        # a prior trend. Consume the first close break, not a later duplicate.
+        assert len(breaks) == 1
         assert all(b.direction == "bullish" and b.break_type == "BOS" for b in breaks)
-        assert "RANGING resolved to uptrend" in caplog.text
-        assert "4swing" in caplog.text
-        # Resolving candle (idx49, first close > h2) suppressed; emission starts after.
-        assert all(b.timestamp > df.index[49].to_pydatetime() for b in breaks)
+        assert breaks[0].timestamp == df.index[49].to_pydatetime()
 
 
 # ===========================================================================
@@ -479,3 +502,207 @@ class TestCurrentWiring4SwingVolumeGate:
         assert all(b.level == pytest.approx(h2_level) for b in bos), (
             "4swing BOS must break the most recent higher high (h2)"
         )
+
+
+@pytest.mark.parametrize('direction', ['bullish', 'bearish'])
+@pytest.mark.parametrize('seed', ['uptrend', 'downtrend', 'ranging'])
+def test_structural_four_swing_geometry_owns_direction_and_consumes_pivot(monkeypatch, direction, seed):
+    from backend.strategy.smc import bos_choch
+    closes = _macro_4swing_closes()
+    if direction == 'bearish':
+        closes = [200.-x for x in closes]
+    vols = [1000.] * len(closes)
+    for i in (27,28,29,30):
+        vols[i] = 5000.
+    df = _df_from_closes(closes, vols)
+    monkeypatch.setattr(bos_choch, '_determine_initial_trend', lambda *_: seed)
+    events = detect_structural_breaks(df, {'swing_lookback': 3}, mode_profile='stealth_balanced')
+    assert len(events) == 1
+    assert (events[0].break_type, events[0].direction) == ('BOS', direction)
+    assert events[0].timestamp == df.index[27].to_pydatetime()
+
+
+@pytest.mark.parametrize('direction', ['bullish', 'bearish'])
+def test_structural_four_swing_volume_failure_cannot_refire_same_pivot(direction):
+    closes = _macro_4swing_closes()
+    if direction == 'bearish':
+        closes = [200.-x for x in closes]
+    vols = [1000.] * len(closes)
+    for i in (28,29,30):
+        vols[i] = 5000.
+    events = detect_structural_breaks(_df_from_closes(closes, vols),
+                                     {'swing_lookback': 3}, mode_profile='stealth_balanced')
+    assert events == []
+
+
+def _four_swing_control(monkeypatch, highs, lows, closes, volumes, *, direction='bullish'):
+    from backend.strategy.smc import bos_choch
+    from backend.indicators import volatility
+    df = _df_from_closes(closes, volumes)
+    high_points = pd.Series({df.index[i]: price for i, price in highs})
+    low_points = pd.Series({df.index[i]: price for i, price in lows})
+    if direction == 'bearish':
+        df = _df_from_closes([200.-x for x in closes], volumes)
+        high_points, low_points = 200.-low_points, 200.-high_points
+    monkeypatch.setattr(bos_choch, '_detect_swing_highs', lambda *_: high_points)
+    monkeypatch.setattr(bos_choch, '_detect_swing_lows', lambda *_: low_points)
+    monkeypatch.setattr(bos_choch, '_determine_initial_trend', lambda *_: 'ranging')
+    monkeypatch.setattr(volatility, 'compute_atr', lambda *_args, **_kwargs: pd.Series(4., index=df.index))
+    return detect_structural_breaks(df, {'swing_lookback': 3, 'min_break_distance_atr': 1.},
+                                    mode_profile='stealth_balanced')
+
+
+@pytest.mark.parametrize('direction', ['bullish', 'bearish'])
+@pytest.mark.parametrize('base,break_volume,expected_count,expected_grade', [
+    (1870., 2469., 0, None),    # Just below 1.3x average.
+    (1870., 2470., 1, 'C'),     # 2470 / ((19*1870+2470)/20) == 1.3 exactly.
+    (900., 1900., 1, 'B'),      # 1900 / ((19*900+1900)/20) == 2 exactly: promote C.
+])
+def test_structural_four_swing_choch_volume_boundaries_and_consumption(monkeypatch, direction, base, break_volume, expected_count, expected_grade):
+    closes, vols = [100.] * 40, [base] * 40
+    closes[29:33] = [103.] * 4
+    vols[29] = break_volume
+    vols[30:33] = [5000.] * 3  # No re-emission or later upgrade of that pivot.
+    events = _four_swing_control(monkeypatch, [(23,104.),(25,102.)], [(24,96.),(26,94.)],
+                                closes, vols, direction=direction)
+    assert len(events) == expected_count
+    if events:
+        assert (events[0].break_type, events[0].direction, events[0].grade) == ('CHoCH', direction, expected_grade)
+
+
+@pytest.mark.parametrize('direction', ['bullish', 'bearish'])
+def test_structural_four_swing_distinct_pivots_at_same_price_are_distinct(monkeypatch, direction):
+    closes, vols = [100.] * 40, [1000.] * 40
+    closes[23], closes[31] = 104., 104.
+    vols[23], vols[31] = 5000., 5000.
+    events = _four_swing_control(monkeypatch,
+        [(19,101.),(21,103.),(27,100.),(29,103.)],
+        [(20,94.),(22,96.),(28,90.),(30,92.)], closes, vols, direction=direction)
+    assert len(events) == 2
+    assert all(e.direction == direction and e.break_type == 'BOS' for e in events)
+    assert events[0].level == events[1].level
+    assert events[0].timestamp != events[1].timestamp
+
+
+@pytest.mark.parametrize('mixed', [True, False])
+def test_structural_four_swing_never_falls_back_to_simple_break(monkeypatch, mixed):
+    closes, vols = [100.] * 40, [1000.] * 40
+    closes[29], vols[29] = 110., 5000.
+    highs = [(23,101.),(25,103.)] if mixed else [(23,101.)]
+    lows = [(24,94.),(26,92.)] if mixed else [(24,94.)]
+    assert _four_swing_control(monkeypatch, highs, lows, closes, vols) == []
+
+
+def _controlled_graded_break(monkeypatch, direction, kind, minimum, multiple, *, atr=4., volume=1000.):
+    """Exercise each real emission branch with controlled swing and ATR inputs."""
+    from backend.strategy.smc import bos_choch
+    from backend.indicators import volatility
+    df = _df_from_closes([95.] * 30)
+    level = 100. if direction == 'bullish' else 90.
+    distance = 4. * minimum * multiple
+    close = level + distance if direction == 'bullish' else level - distance
+    df.loc[df.index[-1], ['open', 'high', 'low', 'close', 'volume']] = [
+        95., max(95., close)+.2, min(95., close)-.2, close, volume]
+    monkeypatch.setattr(bos_choch, '_detect_swing_highs',
+                        lambda *_: pd.Series([100.], index=[df.index[9]]))
+    monkeypatch.setattr(bos_choch, '_detect_swing_lows',
+                        lambda *_: pd.Series([90.], index=[df.index[10]]))
+    trend = 'uptrend' if (direction == 'bullish') == (kind == 'BOS') else 'downtrend'
+    monkeypatch.setattr(bos_choch, '_determine_initial_trend', lambda *_: trend)
+    monkeypatch.setattr(volatility, 'compute_atr', lambda *_args, **_kwargs: pd.Series(atr, index=df.index))
+    breaks = detect_structural_breaks(df, {'swing_lookback': 3, 'min_break_distance_atr': minimum})
+    assert len(breaks) == 1
+    event = breaks[0]
+    assert (event.direction, event.break_type) == (direction, kind)
+    return event
+
+
+@pytest.mark.parametrize('direction', ['bullish', 'bearish'])
+@pytest.mark.parametrize('kind', ['BOS', 'CHoCH'])
+@pytest.mark.parametrize('minimum', [.5, 1., 1.5])
+@pytest.mark.parametrize('multiple,expected', [(1.4, 'C'), (1.5, 'B'), (2.49, 'B'), (2.5, 'A')])
+def test_structural_grading_uses_atr_units_and_ordered_boundaries(monkeypatch, direction, kind, minimum, multiple, expected):
+    event = _controlled_graded_break(monkeypatch, direction, kind, minimum, multiple)
+    assert event.grade == expected
+    assert event.break_distance_atr == pytest.approx(minimum * multiple)
+
+
+@pytest.mark.parametrize('direction', ['bullish', 'bearish'])
+@pytest.mark.parametrize('kind', ['BOS', 'CHoCH'])
+@pytest.mark.parametrize('multiple,expected', [(1.4, 'B'), (1.5, 'A'), (2.5, 'A')])
+def test_structural_grading_preserves_volume_promotion(monkeypatch, direction, kind, multiple, expected):
+    event = _controlled_graded_break(monkeypatch, direction, kind, 1., multiple, volume=5000.)
+    assert event.grade == expected
+
+
+@pytest.mark.parametrize('direction', ['bullish', 'bearish'])
+@pytest.mark.parametrize('kind', ['BOS', 'CHoCH'])
+@pytest.mark.parametrize('atr', [0., float('nan')])
+def test_structural_grading_missing_atr_cannot_create_qualifying_grade(monkeypatch, direction, kind, atr):
+    event = _controlled_graded_break(monkeypatch, direction, kind, 1., 1.5, atr=atr)
+    assert event.grade == 'C'
+    assert event.break_distance_atr == 0.
+
+
+@pytest.mark.parametrize('tf', ['15m', '1h', '4h', '1d'])
+def test_structural_grading_captured_btc_feed(monkeypatch, tf, capsys):
+    """Later public-feed capture truncated to the rejection's completed bars.
+
+    This checks detector grading on real prices, not a replay of the original scan.
+    """
+    import json
+    from collections import Counter
+    from pathlib import Path
+    from backend.services.smc_service import SMCDetectionService
+    from backend.shared.config.smc_config import get_tf_smc_config
+    from backend.indicators.volatility import compute_atr
+    payload = json.loads((Path(__file__).resolve().parents[3] / 'docs/audits/structural_gate_2026-10-10' / f'btc_{tf}.json').read_text())
+    df = pd.DataFrame(payload['candles'])
+    df.index = pd.to_datetime(df.pop('timestamp'), utc=True)
+    duration = pd.Timedelta({'15m': '15min', '1h': '1h', '4h': '4h', '1d': '1D'}[tf])
+    df = df[df.index + duration <= pd.Timestamp(payload['capture']['analysis_cutoff'])]
+    config = SMCDetectionService(mode='stealth')._create_tf_smc_config(get_tf_smc_config(tf, 'stealth'))
+    events = detect_structural_breaks(df, config, mode_profile='stealth_balanced')
+    from backend.strategy.smc import bos_choch
+    from backend.shared.config.smc_config import scale_lookback
+    import bisect
+    lookback = scale_lookback(config.structure_swing_lookback, bos_choch._infer_timeframe(df))
+    highs, lows = bos_choch._detect_swing_highs(df, lookback), bos_choch._detect_swing_lows(df, lookback)
+    kinds, levels, indices = bos_choch._build_swing_sequence(highs, lows)
+    raw = Counter()
+    for timestamp, row in df.iterrows():
+        pos = bisect.bisect_right(indices, timestamp)
+        kind, direction, _, _ = bos_choch._detect_bos_choch_pattern(kinds[:pos], levels[:pos], indices[:pos], row.close, row.high, row.low)
+        if kind:
+            raw[(kind, direction)] += 1
+    with monkeypatch.context() as m:
+        m.setitem(MODE_VOLUME_REQUIREMENTS, 'stealth_balanced', {'require_volume': False})
+        ungated = detect_structural_breaks(df, config, mode_profile='stealth_balanced')
+    simple = detect_structural_breaks(df, config, mode_profile='intraday_aggressive')
+    with capsys.disabled():
+        print('STRUCTURAL_DIAGNOSTIC ' + json.dumps(dict(tf=tf, swings=[len(highs),len(lows)],
+            initial=bos_choch._determine_initial_trend(highs,lows), raw_patterns={str(k):v for k,v in raw.items()},
+            without_volume=len(ungated), simple_control=len(simple))))
+    atr = compute_atr(df, period=14)
+    mean_volume = df.volume.rolling(20).mean()
+    expected = []
+    for event in events:
+        ratio = abs(df.loc[event.timestamp, 'close'] - event.level) / atr.loc[event.timestamp]
+        grade = ('A' if ratio >= 2.5 * config.structure_min_break_distance_atr else
+                 'B' if ratio >= 1.5 * config.structure_min_break_distance_atr else 'C')
+        if df.loc[event.timestamp, 'volume'] / mean_volume.loc[event.timestamp] >= 2.:
+            grade = {'C': 'B', 'B': 'A', 'A': 'A'}[grade]
+        expected.append((event, grade, ratio))
+    latest = {}
+    for direction in ('bullish', 'bearish'):
+        aligned = [row for row in expected if row[0].direction == direction]
+        if aligned:
+            event, grade, ratio = max(aligned, key=lambda row: row[0].timestamp)
+            latest[direction] = dict(timestamp=event.timestamp.isoformat(), kind=event.break_type,
+                                     actual_grade=event.grade, expected_grade=grade, distance_atr=ratio)
+    with capsys.disabled():
+        print('STRUCTURAL_CAPTURE ' + json.dumps(dict(tf=tf, candles=len(df), events=len(events),
+            grades=dict(Counter(e.grade for e in events)), latest=latest)))
+    assert events, 'Captured real feed must exercise actual four-swing emissions'
+    assert all(e.grade == grade for e, grade, _ in expected)
+    assert all(e.break_distance_atr == pytest.approx(ratio) for e, _, ratio in expected)

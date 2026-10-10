@@ -1,0 +1,164 @@
+{
+  "date": "2026-10-10",
+  "status": "verified_local_changes",
+  "base_commit": "af050683299ab75eae64d124ef78df1444766ca0",
+  "scope": "Conflict-density evidence counting and final direction gate ownership; builds on uncommitted structural detector corrections documented separately.",
+  "baseline_evidence": "docs/audits/conflict_density_2026-10-10/rejections_scan_400.json",
+  "baseline_limits": {
+    "stealth_strike_surgical": 3,
+    "overwatch": 5,
+    "conditional_btc_aligned": 6,
+    "changed_numerically": false,
+    "calibration": "Count semantics change effective selectivity. Existing numbers are not proven optimal."
+  },
+  "changes": [
+    "Latest structural timestamp across BOS and CHoCH owns each effective timeframe; at most one opposing BOS state per timeframe.",
+    "Explicit scope overrides config.structure_timeframes, which falls back to mode defaults; case and empty scope handled.",
+    "Invalidated, breaker and fully mitigated OBs excluded; >50% symmetric overlap groups require all-member overlap and deterministic ordering.",
+    "Labels show event times and actual OB high/low; rejection reason shows base conflict limit and count components.",
+    "Changed score winner must pass gates before planning; successful preliminary flip owns admitted direction; no flip loop.",
+    "Known initial direction and actual final score/direction survive existing rejection publication."
+  ],
+  "owners_and_consumers": {
+    "producers": [
+      "SMCDetectionService",
+      "structural detector",
+      "order-block detectors and mode filters"
+    ],
+    "gate_owner": "backend/strategy/confluence/scorer.py::_conflict_density_gate",
+    "admission_owner": "backend/engine/orchestrator.py::_process_symbol",
+    "callers": [
+      "initial pre-scoring",
+      "legacy opposite-side retry",
+      "cascade scale",
+      "changed final score winner"
+    ],
+    "consumers": [
+      "ScannerService",
+      "PaperTradingService._run_scan",
+      "LiveTradingService._run_scan",
+      "Orchestrator._emit_rejection_telemetry",
+      "Gauntlet reason_type classification"
+    ],
+    "public_shape": "Existing count/conditions/direction/score/reason fields retained. Additional GateResult policy/scope/component metadata stays internal.",
+    "freshness": "Existing mode-specific SMC filtering remains authority; no new TTL or current-ticker crossing admission rule.",
+    "execution": "Shared scanner/bot signal logic only; no executor, order, credential, risk-size or account changes."
+  },
+  "verification": {
+    "guarded_runner": "backend/venv/Scripts/python.exe -B backend/diagnostics/offline_verify.py",
+    "manifest": "backend/diagnostics/offline_checks.json",
+    "before_counter": {
+      "command_suffix": "backend -k conflict_density",
+      "failed": 22,
+      "passed": 1,
+      "deselected": 2583
+    },
+    "before_handoff": {
+      "command_suffix": "backend -k 'conflict_density and not test_conflict_density.py'",
+      "failed": 14,
+      "passed": 2,
+      "deselected": 2606,
+      "note": "Before final-side repair; BTC fixture later adjusted to test exact6 rather than7 boundary."
+    },
+    "focused_after": {
+      "command_suffix": "backend -k 'conflict_density or scoring_direction_handoff'",
+      "passed": 69,
+      "deselected": 2553,
+      "warnings": 14,
+      "seconds": 16.04
+    },
+    "regression": {
+      "command_suffix": "backend -k 'conflict_density or scoring_direction_handoff or scan_rejection_evidence or rejection_consumers or core_workflow or score_policy_balance or evidence_accounting or mode_regime_policy or pre_direction_tally_symmetry or btc_impulse_regime_aware or decision_input_cohesion or cascade_no_direction_flip or no_silent_long_default'",
+      "status": "passed",
+      "passed": 489,
+      "deselected": 2134,
+      "warnings": 276,
+      "seconds": 411.94
+    },
+    "captured_feed": {
+      "source": "docs/audits/structural_gate_2026-10-10/btc_{15m,1h,4h,1d}.json",
+      "long": {
+        "historical_opposing_bos": 2,
+        "current_opposing_states": 1,
+        "latest_counted": "15m bearish BOS 2026-10-08T13:30:00+00:00"
+      },
+      "short": {
+        "historical_opposing_bos": 2,
+        "current_opposing_states": 1,
+        "latest_counted": "1h bullish BOS 2026-10-02T04:00:00+00:00"
+      },
+      "limit": "Saved later public feed, completed-bar cutoff; not original scan replay or historical causality proof."
+    },
+    "contracts": {
+      "command_suffix": "contracts",
+      "api": "clean",
+      "telemetry": "clean",
+      "pipeline": "clean",
+      "db_jsonl_drift": 6,
+      "disposition": "Same existing writer hashes/key hints as prior audit; baselines unchanged.",
+      "identical_to_previous_audit": true
+    },
+    "smoke": {
+      "command_suffix": "smoke",
+      "mode_policy_drift": 5,
+      "pre_scoring_gates": "clean",
+      "disposition": "Same existing mode score/cascade/allowed-type deltas as prior audit; baselines unchanged.",
+      "identical_to_previous_audit": true
+    },
+    "isolation": "Seven denial probes passed. Backend blocked subprocess.Popen; contracts also blocked socket.bind/socket.getaddrinfo; smoke blocked socket.bind. Fixture writes only; no unrestricted backend test run.",
+    "diff_check": "passed",
+    "typescript": "not applicable: no frontend changes",
+    "log_sha256": {
+      "snipersight-conflict-density-before.txt": "63a55e6607d76cca8cddaa558e18e4814e45bb3734c27f9111606b0c3d981e0f",
+      "snipersight-conflict-handoff-before.txt": "1e5bf4058fe61f500b6b2d5fb1a3f595b2015e3734801a4d9d0c963f93f34338",
+      "snipersight-conflict-handoff-after.txt": "11479c0c507e506db1eb537784bc5bf47dffe19616ad3253aca9e69ebba7850e",
+      "snipersight-conflict-regression.txt": "ae55a74b86253f32be5c502ee053efb63806f0191ab079b3ba9a3740b7ac909d",
+      "snipersight-conflict-contracts.txt": "eb4a22896127f1ffc7d0f2b7b101bc16ad6b802bf9197cc6cf244b9f5f857a55",
+      "snipersight-conflict-smoke.txt": "9f2b79d1748db6d87080bbc0e5eea63f1aa7df3524273f608c2c57a735eb8429"
+    }
+  },
+  "independent_review": {
+    "reviewer": "structural_gate_review",
+    "scope": "Actual conflict projection, orchestrator handoff, scoped tests and manifest; separate from prior structural-detector review.",
+    "result": "No blocking defect found",
+    "findings_applied": [
+      "Avoid transitive overlap merging through a bridge",
+      "Defer ticker-position filtering",
+      "Handle equal-time structural ambiguity conservatively",
+      "Revalidate changed final winner against admitted side"
+    ],
+    "limitation": "Source and test review plus diff check; reviewer did not independently rerun the reported tests."
+  },
+  "runtime_observation": "docs/audits/conflict_density_2026-10-10/runtime_status.json",
+  "runtime_scope": "Read-only paper status, session503206fe remained running; no restart or complete runtime version confirmation.",
+  "limitations": [
+    "Original full SMC snapshots absent, so no claim that every pasted rejection was wrong.",
+    "BOS state and OB zone remain separate correlated evidence types; no causal-link field exists for exact shared-impulse deduplication.",
+    "Current state means latest detected state, not a newly calibrated expiry window.",
+    "Detector pivot-confirmation/look-ahead limitations from preceding audit remain.",
+    "Regime and immediate opposing-FVG evidence gates remain separate and unchanged.",
+    "Synthetic/serial-worker checks do not establish true process-pool or live-execution correctness.",
+    "Trading selectivity/profitability needs paper validation, not threshold tuning to force admission."
+  ],
+  "checklist": {
+    "scope": "Bounded reproduced counter and direction-ownership defects; other local edits preserved.",
+    "fundamentals": "Mode precedence, event chronology, timestamp normalization, overlap units and upstream freshness traced.",
+    "contracts": "Existing dynamic rejection fields and telemetry single-emission path retained; private helper metadata documented.",
+    "behavior": "Mirrored directions, supersession, ties, modes/overrides, overlap/lifecycle, boundaries and winner revalidation covered.",
+    "diagnosability": "Known direction, actual score, count components and usable structure labels preserved.",
+    "safe_verification": "Guarded manifest-selected runs only; baseline drift disclosed.",
+    "trading_assumptions": "No score probability or profitability claim; numerical limits not treated as calibrated.",
+    "completion": "Independent review completed; 489 selected regressions passed; navigation and evidence appended; changes remain local."
+  },
+  "source_sha256": {
+    "backend/strategy/confluence/scorer.py": "d0b2bcf8ff1aec7fa4c26bb35070d625677f3f489e3a2a91a82f2d8a7c170b76",
+    "backend/engine/orchestrator.py": "bd226db24ddced1dc5c5f1cf7174d4d245d4e53cc0396d638924dc9bebb919d7",
+    "backend/tests/unit/test_conflict_density.py": "92e145279f8b67ef2e17d2d3ed32c3a917d6a31791ecfc930ff6156434e7dc2d",
+    "backend/tests/integration/test_scoring_direction_handoff.py": "101151f044e693fbbd7c6cc0b05d8f2b37b19cda5235713c25a0c22436a4e0a5",
+    "backend/diagnostics/offline_checks.json": "879fab4e8aa811ca6df967a7bb9d667e18639004eb96edc7038e35944f08a772",
+    "docs/ARCHITECTURE_INDEX.md": "aafe81123fdd628b1847e431789719f70c3122d7e260abff5c67a78a8cd1ef80",
+    "docs/audits/CONFLICT_DENSITY_2026-10-10.md": "cf68856622b87295188d00e2bdf550fdce8a84c083a3c0710e84c5d56fcbdcdf",
+    "docs/audits/conflict_density_2026-10-10/rejections_scan_400.json": "0561c0bc210a80062d9906aa11ac44b8cf6afeb2e3578bba7a808f5b27796913",
+    "docs/audits/conflict_density_2026-10-10/runtime_status.json": "35792e4d0773e62438c759688f7e169ec188aae849ba03c5ea8809a4d5153c80"
+  }
+}

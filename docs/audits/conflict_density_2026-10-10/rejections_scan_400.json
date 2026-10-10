@@ -1,0 +1,74 @@
+{
+  "captured_at": "2026-10-10T16:14:26.4018698Z",
+  "source": "GET /api/paper-trading/status, active paper session 503206fe",
+  "limitation": "Recorded rejection summaries only; full SMC input snapshots were not retained",
+  "rejections": [
+    {
+      "timestamp": "2026-10-10T11:07:59.708552-04:00",
+      "scan_number": 400,
+      "symbol": "SOL/USDT:USDT",
+      "direction": "UNKNOWN",
+      "reason": "3 simultaneous conflict conditions detected | flip LONG blocked by [conflict_density]: 7 simultaneous conflict conditions detected",
+      "conflict_count": 3,
+      "conflict_conditions": [
+        "bullish BOS @ 103.1300 [4H]",
+        "bullish BOS @ 83.9300 [1D]",
+        "bullish OB(A) [15m]"
+      ]
+    },
+    {
+      "timestamp": "2026-10-10T11:07:59.709605-04:00",
+      "scan_number": 400,
+      "symbol": "ETH/USDT:USDT",
+      "direction": "UNKNOWN",
+      "reason": "3 simultaneous conflict conditions detected | flip-retry SKIPPED (quality_override stands)",
+      "conflict_count": 3,
+      "conflict_conditions": [
+        "bearish BOS @ 2682.9600 [15m]",
+        "bearish BOS @ 2661.4100 [1H]",
+        "bearish BOS @ 3378.3300 [1D]"
+      ]
+    },
+    {
+      "timestamp": "2026-10-10T11:07:59.710714-04:00",
+      "scan_number": 400,
+      "symbol": "XRP/USDT:USDT",
+      "direction": "UNKNOWN",
+      "reason": "4 simultaneous conflict conditions detected | flip SHORT blocked by [regime_alignment]: SHORT rejected: regime is strong_up with no confirming CHoCH (mode=stealth_balanced)",
+      "conflict_count": 4,
+      "conflict_conditions": [
+        "bearish BOS @ 1.3864 [15m]",
+        "bearish BOS @ 1.4440 [4H]",
+        "bearish BOS @ 1.7707 [1D]",
+        "bearish OB(B) [15m]"
+      ]
+    },
+    {
+      "timestamp": "2026-10-10T11:07:59.71233-04:00",
+      "scan_number": 400,
+      "symbol": "SPCX/USDT:USDT",
+      "direction": "UNKNOWN",
+      "reason": "3 simultaneous conflict conditions detected | flip SHORT blocked by [conflict_density]: 5 simultaneous conflict conditions detected",
+      "conflict_count": 3,
+      "conflict_conditions": [
+        "bearish BOS @ 144.2900 [4H]",
+        "bearish OB(B) [15m]",
+        "bearish OB(A) [15m]"
+      ]
+    },
+    {
+      "timestamp": "2026-10-10T11:07:59.713411-04:00",
+      "scan_number": 400,
+      "symbol": "ONDO/USDT:USDT",
+      "direction": "UNKNOWN",
+      "reason": "4 simultaneous conflict conditions detected | flip SHORT blocked by [conflict_density]: 3 simultaneous conflict conditions detected",
+      "conflict_count": 4,
+      "conflict_conditions": [
+        "bearish BOS @ 0.4551 [1H]",
+        "bearish BOS @ 0.3643 [4H]",
+        "bearish BOS @ 0.3385 [4H]",
+        "bearish BOS @ 0.4551 [4H]"
+      ]
+    }
+  ]
+}

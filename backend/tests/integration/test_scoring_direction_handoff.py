@@ -92,11 +92,91 @@ def test_scoring_thesis_no_opposite_retry_preserves_same_direction_btc_allowance
 @pytest.mark.parametrize('direction', ['LONG', 'SHORT'])
 def test_scoring_legacy_still_selects_score_winner(handoff, direction):
     h = handoff(direction, policy='legacy')
+    # Either score winner must have its own anchor when its gates are checked.
+    other = 'bearish' if direction == 'LONG' else 'bullish'
+    h.engine.smc_service.detect.return_value.order_blocks.append(ob(other, AS_OF))
     h.run()
     h.planner.assert_called_once()
     ctx = h.planner.call_args.args[0]
     assert ctx.confluence_breakdown is h.other
     assert ctx.metadata['chosen_direction'] == ('SHORT' if direction == 'LONG' else 'LONG')
+
+
+def conflict_handoff(handoff, monkeypatch, direction, opposition, count=4, score=75., tie='bull_majority'):
+    """Real gates+service; hold the preliminary heuristic steady to test handoff."""
+    from dataclasses import replace
+    h = handoff(direction, policy='legacy', score=score)
+    monkeypatch.setattr(h.engine, '_derive_pre_direction', lambda *a: (direction, tie))
+    snap = h.engine.smc_service.detect.return_value
+    other = 'bearish' if direction == 'LONG' else 'bullish'
+    snap.order_blocks.append(ob(other, AS_OF))
+    snap.structural_breaks = [StructuralBreak(tf, 'BOS', 100., AS_OF, True, direction=opposition)
+                              for tf in ['4h', '1h', '15m']]
+    # Distinct zones keep count6 reachable after history/zone deduplication.
+    snap.order_blocks.extend(replace(ob(opposition, AS_OF), low=120.+20*i, high=130.+20*i)
+                             for i in range(count - 4))
+    return h
+
+
+@pytest.mark.parametrize('direction,aligned', [('LONG', 'bullish'), ('SHORT', 'bearish')])
+def test_conflict_density_changed_score_winner_is_revalidated(handoff, monkeypatch, direction, aligned):
+    h = conflict_handoff(handoff, monkeypatch, direction, aligned)
+    _, rejection = h.run()
+    winner = 'SHORT' if direction == 'LONG' else 'LONG'
+    assert not h.planner.called
+    assert [c.kwargs['direction'] for c in h.gates.call_args_list] == [direction, winner]
+    assert rejection['direction'] == winner and rejection['score'] == 80.
+    assert rejection['reason_type'] == 'conflict_density'
+    assert rejection['conflict_count'] == 4  # 3 states plus its opposing entry zone
+    assert len(rejection['conflict_conditions']) == 4
+
+
+@pytest.mark.parametrize('direction,opposed', [('LONG', 'bearish'), ('SHORT', 'bullish')])
+@pytest.mark.parametrize('score,expected_calls,blocked', [(75., 2, False), (90., 3, True)])
+def test_conflict_density_final_check_tracks_admitted_flip_without_retry_loop(
+        handoff, monkeypatch, direction, opposed, score, expected_calls, blocked):
+    h = conflict_handoff(handoff, monkeypatch, direction, opposed, score=score)
+    _, rejection = h.run()
+    assert h.gates.call_count == expected_calls
+    assert h.planner.called == (not blocked)
+    if blocked:
+        assert rejection['direction'] == direction and rejection['reason_type'] == 'conflict_density'
+    else:
+        assert h.planner.call_args.args[0].metadata['chosen_direction'] != direction
+
+
+@pytest.mark.parametrize('direction,opposed,impulse', [('SHORT', 'bearish', 'strong_up'), ('LONG', 'bullish', 'strong_down')])
+@pytest.mark.parametrize('count,tie,proceeds', [(4, 'bull_majority', True), (6, 'bull_majority', False),
+                                               (4, 'quality_override', False)])
+def test_conflict_density_final_check_preserves_btc_boundary_and_quality_guard(
+        handoff, monkeypatch, direction, opposed, impulse, count, tie, proceeds):
+    h = conflict_handoff(handoff, monkeypatch, direction, opposed, count=count, tie=tie)
+    monkeypatch.setattr(h.engine, '_derive_btc_impulse', lambda *a: impulse)
+    _, rejection = h.run()
+    assert h.gates.call_count == 2
+    assert h.planner.called == proceeds
+    if not proceeds:
+        assert rejection['reason_type'] == 'conflict_density'
+        assert rejection['conflict_count'] == count
+
+
+@pytest.mark.parametrize('direction', ['LONG', 'SHORT'])
+def test_conflict_density_final_direction_cannot_bypass_its_other_gates(handoff, direction):
+    h = handoff(direction, policy='legacy')  # The score winner lacks an anchor.
+    _, rejection = h.run()
+    assert not h.planner.called
+    assert rejection['reason_type'] == 'structural_anchor'
+    assert rejection['direction'] != direction
+
+
+@pytest.mark.parametrize('direction,opposed', [('LONG', 'bearish'), ('SHORT', 'bullish')])
+def test_conflict_density_initial_rejection_records_known_direction_and_quality_guard(handoff, monkeypatch, direction, opposed):
+    h = conflict_handoff(handoff, monkeypatch, direction, opposed, tie='quality_override')
+    _, rejection = h.run()
+    h.gates.assert_called_once()
+    assert not h.score_direction.called and not h.planner.called
+    assert rejection['direction'] == direction
+    assert 'quality_override stands' in rejection['reason']
 
 
 @pytest.mark.parametrize('direction', ['LONG', 'SHORT'])

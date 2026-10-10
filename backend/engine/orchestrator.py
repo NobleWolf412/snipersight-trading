@@ -158,6 +158,17 @@ def build_features_breakdown(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _btc_conflict_density_allows(gate, direction, btc_impulse, tie_break):
+    """Preserve the existing conditional BTC allowance at every admission check."""
+    return (
+        gate.gate_name == "conflict_density"
+        and tie_break != "quality_override"
+        and ((btc_impulse == "strong_up" and direction == "LONG")
+             or (btc_impulse == "strong_down" and direction == "SHORT"))
+        and (gate.metadata or {}).get("conflict_count", 0) < 6
+    )
+
+
 class Orchestrator:
     """
     Main pipeline orchestrator.
@@ -1731,6 +1742,7 @@ class Orchestrator:
             _symbol_regime = context.metadata.get("symbol_regime")
             _btc_impulse = self._derive_btc_impulse(context.macro_context, symbol)
             _is_btc = "BTC" in symbol.upper()
+            _admitted_direction = None
 
             if context.smc_snapshot:
                 # For cascade-enabled modes (stealth), Gate 2 (regime alignment)
@@ -1828,6 +1840,7 @@ class Orchestrator:
                             symbol, _pre_dir_tie_break, _pre_dir,
                         )
 
+                _admitted_direction = _pre_dir
                 _gate = run_pre_scoring_gates(
                     smc_snapshot=context.smc_snapshot,
                     config=_session_gate_config,
@@ -1840,9 +1853,9 @@ class Orchestrator:
                 if not _gate.passed:
                     # ── Conflict-density direction flip ──────────────────────────────
                     # When conflict_density fires, the "conflicts" are opposing OBs/BOS
-                    # for the chosen direction.  Those same structures are ALIGNED for
-                    # the opposite direction — e.g. 3 bearish OBs opposing LONG are a
-                    # strong SHORT signal.  Retry with the flip before giving up.
+                    # for the chosen direction. The existing legacy policy retries
+                    # the opposite side through all gates; opposition alone does
+                    # not establish that the other side is a tradeable setup.
                     #
                     # GUARD (2026-05-27, audit Open Item #1): when the direction came
                     # via quality_override, do NOT flip-retry. The quality verdict
@@ -1859,17 +1872,14 @@ class Orchestrator:
                         _flip_dir = "SHORT" if _orig_dir == "LONG" else "LONG"
                         _conflict_count = (_gate.metadata or {}).get("conflict_count", 0)
 
-                        # When BTC macro confirms the original direction, opposing
-                        # structures are counter-trend — BTC momentum routinely
-                        # sweeps through LTF resistance. Raise the conflict
-                        # threshold from 3 to 6 (not a bypass — heavy opposition
-                        # still blocks even with BTC alignment).
-                        _btc_confirms_orig = (
-                            (_btc_impulse == "strong_up" and _orig_dir == "LONG") or
-                            (_btc_impulse == "strong_down" and _orig_dir == "SHORT")
-                        )
+                        # Existing BTC-aligned allowance is preserved, not calibrated
+                        # by this counting repair. The same rule applies if scoring
+                        # subsequently selects a different direction.
                         _btc_raised_threshold = 6
-                        if _btc_confirms_orig and _conflict_count < _btc_raised_threshold:
+                        if _btc_conflict_density_allows(
+                            _gate, _orig_dir, _btc_impulse,
+                            context.metadata.get("pre_dir_tie_break"),
+                        ):
                             logger.info(
                                 "%s: 🟡 CONFLICT_DENSITY (%d conflicts) under BTC-aligned "
                                 "threshold (%d) — BTC %s confirms %s, proceeding to scoring",
@@ -1890,12 +1900,13 @@ class Orchestrator:
                             )
                             if _flip_gate.passed:
                                 logger.info(
-                                    "%s: 🔄 CONFLICT→FLIP %s→%s — %d opposing OBs are "
-                                    "aligned %s signals, continuing",
+                                    "%s: 🔄 CONFLICT→FLIP %s→%s — %d opposing structures; "
+                                    "%s passed gates, continuing to scoring",
                                     symbol, _orig_dir, _flip_dir,
                                     _conflict_count, _flip_dir,
                                 )
                                 context.metadata["chosen_direction"] = _flip_dir
+                                _admitted_direction = _flip_dir
                                 context.metadata["conflict_density_flip"] = {
                                     "from": _orig_dir, "to": _flip_dir,
                                     "conflict_count": _conflict_count,
@@ -1979,7 +1990,7 @@ class Orchestrator:
                         )
                         _rejection_info: dict = {
                             "symbol": symbol,
-                            "direction": context.metadata.get("chosen_direction") or "UNKNOWN",
+                            "direction": _pre_dir,
                             "reason_type": _gate.gate_name,
                             "reason": _gate.reason + _flip_detail,
                             "score": 0.0,
@@ -2022,6 +2033,41 @@ class Orchestrator:
                 context.metadata["decision"] = decision
                 if decision.legacy_str:
                     context.metadata["chosen_direction"] = decision.legacy_str
+
+            # The score winner can differ from the side actually admitted above,
+            # including after a successful flip. Validate that winner exactly once;
+            # another flip here would invalidate the score/plan direction again.
+            _final_direction = context.metadata.get("chosen_direction")
+            if (_admitted_direction is not None
+                    and _final_direction in ("LONG", "SHORT")
+                    and _final_direction != _admitted_direction):
+                _final_gate = run_pre_scoring_gates(
+                    smc_snapshot=context.smc_snapshot,
+                    config=_session_gate_config,
+                    direction=_final_direction,
+                    regime=_symbol_regime,
+                    btc_impulse=_btc_impulse,
+                    is_btc=_is_btc,
+                    cycle_context=cycle_context,
+                )
+                if not _final_gate.passed and not _btc_conflict_density_allows(
+                    _final_gate, _final_direction, _btc_impulse,
+                    context.metadata.get("pre_dir_tie_break"),
+                ):
+                    _final_score = context.confluence_breakdown.total_score
+                    self.diagnostics["confluence_rejections"].append({
+                        "symbol": symbol, "trace_id": trace_id, "score": _final_score,
+                        "threshold": self.config.min_confluence_score, "gate": _final_gate.gate_name,
+                    })
+                    return None, {
+                        "symbol": symbol, "direction": _final_direction,
+                        "reason_type": _final_gate.gate_name,
+                        "reason": f"Final {_final_direction} after scoring: {_final_gate.reason}",
+                        "score": _final_score, "threshold": self.config.min_confluence_score,
+                        **{k: v for k, v in (_final_gate.metadata or {}).items()
+                           if k in {"conflict_count", "conflict_conditions", "btc_impulse",
+                                    "regime_trend", "alt_local_trend"}},
+                    }
 
         except Exception as e:
             import traceback as _tb

@@ -25,7 +25,8 @@ def upper_scale(value: float, attainable: float) -> float:
 
 def allocate_evidence(factors, profile, *, available, structural_quality,
                       ordered_sequence, context_direction_score: Optional[float],
-                      required_data, macro_context_adjustment=0., proximity=None):
+                      required_data, macro_context_adjustment=0., proximity=None,
+                      structural_detail: Optional[str] = None):
     """Return contribution factors and auditable eligibility/scale metadata."""
     raw = {f.name: f.score for f in factors}
     def value(name, ceiling=100.):
@@ -78,7 +79,8 @@ def allocate_evidence(factors, profile, *, available, structural_quality,
         missing.append('Qualified order block or fair value gap')
     # A strong candle or closes beyond an old level cannot invent a real shift.
     if structural_quality < 50.:
-        missing.append('Confirmed direction-aligned structural shift on an allowed timeframe')
+        reason = 'Confirmed direction-aligned structural shift on an allowed timeframe'
+        missing.append(reason + (f' — {structural_detail}' if structural_detail else ''))
     if not required_data:
         missing.append('Required price, ATR and indicator data')
     distance = proximity.get('proximity_atr')

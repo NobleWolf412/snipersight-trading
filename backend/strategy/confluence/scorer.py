@@ -106,6 +106,95 @@ class GateResult:
     metadata: dict = _field(default_factory=dict)
 
 
+def _conflict_density_gate(smc_snapshot, config, direction, relevant_timeframes=None):
+    """Count current structural states and distinct opposing zones.
+
+    This is an evidence count, not independent statistical votes. Mode freshness
+    remains owned by SMC detection; no age or ticker-crossing rule is added here.
+    """
+    profile = getattr(config, "profile", "stealth_balanced").lower()
+    if relevant_timeframes is None:
+        relevant_timeframes = (getattr(config, "structure_timeframes", ()) or
+                               get_mode(scoring_mode(profile)).structure_timeframes)
+    scope = {tf.lower() for tf in relevant_timeframes}
+    opposing = "bearish" if direction.lower() in ("long", "bullish") else "bullish"
+    conditions = []
+
+    # Select state BEFORE filtering direction/type. A later CHoCH or aligned BOS
+    # supersedes old opposition; repeated BOS on one chart are not extra states.
+    latest = {}
+    for event in smc_snapshot.structural_breaks:
+        tf = event.timeframe.lower()
+        if tf not in scope or event.break_type.upper() not in ("BOS", "CHOCH"):
+            continue
+        stamp = event.timestamp
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        epoch = stamp.timestamp()
+        if not math.isfinite(epoch):
+            raise ValueError("Conflict density requires a finite structural timestamp")
+        previous = latest.get(tf)
+        if previous is None or epoch > previous[0]:
+            latest[tf] = (epoch, [event])
+        elif epoch == previous[0]:
+            latest[tf][1].append(event)
+
+    for tf, (_, events) in sorted(latest.items()):
+        opposing_bos = [e for e in events if e.direction == opposing and e.break_type.upper() == "BOS"]
+        if not opposing_bos:
+            continue
+        # Equal-time contradictory inputs never clear opposition by list order.
+        levels = ", ".join(f"{level:g}" for level in sorted({e.level for e in opposing_bos}))
+        stamp = datetime.fromtimestamp(latest[tf][0], timezone.utc).isoformat()
+        ambiguous = len({(e.direction, e.break_type.upper()) for e in events}) > 1
+        conditions.append(f"{opposing} BOS @ {levels} [{tf}] at {stamp}"
+                          + (" (mixed latest events)" if ambiguous else ""))
+    state_count = len(conditions)
+
+    # Detector families and nested timeframes may describe the same price zone.
+    # Use the existing >50% overlap boundary symmetrically. Every member must
+    # overlap every other member: a bridging zone cannot join disjoint obstacles.
+    zones = [ob for ob in smc_snapshot.order_blocks
+             if ob.timeframe.lower() in scope and ob.direction == opposing
+             and ob.grade in ("A", "B") and not ob.invalidated
+             and not ob.breaker and ob.mitigation_level < 1.]
+    zones.sort(key=lambda ob: (ob.low, ob.high, ob.timeframe.lower(), ob.grade))
+
+    def same_zone(a, b):
+        overlap = min(a.high, b.high) - max(a.low, b.low)
+        return overlap > .5 * min(a.high - a.low, b.high - b.low)
+
+    groups = []
+    for ob in zones:
+        group = next((g for g in groups if all(same_zone(ob, other) for other in g)), None)
+        if group is None:
+            groups.append([ob])
+        else:
+            group.append(ob)
+    for group in groups:
+        low, high = min(ob.low for ob in group), max(ob.high for ob in group)
+        tfs = ", ".join(sorted({ob.timeframe.lower() for ob in group}))
+        grades = "/".join(sorted({ob.grade for ob in group}))
+        conditions.append(f"{opposing} OB({grades}) @ {low:g}–{high:g} [{tfs}]")
+
+    # Preserve existing numerical limits; corrected units still need paper
+    # calibration. A BOS state and an OB zone remain separate evidence types.
+    threshold = 5 if profile in ("overwatch", "macro_surveillance") else 3
+    count = len(conditions)
+    metadata = {
+        "conflict_count": count, "conflict_conditions": conditions,
+        "conflict_threshold": threshold, "conflict_timeframes": sorted(scope),
+        "conflict_bos_states": state_count, "conflict_ob_zones": len(groups),
+        "conflict_policy": "current-structure-v1",
+    }
+    if count >= threshold:
+        return GateResult(False, "conflict_density",
+                          f"{count} current conflicts (threshold {threshold}): "
+                          f"{state_count} opposing timeframe states + {len(groups)} distinct OB zones",
+                          metadata)
+    return GateResult(passed=True, metadata=metadata)
+
+
 def run_pre_scoring_gates(
     smc_snapshot: "SMCSnapshot",
     config: "ScanConfig",
@@ -129,7 +218,8 @@ def run_pre_scoring_gates(
         relevant_timeframes: When provided, conflict_density only counts structures
             from these timeframes. Allows per-scale filtering so scalp trades are not
             blocked by HTF structure irrelevant to their trade duration. When None,
-            all timeframes are counted (current default behavior).
+            the effective config's structure_timeframes (mode fallback) are used.
+            An explicit empty set counts no structure in this gate.
     """
     profile = getattr(config, "profile", "stealth_balanced").lower()
     norm_dir = direction.lower()
@@ -385,89 +475,7 @@ def run_pre_scoring_gates(
                 )
 
     # ── Gate 4: Conflict Density (ALL modes) ──────────────────────────────────
-    # Count active conflict signals (opposing structural breaks and OBs).
-    # Build a human-readable list of each condition so the UI can surface
-    # exactly which structures are causing the conflict, not just the count.
-    #
-    # IMPORTANT: Only BOS (Break of Structure) counts as a conflict.
-    # CHoCH (Change of Character) is a REVERSAL MARKER — it shows where the
-    # prior trend already flipped. Counting historical CHoCH patterns as
-    # "opposing active conditions" is wrong because:
-    #   1. A bearish CHoCH may be what CREATED the long opportunity (sweep +
-    #      CHoCH + OB retest is a textbook SMC long setup).
-    #   2. CHoCH accumulates across TFs — overwatch's weekly/daily data will
-    #      always have several from prior swings, drowning valid setups.
-    #   3. Gate 2 (regime alignment) already handles CHoCH for counter-trend
-    #      logic; double-penalising here is redundant.
-    # BOS confirms trend CONTINUATION in the opposing direction — that is
-    # genuinely a reason to question a trade and belongs in this gate.
-    conflict_count = 0
-    conflict_conditions: list = []
-
-    for sb in smc_snapshot.structural_breaks:
-        sb_dir = getattr(sb, "direction", "bullish")
-        break_type = getattr(sb, "break_type", "BOS").upper()
-
-        # Skip CHoCH — reversal markers, not continuation signals
-        if break_type == "CHOCH":
-            continue
-
-        # Skip structures outside the trade's relevant timeframes when scoped
-        tf = getattr(sb, "timeframe", None)
-        if relevant_timeframes and tf and tf.lower() not in relevant_timeframes:
-            continue
-
-        is_opposing = (is_long and sb_dir == "bearish") or (not is_long and sb_dir == "bullish")
-        if is_opposing:
-            conflict_count += 1
-            level = getattr(sb, "level", None) or getattr(sb, "price_level", None)
-            label = f"{sb_dir} {break_type}"
-            if level is not None:
-                label += f" @ {float(level):.4f}"
-            if tf:
-                label += f" [{tf}]"
-            conflict_conditions.append(label)
-
-    for ob in smc_snapshot.order_blocks:
-        if ob.direction != ob_direction and not ob.invalidated and ob.grade in ("A", "B"):
-            # Skip structures outside the trade's relevant timeframes when scoped
-            tf = getattr(ob, "timeframe", None)
-            if relevant_timeframes and tf and tf.lower() not in relevant_timeframes:
-                continue
-            conflict_count += 1
-            tf = getattr(ob, "timeframe", None)
-            top = getattr(ob, "top", None)
-            bot = getattr(ob, "bottom", None)
-            level_str = ""
-            if top is not None and bot is not None:
-                level_str = f" @ {float(bot):.4f}–{float(top):.4f}"
-            elif top is not None:
-                level_str = f" @ {float(top):.4f}"
-            elif bot is not None:
-                level_str = f" @ {float(bot):.4f}"
-            label = f"{ob.direction} OB({ob.grade}){level_str}"
-            if tf:
-                label += f" [{tf}]"
-            conflict_conditions.append(label)
-
-    # Raise the threshold for overwatch/macro modes: they use weekly/daily data
-    # which naturally produces more historical OBs and structural breaks. The
-    # standard threshold of 3 fires on every legitimate swing setup and
-    # produces nothing but rejections. 5 is still conservative for HTF scans.
-    _conflict_threshold = 5 if profile in ("overwatch", "macro_surveillance") else 3
-
-    if conflict_count >= _conflict_threshold:
-        return GateResult(
-            passed=False,
-            gate_name="conflict_density",
-            reason=f"{conflict_count} simultaneous conflict conditions detected",
-            metadata={
-                "conflict_count": conflict_count,
-                "conflict_conditions": conflict_conditions,
-            },
-        )
-
-    return GateResult(passed=True)
+    return _conflict_density_gate(smc_snapshot, config, direction, relevant_timeframes)
 
 
 # ==============================================================================
@@ -3348,6 +3356,14 @@ def calculate_confluence_score(
               and b.timeframe.lower() in {tf.lower() for tf in allowed_tfs}]
     latest_shift = max(shifts,key=lambda b:b.timestamp) if shifts else None
     structural_quality = 100.*_get_grade_weight(latest_shift.grade) if latest_shift else 0.
+    if latest_shift:
+        structural_detail = (
+            f'latest aligned {latest_shift.timeframe.lower()} {latest_shift.break_type} '
+            f'at {latest_shift.timestamp.isoformat()} is grade {latest_shift.grade} '
+            f'({structural_quality:g}/100; requires 50/100)')
+    else:
+        structural_detail = (f'no detected {direction} BOS/CHoCH '
+                             f'(allowed: {", ".join(tf.lower() for tf in allowed_tfs)})')
     sequence = _institutional_sequence_evidence(smc_snapshot,direction,allowed_timeframes=allowed_tfs)
     ordered_sequence = sequence['ordered'] and sequence['sweep_confirmation'] >= 1
 
@@ -3390,7 +3406,8 @@ def calculate_confluence_score(
     factors, evidence_meta = allocate_evidence(factors,current_profile,available=available,
         structural_quality=structural_quality,ordered_sequence=ordered_sequence,
         context_direction_score=context_direction_score,required_data=required_data,
-        macro_context_adjustment=macro_adj,proximity=prox_res)
+        macro_context_adjustment=macro_adj,proximity=prox_res,
+        structural_detail=structural_detail)
     weighted_score = sum(f.score*f.weight for f in factors)
     quality_factors = evidence_meta['quality_family_count']
     active_factors = sum(f.weight > 0 and f.score > 0 for f in factors)

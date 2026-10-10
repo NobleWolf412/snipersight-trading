@@ -1,0 +1,16 @@
+{
+  "captured_at": "2026-10-10T16:25:25.3547776Z",
+  "session_id": "503206fe",
+  "status": "running",
+  "active_mode": "stealth",
+  "last_scan_at": "2026-10-10T12:25:19.696957-04:00",
+  "reason_counts": [
+    {
+      "Name": "low_confluence",
+      "Count": 14
+    }
+  ],
+  "changed_reason_seen": false,
+  "limitation": "Read-only status observation; no restart or whole-process version confirmation.",
+  "reason_count_scope": "Fourteen most recent retained log entries, not necessarily one scan; the runtime log is deduplicated."
+}

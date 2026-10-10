@@ -5,6 +5,7 @@
     "backend/tests/unit/test_dominance_workflow.py",
     "backend/tests/unit/test_mode_regime_policy.py",
     "backend/tests/unit/test_score_policy_balance.py",
+    "backend/tests/unit/test_conflict_density.py",
     "backend/tests/unit/test_evidence_accounting.py",
     "backend/tests/integration/test_scoring_direction_handoff.py",
     "backend/tests/unit/test_sensitivity_contract.py",

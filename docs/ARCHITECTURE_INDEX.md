@@ -75,6 +75,22 @@ desktop/mobile chart checks, 81 frontend tests and independent source review.
 
 ## Entry points and state owners
 
+Structural rejection follow-up (2026-10-10): the
+[detector correction](audits/STRUCTURAL_GATE_2026-10-10.md) makes four-swing
+BOS/CHoCH check both latest boundaries, classify from current geometry and consume
+each broken pivot once before volume admission. ATR grading uses explicit units;
+rejection text distinguishes missing evidence from the latest weak event. Numeric
+gates and family budgets are unchanged. Captured-feed checks and remaining
+confirmation-time limitations are recorded in the linked evidence.
+
+Conflict-density follow-up (2026-10-10): the
+[current-state projection](audits/CONFLICT_DENSITY_2026-10-10.md) replaces historical
+BOS counts with at most one opposing state per mode-scoped timeframe and groups
+duplicate usable OB zones. Initial, flip and cascade checks share that projection;
+the orchestrator also validates a changed final score winner before planning.
+The existing numeric limits remain uncalibrated; count semantics and verification
+boundaries are recorded separately from the preceding structural detector fix.
+
 | Area | Implementation / key symbols | Responsibility and boundary |
 |---|---|---|
 | Development startup | [package.json](../package.json), [Vite config](../vite.config.ts), `backend.api_server:app` | `npm run dev:all`: API **8001**, UI **5000**. Other scripts/overrides may differ. API import loads environment and constructs adapters/stores; use guarded verification. |
@@ -396,6 +412,7 @@ This append supersedes the compact phone selector in the preceding appearance ch
 ## Paper setup flow and optional dialog correction, 2026-10-10
 
 [Paper setup](../src/pages/training/RangeBot.tsx) now exposes a strategy/risk/execution/review path with scroll/focus navigation and visible essential controls in [RangeBotViews](../src/pages/training/RangeBotViews.tsx). [Live setup](../src/pages/BotSetup.tsx) also shows strategy and execution controls directly. [DialogPanel](../src/components/hud/DialogPanel.tsx) owns only optional display state through the shared native Modal: help, fill-cost compatibility controls, liquidity settings and session diagnostics. Rejection causes stay visible while samples, gauntlet signal rows and completed-paper-trade detail open in modals. Replay first-load inputs stay visible; replacement tape inputs use a modal with the existing serialized controller. Bot/scanner configuration, session, replay, feed, financial and transport owners and command payloads are unchanged. [Evidence](audits/PAPER_SETUP_FLOW_2026-10-10.json) records compiler,183 frontend tests, build and bounded native/independent responsive and keyboard checks. Loaded replay replacement/cleanup remains source-only; score stays315 and broader A08/A09/Level07 remain partial.
+
 
 ## Paper-session beacon restoration, 2026-10-10
 

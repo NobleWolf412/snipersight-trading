@@ -22282,5 +22282,17 @@
     "change": "Scanner chart dialog with saved plan overlays, explicit market provenance and responsive cards; paper bot uninterrupted.",
     "frontend_tests_passed": 81,
     "runtime": "One-target manual LIT scan produced one setup; real desktop/phone-size candles and level overlays checked."
+  },
+  "structural_gate_2026_10_10": {
+    "evidence": "docs/audits/STRUCTURAL_GATE_2026-10-10.json",
+    "report": "docs/audits/STRUCTURAL_GATE_2026-10-10.md",
+    "change": "Corrected four-swing boundary/state suppression, repeated pivot emissions and ATR grading; made evidence rejection reasons specific without changing score thresholds.",
+    "limits": "Captured BTC feed is not the original full scan; confirmation-time/look-ahead and structural freshness remain open."
+  },
+  "conflict_density_2026_10_10": {
+    "evidence": "docs/audits/CONFLICT_DENSITY_2026-10-10.json",
+    "report": "docs/audits/CONFLICT_DENSITY_2026-10-10.md",
+    "change": "Mode-scoped current structural states, distinct usable OB zones and final score-winner gate revalidation; existing numerical limits preserved.",
+    "limits": "Historical rejection lists are incomplete detector inputs. Count selectivity changed and needs paper calibration; structural expiry and confirmation timing remain unverified."
   }
 }

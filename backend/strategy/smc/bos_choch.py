@@ -139,23 +139,11 @@ def _detect_bos_choch_pattern(
 
     Swings are unpacked CHRONOLOGICALLY (oldest -> newest). Within each shape the
     BOS and CHoCH structure preconditions are mutually exclusive:
-    - [-1, 1, -1, 1] = [L1, H1, L2, H2] (Low-High-Low-High):
-        * Bullish BOS:   ascending structure (L2 > L1, H2 > H1) + close > H2
-        * Bullish CHoCH: prior BEARISH structure (H2 < H1 lower high, L2 < L1
-          lower low) + close > H2 (break above the most recent lower high)
-    - [1, -1, 1, -1] = [H1, L1, H2, L2] (High-Low-High-Low):
-        * Bearish BOS:   descending structure (H2 < H1, L2 < L1) + close < L2
-        * Bearish CHoCH: prior BULLISH structure (H2 > H1 higher high, L2 > L1
-          higher low) + close < L2 (break below the most recent higher low)
-
-    Fixed 2026-06-11 (Phase 3A): the old CHoCH conditions tested inverted structure
-    relationships and returned the OLDER swing's level/timestamp (index -3). Both
-    CHoCH branches now require genuine opposite-direction prior structure and break
-    the MOST RECENT swing (index -1).
-
-    KNOWN LIMITATION (flagged, not fixed): bullish CHoCH is only detectable in the
-    H-ending shape and bearish CHoCH only in the L-ending shape. A CHoCH occurring
-    before the final swing of the alternate shape confirms is not covered.
+    Either alternating shape supplies two highs and two lows. Check both latest
+    boundaries, regardless of whether the newest pivot is a high or low. A close
+    beyond H2/L2 is a continuation of agreed ascending/descending geometry or a
+    reversal of the opposite geometry. Mixed geometry is not a structural signal.
+    Return the actual broken pivot's timestamp, which need not be the last pivot.
 
     Args:
         highs_lows_order: List of 1 (high) or -1 (low)
@@ -180,33 +168,23 @@ def _detect_bos_choch_pattern(
     last_4_levels = level_order[-4:]
     last_4_indices = index_order[-4:]
 
-    # === L-H-L-H SHAPE: [-1, 1, -1, 1] — chronological [L1, H1, L2, H2] ===
     if last_4_types == [-1, 1, -1, 1]:
         l1, h1, l2, h2 = last_4_levels
-
-        # Bullish BOS: ascending structure (higher low, higher high, non-overlapping),
-        # close breaks the most recent higher high.
-        if current_close > h2 and l1 < l2 < h1 < h2:
-            return "BOS", "bullish", h2, last_4_indices[-1]
-
-        # Bullish CHoCH: prior bearish structure (lower high AND lower low),
-        # close breaks above the most recent lower high.
-        if current_close > h2 and h2 < h1 and l2 < l1:
-            return "CHoCH", "bullish", h2, last_4_indices[-1]
-
-    # === H-L-H-L SHAPE: [1, -1, 1, -1] — chronological [H1, L1, H2, L2] ===
-    if last_4_types == [1, -1, 1, -1]:
+        high_timestamp, low_timestamp = last_4_indices[-1], last_4_indices[-2]
+    elif last_4_types == [1, -1, 1, -1]:
         h1, l1, h2, l2 = last_4_levels
+        high_timestamp, low_timestamp = last_4_indices[-2], last_4_indices[-1]
+    else:
+        return None, None, 0.0, None
 
-        # Bearish BOS: descending structure (lower high, lower low, non-overlapping),
-        # close breaks the most recent lower low.
-        if current_close < l2 and h1 > h2 > l1 > l2:
-            return "BOS", "bearish", l2, last_4_indices[-1]
-
-        # Bearish CHoCH: prior bullish structure (higher high AND higher low),
-        # close breaks below the most recent higher low.
-        if current_close < l2 and h2 > h1 and l2 > l1:
-            return "CHoCH", "bearish", l2, last_4_indices[-1]
+    if current_close > h2 and l1 < l2 < h1 < h2:
+        return "BOS", "bullish", h2, high_timestamp
+    if current_close > h2 and h2 < h1 and l2 < l1:
+        return "CHoCH", "bullish", h2, high_timestamp
+    if current_close < l2 and h1 > h2 > l1 > l2:
+        return "BOS", "bearish", l2, low_timestamp
+    if current_close < l2 and h2 > h1 and l2 > l1:
+        return "CHoCH", "bearish", l2, low_timestamp
 
     return None, None, 0.0, None
 
@@ -324,6 +302,7 @@ def detect_structural_breaks(
 
     # Hoist mode volume requirement — constant for the entire scan, no need to re-lookup per candle.
     vol_req = MODE_VOLUME_REQUIREMENTS.get(mode_profile) if mode_profile else None
+    consumed_pivots = set()
 
     for i in range(swing_lookback * 2, len(df)):
         current_idx = df.index[i]
@@ -373,42 +352,58 @@ def detect_structural_breaks(
         # 4-swing structural pattern check.
         # Called once per candle; result drives detection for 4-swing modes.
         # bisect_right into the pre-sorted index gives the visible slice in O(log n).
-        _4swing_break_type, _4swing_direction, _4swing_level = None, None, 0.0
-        if use_4swing and len(_idx_order) >= 4:
+        if use_4swing:
             pos = bisect.bisect_right(_idx_order, current_idx)
-            if pos >= 4:
-                _4swing_break_type, _4swing_direction, _4swing_level, _ = _detect_bos_choch_pattern(
-                    _hl_order[:pos], _level_order[:pos], _idx_order[:pos],
-                    current_close, current_high, current_low,
-                )
+            if pos < 4:
+                continue
+            kind, direction, level, pivot_time = _detect_bos_choch_pattern(
+                _hl_order[:pos], _level_order[:pos], _idx_order[:pos],
+                current_close, current_high, current_low,
+            )
+            if kind is None or (direction, pivot_time) in consumed_pivots:
+                continue
+            # The latest four pivots establish the prior trend themselves. The
+            # simple detector's older seed cannot veto their BOS/CHoCH result.
+            # A broken pivot is consumed even when its first break fails volume;
+            # a later close cannot manufacture another break or upgrade its grade.
+            consumed_pivots.add((direction, pivot_time))
+            distance = abs(current_close - level)
+            break_atr = distance / atr_value if atr_value > 0 else 0.
+            grade = (grade_pattern(value=distance, atr=atr_value,
+                                   a_threshold=grade_a_threshold, b_threshold=grade_b_threshold)
+                     if atr_value > 0 else "C")
+            if volume_confirmed and volume_ratio >= 2.0:
+                grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
+            if (vol_req and vol_req.get("require_volume") and kind in vol_req.get("apply_to", [])
+                    and volume_ratio < vol_req["min_volume_ratio"]):
+                logger.debug("%s (%s) rejected — volume %.2fx < %.2fx required (%s).",
+                             kind, direction, volume_ratio, vol_req["min_volume_ratio"], mode_profile)
+                continue
+            prior_trend = ("uptrend" if direction == "bullish" else "downtrend")
+            if kind == "CHoCH":
+                prior_trend = "downtrend" if direction == "bullish" else "uptrend"
+            htf_aligned = (_check_bos_htf_alignment(prior_trend, computed_htf_trend) if kind == "BOS"
+                           else _check_choch_htf_alignment(prior_trend, computed_htf_trend, cycle_context))
+            structural_breaks.append(StructuralBreak(
+                timeframe=inferred_tf, break_type=kind, direction=direction,
+                level=level, timestamp=current_idx.to_pydatetime(),
+                htf_aligned=htf_aligned, grade=grade, break_distance_atr=break_atr,
+            ))
+            continue
 
         # ─── Helpers to resolve the detection condition and broken level per mode ────
-        # For 4-swing modes: pattern result IS the detection — no simple price check needed.
-        # For simple modes: state-machine price check as before.
-        # In both cases a shared body handles grade/volume/HTF/emit below.
+        # Simple modes retain their state-machine price checks and trend updates.
         def _bos_triggered(direction: str) -> tuple:
             """Returns (fired: bool, level: float, break_dist: float)"""
-            if use_4swing:
-                if _4swing_break_type == "BOS" and _4swing_direction == direction:
-                    dist = abs(current_close - _4swing_level)
-                    return True, _4swing_level, dist
-                return False, 0.0, 0.0
-            else:
-                ref = last_swing_high if direction == "bullish" else last_swing_low
-                dist = (current_close - ref) if direction == "bullish" else (ref - current_close)
-                return dist > min_break, ref, dist
+            ref = last_swing_high if direction == "bullish" else last_swing_low
+            dist = (current_close - ref) if direction == "bullish" else (ref - current_close)
+            return dist > min_break, ref, dist
 
         def _choch_triggered(direction: str) -> tuple:
             """Returns (fired: bool, level: float, break_dist: float)"""
-            if use_4swing:
-                if _4swing_break_type == "CHoCH" and _4swing_direction == direction:
-                    dist = abs(current_close - _4swing_level)
-                    return True, _4swing_level, dist
-                return False, 0.0, 0.0
-            else:
-                ref = last_swing_low if direction == "bearish" else last_swing_high
-                dist = (ref - current_close) if direction == "bearish" else (current_close - ref)
-                return dist > min_break, ref, dist
+            ref = last_swing_low if direction == "bearish" else last_swing_high
+            dist = (ref - current_close) if direction == "bearish" else (current_close - ref)
+            return dist > min_break, ref, dist
         # ─────────────────────────────────────────────────────────────────────────────
 
         # Check for breaks in uptrend
@@ -417,7 +412,9 @@ def detect_structural_breaks(
             _fired, _level, _dist = _bos_triggered("bullish")
             if _fired:
                 break_atr = _dist / atr_value if atr_value > 0 else 0.0
-                grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
+                grade = (grade_pattern(value=_dist, atr=atr_value,
+                                       a_threshold=grade_a_threshold, b_threshold=grade_b_threshold)
+                         if atr_value > 0 else "C")
                 if volume_confirmed and volume_ratio >= 2.0:
                     grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_bos_htf_alignment("uptrend", computed_htf_trend)
@@ -437,7 +434,7 @@ def detect_structural_breaks(
                     structural_breaks.append(StructuralBreak(
                         timeframe=_infer_timeframe(df), break_type="BOS", direction="bullish",
                         level=_level, timestamp=current_idx.to_pydatetime(),
-                        htf_aligned=htf_aligned, grade=grade,
+                        htf_aligned=htf_aligned, grade=grade, break_distance_atr=break_atr,
                     ))
                 # CRITICAL: swing ref advances regardless of signal gate — otherwise the
                 # same stale level re-fires on every subsequent candle.
@@ -447,7 +444,9 @@ def detect_structural_breaks(
             _fired, _level, _dist = _choch_triggered("bearish")
             if _fired:
                 break_atr = _dist / atr_value if atr_value > 0 else 0.0
-                grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
+                grade = (grade_pattern(value=_dist, atr=atr_value,
+                                       a_threshold=grade_a_threshold, b_threshold=grade_b_threshold)
+                         if atr_value > 0 else "C")
                 if volume_confirmed and volume_ratio >= 2.0:
                     grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_choch_htf_alignment("uptrend", computed_htf_trend, cycle_context)
@@ -464,7 +463,7 @@ def detect_structural_breaks(
                     structural_breaks.append(StructuralBreak(
                         timeframe=_infer_timeframe(df), break_type="CHoCH", direction="bearish",
                         level=_level, timestamp=current_idx.to_pydatetime(),
-                        htf_aligned=htf_aligned, grade=grade,
+                        htf_aligned=htf_aligned, grade=grade, break_distance_atr=break_atr,
                     ))
                 # CRITICAL: trend flip is unconditional — price broke structure regardless of signal gate
                 current_trend = "downtrend"
@@ -476,7 +475,9 @@ def detect_structural_breaks(
             _fired, _level, _dist = _bos_triggered("bearish")
             if _fired:
                 break_atr = _dist / atr_value if atr_value > 0 else 0.0
-                grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
+                grade = (grade_pattern(value=_dist, atr=atr_value,
+                                       a_threshold=grade_a_threshold, b_threshold=grade_b_threshold)
+                         if atr_value > 0 else "C")
                 if volume_confirmed and volume_ratio >= 2.0:
                     grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_bos_htf_alignment("downtrend", computed_htf_trend)
@@ -495,7 +496,7 @@ def detect_structural_breaks(
                     structural_breaks.append(StructuralBreak(
                         timeframe=_infer_timeframe(df), break_type="BOS", direction="bearish",
                         level=_level, timestamp=current_idx.to_pydatetime(),
-                        htf_aligned=htf_aligned, grade=grade,
+                        htf_aligned=htf_aligned, grade=grade, break_distance_atr=break_atr,
                     ))
                 # CRITICAL: swing ref advances regardless of signal gate — otherwise the
                 # same stale level re-fires on every subsequent candle.
@@ -505,7 +506,9 @@ def detect_structural_breaks(
             _fired, _level, _dist = _choch_triggered("bullish")
             if _fired:
                 break_atr = _dist / atr_value if atr_value > 0 else 0.0
-                grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
+                grade = (grade_pattern(value=_dist, atr=atr_value,
+                                       a_threshold=grade_a_threshold, b_threshold=grade_b_threshold)
+                         if atr_value > 0 else "C")
                 if volume_confirmed and volume_ratio >= 2.0:
                     grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
 
@@ -535,6 +538,7 @@ def detect_structural_breaks(
                         timestamp=current_idx.to_pydatetime(),
                         htf_aligned=htf_aligned,
                         grade=grade,
+                        break_distance_atr=break_atr,
                     ))
 
                 # CRITICAL: Trend flip and swing update execute regardless of volume filter.
@@ -548,37 +552,20 @@ def detect_structural_breaks(
         # classify the break as BOS (continuation) vs CHoCH (reversal), and defaulting
         # one would be a silent directional bias.
         elif current_trend == "ranging":
-            if use_4swing:
-                if _4swing_break_type is not None:
-                    current_trend = (
-                        "uptrend" if _4swing_direction == "bullish" else "downtrend"
-                    )
-                    if _4swing_direction == "bullish":
-                        last_swing_high = current_high
-                    else:
-                        last_swing_low = current_low
-                    logger.info(
-                        "Initial trend RANGING resolved to %s at %s (4swing %s) — "
-                        "establishing break not emitted",
-                        current_trend, current_idx, _4swing_break_type,
-                    )
-            else:
-                if current_close - last_swing_high > min_break:
-                    current_trend = "uptrend"
-                    last_swing_high = current_high
-                    logger.info(
-                        "Initial trend RANGING resolved to uptrend at %s — "
-                        "establishing break not emitted",
-                        current_idx,
-                    )
-                elif last_swing_low - current_close > min_break:
-                    current_trend = "downtrend"
-                    last_swing_low = current_low
-                    logger.info(
-                        "Initial trend RANGING resolved to downtrend at %s — "
-                        "establishing break not emitted",
-                        current_idx,
-                    )
+            if current_close - last_swing_high > min_break:
+                current_trend = "uptrend"
+                last_swing_high = current_high
+                logger.info(
+                    "Initial trend RANGING resolved to uptrend at %s — "
+                    "establishing break not emitted", current_idx,
+                )
+            elif last_swing_low - current_close > min_break:
+                current_trend = "downtrend"
+                last_swing_low = current_low
+                logger.info(
+                    "Initial trend RANGING resolved to downtrend at %s — "
+                    "establishing break not emitted", current_idx,
+                )
 
     return structural_breaks
 

@@ -1,0 +1,334 @@
+{
+  "date": "2026-10-10",
+  "status": "verified_local_changes",
+  "base_commit": "f5f05deaaf99c4abbba5903249bf491e4677e890",
+  "scope": "Structural rejection diagnosis and bounded detector/grading correction. No score/volume threshold changes.",
+  "reported_scan": {
+    "timestamp_utc": "2026-10-10T14:25:13+00:00",
+    "session": "503206fe",
+    "scanned": 14,
+    "activity_counts": {
+      "evidence_requirements": 13,
+      "conflict_density": 1
+    },
+    "pasted_evidence_rows_above_numeric_gate": 11,
+    "persisted_examples": {
+      "ETH": {
+        "score": 69.0,
+        "confirmation_points": 15.0,
+        "source": "Multi-Candle Confirmation",
+        "evidence_eligible": false
+      },
+      "BTC": {
+        "score": 77.2,
+        "confirmation_points": 15.0,
+        "source": "Multi-Candle Confirmation",
+        "evidence_eligible": false
+      }
+    },
+    "limitation": "Persisted signal JSONL contains ETH/BTC/SPCX at this timestamp; other symbol details come from the user table and activity aggregate, not invented raw break snapshots."
+  },
+  "source_sha256": {
+    "backend/strategy/smc/bos_choch.py": "571be13cd76798a90337cfdb514570920f626ae578f593b52dc605ba11a10e1a",
+    "backend/strategy/confluence/scorer.py": "e16e62773f8d031899eeb707026ae746ce586c67642e78d50894d492295369e0",
+    "backend/strategy/confluence/evidence_policy.py": "b1fb2d9585b61829ae5f9c5b7e459013476ed5fcbaa9962aa8183b09a053a6e8",
+    "backend/tests/unit/test_bos_choch_structure.py": "6ed5a8949a5fb1529f4728890fc05665fb333dcaa7bf7a817663eb468561f7a0",
+    "backend/tests/unit/test_score_policy_balance.py": "7e29b50b5ded2f35682f3150169408442d60e985213529d27b75666ec8748c1e"
+  },
+  "capture_sha256": {
+    "docs/audits/structural_gate_2026-10-10/btc_15m.json": "c4e7c75184f906b15a3173b8462e400c5f4a6d65426a20719957fe04c2c41778",
+    "docs/audits/structural_gate_2026-10-10/btc_1d.json": "1b753f6c3f61be361a7832c1562b5a2549b947e20dbf73fdde987a9e0fa58fff",
+    "docs/audits/structural_gate_2026-10-10/btc_1h.json": "882a327db62f21c190bdf983e8c0eccaf4b506a15ae1b6e70df6955ec49a8b35",
+    "docs/audits/structural_gate_2026-10-10/btc_4h.json": "0fb5a71ec15041c36e09bc8dbadf19367350a74b2fb197ff06c9cd9d07e68185"
+  },
+  "captured_feed_before": [
+    {
+      "tf": "15m",
+      "candles": 499,
+      "events": 0,
+      "grades": {},
+      "latest": {}
+    },
+    {
+      "tf": "1h",
+      "candles": 500,
+      "events": 0,
+      "grades": {},
+      "latest": {}
+    },
+    {
+      "tf": "4h",
+      "candles": 500,
+      "events": 0,
+      "grades": {},
+      "latest": {}
+    },
+    {
+      "tf": "1d",
+      "candles": 500,
+      "events": 0,
+      "grades": {},
+      "latest": {}
+    }
+  ],
+  "captured_feed_after": [
+    {
+      "tf": "15m",
+      "candles": 499,
+      "events": 2,
+      "grades": {
+        "A": 1,
+        "B": 1
+      },
+      "latest": {
+        "bearish": {
+          "timestamp": "2026-10-08T13:30:00+00:00",
+          "kind": "BOS",
+          "actual_grade": "B",
+          "expected_grade": "B",
+          "distance_atr": 0.6890801553889355
+        }
+      }
+    },
+    {
+      "tf": "1h",
+      "candles": 500,
+      "events": 3,
+      "grades": {
+        "B": 2,
+        "A": 1
+      },
+      "latest": {
+        "bullish": {
+          "timestamp": "2026-10-02T04:00:00+00:00",
+          "kind": "BOS",
+          "actual_grade": "B",
+          "expected_grade": "B",
+          "distance_atr": 1.9140276109618068
+        },
+        "bearish": {
+          "timestamp": "2026-09-28T01:00:00+00:00",
+          "kind": "CHoCH",
+          "actual_grade": "B",
+          "expected_grade": "B",
+          "distance_atr": 0.30814041865186376
+        }
+      }
+    },
+    {
+      "tf": "4h",
+      "candles": 500,
+      "events": 4,
+      "grades": {
+        "A": 2,
+        "C": 1,
+        "B": 1
+      },
+      "latest": {
+        "bullish": {
+          "timestamp": "2026-09-18T12:00:00+00:00",
+          "kind": "CHoCH",
+          "actual_grade": "B",
+          "expected_grade": "B",
+          "distance_atr": 0.9912990772200597
+        },
+        "bearish": {
+          "timestamp": "2026-09-10T12:00:00+00:00",
+          "kind": "CHoCH",
+          "actual_grade": "C",
+          "expected_grade": "C",
+          "distance_atr": 0.5198060819350768
+        }
+      }
+    },
+    {
+      "tf": "1d",
+      "candles": 500,
+      "events": 4,
+      "grades": {
+        "C": 4
+      },
+      "latest": {
+        "bearish": {
+          "timestamp": "2026-06-03T00:00:00+00:00",
+          "kind": "CHoCH",
+          "actual_grade": "C",
+          "expected_grade": "C",
+          "distance_atr": 0.3283960278015743
+        }
+      }
+    }
+  ],
+  "verification": {
+    "grading_before": {
+      "log_sha256": "850057682346b10c2416258fd01f5d691200b5d16a79e3c49f5728ad9749869e",
+      "summary": [
+        "[offline] seven guard-denial checks passed",
+        "52 failed, 20 passed, 2480 deselected, 1 warning in 21.12s",
+        "[offline] blocked operations: ['subprocess.Popen']"
+      ]
+    },
+    "gate_before": {
+      "log_sha256": "ab7d4d03416c2d698ccb50b0cffe6d862f3ea649cd7e3d47313991e9532bd699",
+      "summary": [
+        "[offline] seven guard-denial checks passed",
+        "20 failed, 1 passed, 2552 deselected, 8 warnings in 12.60s",
+        "[offline] blocked operations: ['subprocess.Popen']"
+      ]
+    },
+    "focused_after": {
+      "log_sha256": "092d1f3d2b7736947e3a213dd9e705fe44a0d97bdcb54e243529a96c4c9777df",
+      "summary": [
+        "[offline] seven guard-denial checks passed",
+        "123 passed, 2450 deselected, 9 warnings in 20.86s",
+        "[offline] blocked operations: ['subprocess.Popen']"
+      ]
+    },
+    "contracts": {
+      "log_sha256": "600afa265dfa2564a41e7909176cff83430a29b9e6801a430e1093e7b17386dc",
+      "summary": [
+        "[offline] seven guard-denial checks passed",
+        "=== RESULT: DRIFT/INCOMPLETE (6 changes) ===",
+        "[offline] blocked operations: ['socket.bind', 'socket.getaddrinfo', 'subprocess.Popen']"
+      ],
+      "disposition": "API/telemetry/pipeline clean; six previously recorded JSONL writer inventory differences. Baselines unchanged."
+    },
+    "smoke": {
+      "log_sha256": "67f99a65d68a8c56808f6ced601233e64dfad3898c82572ca65359afe24ac1df",
+      "summary": [
+        "[offline] seven guard-denial checks passed",
+        "=== RESULT: DRIFT (5 changes) ===",
+        "[offline] blocked operations: ['socket.bind']"
+      ],
+      "disposition": "Five prior mode-policy baseline differences; changed threshold/allowed-type/cascade fields were not edited by this correction."
+    },
+    "affected_regression": {
+      "command": ".\\backend\\venv\\Scripts\\python.exe -B backend/diagnostics/offline_verify.py backend -k \"bos_choch_structure or bos_ob_linkage or score_policy_balance or evidence_accounting or scoring_confidence_contract or scan_rejection_evidence or rejection_consumers or core_workflow or institutional_sequence or mode_regime_policy\"",
+      "passed": 561,
+      "deselected": 2022,
+      "warnings": 264,
+      "duration": "470.43s (0:07:50)",
+      "seven_guard_denials_passed": true,
+      "observed_blocked_operations": [
+        "subprocess.Popen"
+      ],
+      "log_sha256": "e884374dc02e9cfe40532f6156862265b1abdbbfef696d40c1f732d58a2f41da",
+      "scope": "Selected guarded regressions; core workflow uses synthetic market inputs and a serial pickle-preserving worker pool. Real process isolation, exchange fills, historical strategy validity and profitability are not established.",
+      "manifest": "backend/diagnostics/offline_checks.json"
+    }
+  },
+  "independent_review": {
+    "agent": "structural_gate_review",
+    "method": "Read-only source/diff review; reviewer did not execute tests",
+    "result": "No material blocker",
+    "findings_resolved": [
+      "Preserve nonpositive/unknown ATR C base grade",
+      "Check both boundaries of latest4 instead of borrowing older windows",
+      "Geometry owns4swing classification; simple path remains separate",
+      "Consume direction/pivot timestamp before volume gate",
+      "Captured tests must assert nonempty emissions",
+      "Added exact volume boundaries, CHoCH full-detector consumption and distinct same-price pivot tests"
+    ],
+    "limitations": [
+      "Precomputed pivot confirmation/look-ahead remains",
+      "Captured BTC evidence does not establish every pasted rejection was wrong"
+    ]
+  },
+  "runtime_observation": {
+    "observed_at_utc": "2026-10-10T14:47:58.494815+00:00",
+    "session_id": "503206fe",
+    "status": "running",
+    "last_scan_at": "2026-10-10T14:45:40.724504+00:00",
+    "use_testnet": false,
+    "positions": 0,
+    "pending": 1,
+    "recent_reasons": [
+      {
+        "timestamp": "2026-10-10T14:43:39.360970+00:00",
+        "symbol": "TAO/USDT:USDT",
+        "confluence": 62.8,
+        "reason": "TAO/USDT:USDT: Evidence requirements failed — Confirmed direction-aligned structural shift on an allowed timeframe — latest aligned 15m CHoCH at 2026-10-10T01:45:00+00:00 is grade C (40/100; requires 50/100)",
+        "reason_type": "evidence_requirements",
+        "evidence_missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe — latest aligned 15m CHoCH at 2026-10-10T01:45:00+00:00 is grade C (40/100; requires 50/100)"
+        ],
+        "score_gate_passed": false,
+        "evidence_eligible": false
+      },
+      {
+        "timestamp": "2026-10-10T14:43:39.875591+00:00",
+        "symbol": "BTC/USDT:USDT",
+        "confluence": 72.0,
+        "reason": "Low pullback probability (0.42) for limit entry @ 82639.3000 (price=82987.6000)",
+        "reason_type": "pullback_prob",
+        "evidence_missing": [],
+        "score_gate_passed": true,
+        "evidence_eligible": true
+      },
+      {
+        "timestamp": "2026-10-10T14:46:50.678226+00:00",
+        "symbol": "LINK/USDT:USDT",
+        "confluence": 64.7,
+        "reason": "LINK/USDT:USDT: Evidence requirements failed — Confirmed direction-aligned structural shift on an allowed timeframe — latest aligned 1h BOS at 2026-10-04T22:00:00+00:00 is grade C (40/100; requires 50/100), Entry blocked by immediate opposing structure: 15m bearish FVG (opposing)",
+        "reason_type": "evidence_requirements",
+        "evidence_missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe — latest aligned 1h BOS at 2026-10-04T22:00:00+00:00 is grade C (40/100; requires 50/100)",
+          "Entry blocked by immediate opposing structure: 15m bearish FVG (opposing)"
+        ],
+        "score_gate_passed": false,
+        "evidence_eligible": false
+      },
+      {
+        "timestamp": "2026-10-10T14:46:50.680967+00:00",
+        "symbol": "TAO/USDT:USDT",
+        "confluence": 64.0,
+        "reason": "TAO/USDT:USDT: Evidence requirements failed — Confirmed direction-aligned structural shift on an allowed timeframe — latest aligned 15m CHoCH at 2026-10-10T01:45:00+00:00 is grade C (40/100; requires 50/100)",
+        "reason_type": "evidence_requirements",
+        "evidence_missing": [
+          "Confirmed direction-aligned structural shift on an allowed timeframe — latest aligned 15m CHoCH at 2026-10-10T01:45:00+00:00 is grade C (40/100; requires 50/100)"
+        ],
+        "score_gate_passed": false,
+        "evidence_eligible": false
+      },
+      {
+        "timestamp": "2026-10-10T14:46:51.223568+00:00",
+        "symbol": "BTC/USDT:USDT",
+        "confluence": 72.0,
+        "reason": "Low pullback probability (0.42) for limit entry @ 82639.3000 (price=83010.0000)",
+        "reason_type": "pullback_prob",
+        "evidence_missing": [],
+        "score_gate_passed": true,
+        "evidence_eligible": true
+      },
+      {
+        "timestamp": "2026-10-10T14:46:51.887694+00:00",
+        "symbol": "SUI/USDT:USDT",
+        "confluence": 66.0,
+        "reason": "Low pullback probability (0.39) for limit entry @ 1.1069 (price=1.1345)",
+        "reason_type": "pullback_prob",
+        "evidence_missing": [],
+        "score_gate_passed": true,
+        "evidence_eligible": true
+      }
+    ],
+    "activation": "No service restart. Existing per-scan ProcessPoolExecutor workers import current source; new specific rejection text confirms worker adoption. Parent-process imported modules are not claimed refreshed.",
+    "actions": "Read-only status/feed queries; no start/stop/reset/order commands."
+  },
+  "limitations": [
+    "No exact reconstruction of the original full scan; later500-bar feed capture can differ from engine750-bar lookback",
+    "No win-rate, profit, or full-system certification",
+    "Structural freshness/invalidation and latest cross-timeframe selection unchanged",
+    "No frontend changes in this task; concurrent UI edits preserved",
+    "No commit or push performed for this follow-up"
+  ],
+  "checklist": {
+    "scope": "User rejection-table follow-up; three production files, two test files and recorded public-feed/evidence fixtures; unrelated UI work preserved.",
+    "fundamentals": "Traced TF configuration, four-swing/latest-event selection, ATR units, volume gates and grading; look-ahead limitations documented.",
+    "contracts": "SMC detection to snapshot, BOS-linked OB, scoring, scanner rejection, paper/live JSONL and existing UI reason consumers. No new public field or route.",
+    "behavior": "Before-fix failures reproduced; after-fix561 selected regressions pass, including mirrored directions and negative gates.",
+    "accounting": "No accounting/order implementation edited. Read-only observation of continuing simulated paper session; no manual trading actions.",
+    "isolation": "Guarded runner only for backend imports/tests; captured API feed/status reads performed separately and labeled as runtime observations.",
+    "trading": "No numerical thresholds/weights changed; detector evidence changes plans. No calibration claim.",
+    "review": "Independent read-only source review found no material blockers; requested additional volume/CHoCH/pivot tests included in passing run."
+  }
+}

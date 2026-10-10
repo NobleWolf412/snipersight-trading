@@ -356,3 +356,36 @@ def test_score_policy_structure_seed_respects_both_sides_and_reflection(highs,lo
     assert _determine_initial_trend(pd.Series(highs),pd.Series(lows)) == expected
     reflected = _determine_initial_trend(pd.Series([200.-p for p in lows]),pd.Series([200.-p for p in highs]))
     assert reflected == {'ranging':'ranging','uptrend':'downtrend','downtrend':'uptrend'}[expected]
+
+
+@pytest.mark.parametrize('direction', ['bullish', 'bearish'])
+@pytest.mark.parametrize('case', ['absent', 'wrong_tf', 'opposed', 'weak_latest'])
+def test_score_policy_structural_rejection_explains_actual_requirement(direction, case):
+    def mutate(config, smc, *_):
+        config.min_confluence_score = 0.
+        event = smc.structural_breaks[0]
+        event.timeframe = '1h'
+        if case == 'absent':
+            smc.structural_breaks = []
+        elif case == 'wrong_tf':
+            event.timeframe = '5m'
+        elif case == 'opposed':
+            event.direction = 'bearish' if direction == 'bullish' else 'bullish'
+        else:
+            # Preserve latest-event policy: an older strong event cannot conceal
+            # the newest weak aligned event, including across allowed timeframes.
+            event.timestamp -= timedelta(minutes=15)
+            newer = deepcopy(event)
+            newer.timeframe, newer.grade = '15m', 'C'
+            newer.timestamp += timedelta(minutes=15)
+            smc.structural_breaks.append(newer)
+    result = score_setup(direction=direction, mutate=mutate)
+    assert result.metadata['evidence_eligible'] is False
+    assert result.metadata['admission_passed'] is False
+    reason = next(r for r in result.metadata['evidence_missing'] if 'structural shift' in r)
+    if case == 'weak_latest':
+        assert '15m' in reason and 'grade C' in reason and '40/100' in reason
+        assert 'requires 50/100' in reason
+    else:
+        assert f'no detected {direction} BOS/CHoCH' in reason
+        assert 'allowed: 1d, 4h, 1h, 15m' in reason
