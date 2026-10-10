@@ -1,10 +1,12 @@
 import { useScanner, defaultScanConfig } from '@/context/ScannerContext';
 import { scanRunService, scanIsBusy } from '@/services/scanRunService';
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
+import { Modal } from '@/components/hud/Modal';
 
 export function ScannerInputs() {
   const { scanConfig: config, setScanConfig, refreshModes } = useScanner();
   const progress = useSyncExternalStore(scanRunService.subscribe, scanRunService.getSnapshot);
+  const [macroHelpOpen, setMacroHelpOpen] = useState(false);
   const set = <K extends keyof typeof config>(field: K, value: typeof config[K]) => setScanConfig({ ...config, [field]: value });
   return <section className="scanner-inputs" aria-label="Scan inputs">
     <h2>Scan inputs</h2>
@@ -18,7 +20,15 @@ export function ScannerInputs() {
       </div>
       <div className="scanner-inputs__toggles">
         {(['majors', 'altcoins', 'memeMode'] as const).map(key => <label key={key}><input type="checkbox" checked={config.categories[key]} onChange={e => set('categories', { ...config.categories, [key]: e.target.checked })} /> {key === 'memeMode' ? 'Meme coins' : key === 'majors' ? 'Majors' : 'Altcoins'}</label>)}
-        <label><input type="checkbox" checked={config.macroOverlay} onChange={e => set('macroOverlay', e.target.checked)} /> Macro overlay</label>
+        <div className="scanner-inputs__macro">
+          <label><input type="checkbox" checked={config.macroOverlay} onChange={e => set('macroOverlay', e.target.checked)} /> Macro overlay</label>
+          <button type="button" className="btn btn-icon scanner-help-button" aria-label="Macro overlay help" aria-haspopup="dialog" onClick={() => setMacroHelpOpen(true)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M12 11v6M12 7v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
       <div className="scanner-inputs__footer">
         <p>Inputs apply to the next scan. Timeframes and score policy come from the selected mode.</p>
@@ -26,5 +36,13 @@ export function ScannerInputs() {
         <button type="button" className="btn" onClick={() => void refreshModes()}>Reload mode definitions</button>
       </div>
     </fieldset>
+    {macroHelpOpen && <Modal label="Macro overlay help" onClose={() => setMacroHelpOpen(false)} maxWidth={520}>
+      <div className="scanner-help-content">
+        <h2>Macro overlay</h2>
+        <p>Adds the wider crypto market to setup scoring: Bitcoin, altcoin and stablecoin dominance, market direction and how broadly coins are participating.</p>
+        <p>This context can strengthen or reduce the setup's contextual evidence within the existing score limits. If required market context is unavailable, an enabled overlay rejects the setup with a reason.</p>
+        <p>Applies to the next scan. Turning it off skips this overlay; the selected mode's requirements and other safety checks still apply.</p>
+      </div>
+    </Modal>}
   </section>;
 }
