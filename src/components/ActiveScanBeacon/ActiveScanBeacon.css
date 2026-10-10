@@ -1,3 +1,86 @@
-.active-scan-beacon { position:fixed; right:max(16px, env(safe-area-inset-right)); bottom:max(16px, env(safe-area-inset-bottom)); z-index:40; display:flex; gap:8px; flex-wrap:wrap; max-width:calc(100vw - 32px); }
-.active-scan-beacon .btn { background:var(--bg-2); min-height:44px; padding:10px 14px; box-shadow:none; text-transform:none; letter-spacing:0; }
-@media (max-width:600px) { .active-scan-beacon { position:sticky; bottom:0; padding:8px 16px; margin-top:16px; max-width:100%; background:var(--bg); } }
+.active-scan-beacon {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 230px;
+  max-width: calc(100vw - 24px - env(safe-area-inset-right) - env(safe-area-inset-left));
+}
+
+.active-scan-beacon__link {
+  --beacon-color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  color: var(--fg);
+  background: var(--bg-2);
+  border: 1px solid color-mix(in oklch, var(--beacon-color) 55%, var(--border-soft));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .5), 0 0 14px color-mix(in oklch, var(--beacon-color) 12%, transparent);
+  text-decoration: none;
+}
+.active-scan-beacon__link--bot { --beacon-color: var(--amber); }
+.active-scan-beacon__link--scan { --beacon-color: var(--cyan, #22d3ee); }
+.active-scan-beacon__link:hover { border-color: var(--beacon-color); }
+.active-scan-beacon__link:focus-visible {
+  outline: 2px solid var(--beacon-color);
+  outline-offset: 3px;
+}
+.active-scan-beacon__radar {
+  position: relative;
+  flex: 0 0 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--beacon-color);
+  border-radius: 50%;
+  box-shadow: 0 0 12px color-mix(in oklch, var(--beacon-color) 35%, transparent);
+  overflow: hidden;
+}
+.active-scan-beacon__radar::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 240deg, color-mix(in oklch, var(--beacon-color) 50%, transparent) 360deg);
+  animation: active-beacon-sweep 8s linear infinite;
+}
+.active-scan-beacon__radar::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px solid color-mix(in oklch, var(--beacon-color) 45%, transparent);
+  border-radius: 50%;
+}
+.active-scan-beacon__core {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--beacon-color);
+  box-shadow: 0 0 8px var(--beacon-color);
+}
+.active-scan-beacon__text { display: grid; gap: 2px; min-width: 0; }
+.active-scan-beacon__code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: .12em;
+  color: var(--beacon-color);
+}
+.active-scan-beacon__state { font-size: 12px; line-height: 1.35; }
+.active-scan-beacon__arrow { margin-left: auto; color: var(--beacon-color); }
+
+/* Leave scroll room so the floating tasks never cover the last page action. */
+.shell:has(~ .active-scan-beacon) { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+.shell:has(~ .active-scan-beacon[data-count="2"]) { padding-bottom: calc(152px + env(safe-area-inset-bottom)); }
+.shell:has(~ .active-scan-beacon[data-count="3"]) { padding-bottom: calc(216px + env(safe-area-inset-bottom)); }
+
+@keyframes active-beacon-sweep { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .active-scan-beacon__radar::before { animation: none; }
+}
